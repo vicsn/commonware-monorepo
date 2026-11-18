@@ -1,4 +1,4 @@
-"""Mutate the Rust specification, re-extract it, and require the Lean proofs to reject it.
+"""Mutate the extracted Rust, re-extract it, and require the Lean proofs to reject it.
 
 Run after check-bridge.sh, which prepares the pinned traversal, DyLean build and dependencies.
 """
@@ -19,20 +19,23 @@ toolchain = "leanprover/lean4:v4.35.0"
 env = dict(os.environ, XDG_CACHE_HOME=os.environ.get("XDG_CACHE_HOME", str(cache / "modern-cache")))
 modules = ["Model", "Binding", "DyTerms", "Reference", "Correspondence", "Protocol"]
 
-# (name, file, original, mutation, module whose proof must fail)
+TRAVERSAL = ".lake/rust/storage/src/merkle/proof/traversal.rs"
+
+# (name, file under the mutation root, original, mutation, module whose proof must fail)
 MUTATIONS = [
-    ("leaf drops the item", "spec.rs",
+    ("leaf drops the item", "rust/src/adapter.rs",
      "T::hash(T::concat(T::literal(&be64(position)), T::item(item)))",
      "T::hash(T::literal(&be64(position)))", "Correspondence"),
-    ("root drops the family domain", "spec.rs",
+    ("root drops the family domain", "rust/src/adapter.rs",
      "pub const MMR_DOMAIN: u8 = 0;", "pub const MMR_DOMAIN: u8 = 1;", "Correspondence"),
-    ("replay misroutes the midpoint", "spec.rs",
-     "if location < start + half {", "if location <= start + half {", "Correspondence"),
-    ("traversal ignores unused siblings", "adapter.rs",
-     "Ok(peak) => opening.next == siblings.len() && spec::wrap::<T>(height, peak) == *root,",
-     "Ok(peak) => spec::wrap::<T>(height, peak) == *root,", "Correspondence"),
-    ("client skips verification", "client.rs",
-     "if adapter::verify::<T>(height, location, &root, &item, siblings) {",
+    ("production traversal treats a boundary subtree as inside", TRAVERSAL,
+     "if start + width <= range_start || start >= range_end {",
+     "if start + width < range_start || start >= range_end {", "Correspondence"),
+    ("adapter ignores unused siblings", "rust/src/adapter.rs",
+     "Ok(peak) => opening.next == siblings.len() && wrap::<T>(height, peak) == *root,",
+     "Ok(peak) => wrap::<T>(height, peak) == *root,", "Correspondence"),
+    ("client skips verification", "rust/src/client.rs",
+     "if adapter::verify::<T>(height, location, root, &item, siblings) {",
      "if true {", "Correspondence"),
 ]
 
@@ -57,7 +60,7 @@ def main():
         traversal = Path("storage/src/merkle/proof/traversal.rs")
         (root / ".lake" / "rust" / traversal).parent.mkdir(parents=True)
         shutil.copy(here / ".lake" / "rust" / traversal, root / ".lake" / "rust" / traversal)
-        source = crate / "src" / file
+        source = root / file
         text = source.read_text()
         assert text.count(old) == 1, (name, old)
         source.write_text(text.replace(old, new))

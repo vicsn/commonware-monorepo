@@ -2,9 +2,8 @@ module
 public import DyTerms
 public import Binding
 
-/-! The handwritten client semantics that this experiment trusted before the specification moved
-to Rust. It is now an untrusted, executable reference: `Correspondence` proves the extracted Rust
-equal to it, and `SanityChecks` runs it. -/
+/-! An untrusted, executable reference for the client's decision, built on the handwritten model.
+`Correspondence` proves the extracted Rust equal to it, and `Scenarios` runs it. -/
 
 namespace Qmdb.Reference
 open DY Aeneas Aeneas.Std
@@ -26,34 +25,14 @@ theorem check_spec (h loc : Nat) (root : Bytes) (item : ByteArray) (ws : List By
 
 abbrev Acceptance := qmdb_dylean.client.Acceptance ByteArray
 
-/-- The honest root of the snapshot. -/
-def root [Snapshot] : Bytes :=
-  let h := (Snapshot.height).val
-  wrap h (tree Snapshot.items h (2*(2^h-1)) 0)
-
 /-- The client's decision on a received message. -/
 def step [Snapshot] (message : Bytes) (loc : Std.U64) (ws : Slice Bytes) : Option Acceptance :=
   match Literal.bytesToLiteral message with
   | none => none
   | some item =>
-    if check (Snapshot.height).val loc.val root item ws.val
+    if check (Snapshot.height).val loc.val Snapshot.root item ws.val
     then some { height := Snapshot.height, location := loc, item }
     else none
-
-/-- Every accepted event names the snapshot height, an in-range location and the stored item. -/
-theorem step_sound [Snapshot] (message : Bytes) (loc : Std.U64) (ws : Slice Bytes)
-    (event : Acceptance) (accepted : step message loc ws = some event) :
-    event.height = Snapshot.height ∧ event.location.val < 2^event.height.val ∧
-      event.item = Snapshot.items event.location.val := by
-  unfold step at accepted
-  split at accepted
-  · simp at accepted
-  · split at accepted
-    · rename_i checked
-      cases accepted
-      have valid := (check_spec ..).mp checked
-      exact ⟨rfl, valid.2.1, inclusion_sound _ _ _ _ _ valid⟩
-    · simp at accepted
 
 end
 end Qmdb.Reference

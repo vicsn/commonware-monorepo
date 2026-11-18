@@ -1,10 +1,11 @@
 module
-public import Reference
+public import Correspondence
 public meta import Reference
 
 /-! Executable client decisions on a two-item snapshot. `Correspondence.client_step_eq` makes the
 extracted Rust decision equal to `Reference.step`, so these outcomes are the extracted client's.
-`SanityChecks` proves the corresponding protocol traces reachable. -/
+`SanityChecks` proves the corresponding protocol traces reachable. The snapshot's root is the
+honest tree's, which satisfies the snapshot assumption by `honest_opening_accepted`. -/
 
 namespace Qmdb.Scenarios
 open DY Aeneas Aeneas.Std
@@ -13,9 +14,13 @@ open DY Aeneas Aeneas.Std
 def alice := "Alice".toUTF8
 def bob := "Bob".toUTF8
 
+def items (i : Nat) : ByteArray := if i = 0 then alice else bob
+
 instance snapshot : Snapshot where
   height := 1#u32
-  items := fun i => if i = 0 then alice else bob
+  root := wrap (1#u32).val (tree items (1#u32).val (2*(2^(1#u32).val-1)) 0)
+  items := items
+  honest := Correspondence.honest_opening_accepted items 1#u32 (by decide)
 
 def opening (ws : List Bytes) (short : ws.length ≤ 2 := by decide) : Slice Bytes :=
   Slice.from ws (by scalar_tac)

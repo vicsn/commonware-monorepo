@@ -1,10 +1,10 @@
-//! Abstract terms and snapshot access.
+//! Abstract terms for the hash inputs.
 //!
-//! The specification never inspects bytes. It only builds terms from literals, items and digests,
+//! The verifier never inspects bytes. It only builds terms from literals, items and digests,
 //! concatenates them and hashes them, so one definition serves both the concrete SHA-256 tests and
 //! the symbolic DyLean proofs.
 
-/// Constructors for the byte strings that the specification hashes.
+/// Constructors for the byte strings that the verifier hashes.
 pub trait Terms {
     /// Byte strings built from literals, items and digests.
     type Bytes;
@@ -25,10 +25,4 @@ pub trait Terms {
     fn concat(left: Self::Bytes, right: Self::Bytes) -> Self::Bytes;
     /// The digest of a byte string.
     fn hash(input: Self::Bytes) -> Self::Digest;
-}
-
-/// Read access to the items of an authenticated snapshot.
-pub trait Store<I> {
-    /// The item at `location`.
-    fn item(&self, location: u64) -> I;
 }

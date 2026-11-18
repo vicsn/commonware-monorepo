@@ -1,16 +1,14 @@
-//! Rust specification of single-item QMDB inclusion for the DyLean experiment.
+//! The production QMDB traversal and a single-item client for the DyLean experiment.
 //!
-//! [`spec`] defines the digests, the honest root and the verifier semantics. [`client`] decides
-//! whether a client accepts a claimed item. [`adapter`] runs the pinned production traversal over
-//! the same terms. Everything is generic over [`terms::Terms`]: tests instantiate it with byte
-//! strings and SHA-256, and Lean instantiates the hax extraction with DyLean's symbolic literal,
-//! concatenation and hash constructors.
+//! [`adapter`] runs the pinned production traversal with callbacks that follow the production
+//! hasher, and [`client`] decides whether a client accepts a claimed item. Both are generic over
+//! [`terms::Terms`]: tests instantiate it with byte strings and SHA-256, and Lean instantiates the
+//! hax extraction with DyLean's symbolic literal, concatenation and hash constructors.
 
 #![forbid(unsafe_code)]
 
 pub mod adapter;
 pub mod client;
-pub mod spec;
 pub mod terms;
 
 /// Production traversal, archived from the pinned revision by `check-bridge.sh`.

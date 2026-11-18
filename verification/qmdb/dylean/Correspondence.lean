@@ -1,9 +1,10 @@
 module
 public import Reference
 
-/-! Proofs that the extracted Rust specification and production traversal, interpreted with
-`dyTerms`, compute exactly what the reference model computes. Checked by Lean; nothing here is
-trusted beyond the statements that `Protocol` uses. -/
+/-! Proofs that the extracted production traversal, adapter and client step, interpreted with
+`dyTerms`, compute exactly what the reference model computes, and that the production verifier
+is binding. Checked by Lean; nothing here is trusted beyond the statements that `Protocol` and
+`SecurityTheorems` use. -/
 
 namespace Qmdb.Correspondence
 open DY Aeneas Aeneas.Std Aeneas.Std.WP CoreModels qmdb_dylean
@@ -69,10 +70,10 @@ theorem succ_ok (i : Std.Usize) {α} (s : Slice α) (bound : i.val < s.length) :
 private def byte (v : Std.U64) (k : Nat) : Std.U8 :=
   UScalar.cast .U8 (⟨v.bv.ushiftRight k⟩ : Std.U64)
 
-private theorem be64_ok (v : Std.U64) : spec.be64 v = RustM.ok (Array.make 8#usize
+private theorem be64_ok (v : Std.U64) : adapter.be64 v = RustM.ok (Array.make 8#usize
     [byte v 56, byte v 48, byte v 40, byte v 32, byte v 24, byte v 16, byte v 8,
       UScalar.cast .U8 v]) := by
-  unfold spec.be64
+  unfold adapter.be64
   simp only [HShiftRight.hShiftRight, UScalar.shiftRight_IScalar, UScalar.shiftRight, lift]
   simp [byte]
 
@@ -94,270 +95,34 @@ private theorem be64_bytes (v : Std.U64) : toByteArray (Array.to_slice (Array.ma
   simp [toByteArray, be64, Array.val_to_slice, List.range_succ, ofNat_byte, ofNat_mod]
 
 private theorem wrap_bytes (v : Std.U64) : toByteArray (Array.to_slice (Array.make 10#usize
-    [spec.MMR_DOMAIN, spec.FORWARD_FOLD, byte v 56, byte v 48, byte v 40, byte v 32, byte v 24,
+    [adapter.MMR_DOMAIN, adapter.FORWARD_FOLD, byte v 56, byte v 48, byte v 40, byte v 32, byte v 24,
       byte v 16, byte v 8, UScalar.cast .U8 v])) = ⟨#[0,0]⟩ ++ be64 v.val := by
   rw [← be64_bytes]
   apply ByteArray.ext
-  simp [toByteArray, Array.val_to_slice, spec.MMR_DOMAIN, spec.FORWARD_FOLD]
+  simp [toByteArray, Array.val_to_slice, adapter.MMR_DOMAIN, adapter.FORWARD_FOLD]
 
 theorem leaf_eq (p : Std.U64) (item : ByteArray) :
-    spec.leaf dyTerms p item = RustM.ok (leaf p.val item) := by
-  simp only [spec.leaf, be64_ok, core.array.Array.as_slice, rust_primitives.slice.array_as_slice]
+    adapter.leaf dyTerms p item = RustM.ok (leaf p.val item) := by
+  simp only [adapter.leaf, be64_ok, core.array.Array.as_slice, rust_primitives.slice.array_as_slice]
   simp [dyTerms, leaf, be64_bytes]
 
 theorem node_eq (p : Std.U64) (l r : Bytes) :
-    spec.node dyTerms p l r = RustM.ok (node p.val l r) := by
-  simp only [spec.node, be64_ok, core.array.Array.as_slice, rust_primitives.slice.array_as_slice]
+    adapter.node dyTerms p l r = RustM.ok (node p.val l r) := by
+  simp only [adapter.node, be64_ok, core.array.Array.as_slice, rust_primitives.slice.array_as_slice]
   simp [dyTerms, node, be64_bytes]
 
 theorem wrap_eq (h : Std.U32) (bound : h.val ≤ 63) (peak : Bytes) :
-    spec.wrap dyTerms h peak = RustM.ok (wrap h.val peak) := by
+    adapter.wrap dyTerms h peak = RustM.ok (wrap h.val peak) := by
   obtain ⟨z, hz, hv⟩ := pow_ok h bound
-  simp only [spec.wrap, hz, be64_ok, core.array.Array.as_slice,
+  simp only [adapter.wrap, hz, be64_ok, core.array.Array.as_slice,
     rust_primitives.slice.array_as_slice]
   simp [Array.index_usize, dyTerms, wrap]
   rw [wrap_bytes, hv]
-
-/-! ## The honest tree -/
-
-theorem tree_eq {S : Type} (store : qmdb_dylean.terms.Store S ByteArray) (self : S)
-    (items : Nat → ByteArray)
-    (stored : ∀ loc : Std.U64, store.item self loc = RustM.ok (items loc.val)) :
-    ∀ (H : Nat) (h : Std.U32) (p s : Std.U64), h.val = H → H ≤ 63 → 2*(2^H-1) ≤ p.val →
-      s.val + 2^H ≤ 2^63 →
-      spec.tree dyTerms store self h p s = RustM.ok (tree items H p.val s.val) := by
-  intro H
-  induction H with
-  | zero =>
-    intro h p s height _ _ _
-    have zero : h = 0#u32 := by scalar_tac
-    rw [spec.tree.eq_def]
-    simp [zero, stored, leaf_eq, tree]
-  | succ n ih =>
-    intro h p s height bound position start
-    have one : 1 ≤ 2^n := Nat.one_le_two_pow
-    have small : 2^n ≤ 2^62 := Nat.pow_le_pow_right (by decide) (by omega)
-    have double : 2^(n+1) = 2*2^n := by rw [Nat.pow_succ]; omega
-    rw [double] at position start
-    have nonzero : ¬ h = 0#u32 := by scalar_tac
-    obtain ⟨i, hi, iv⟩ := sub_ok h 1#u32 (by scalar_tac)
-    obtain ⟨half, hhalf, halfv⟩ := pow_ok i (by scalar_tac)
-    rw [show i.val = n by scalar_tac] at halfv
-    obtain ⟨w, hw, wv⟩ := mul_ok 2#u64 half (by scalar_tac)
-    obtain ⟨lp, hlp, lpv⟩ := sub_ok p w (by scalar_tac)
-    obtain ⟨rp, hrp, rpv⟩ := sub_ok p 1#u64 (by scalar_tac)
-    obtain ⟨mid, hmid, midv⟩ := add_ok s half (by scalar_tac)
-    have left := ih i lp s (by scalar_tac) (by omega) (by scalar_tac) (by omega)
-    have right := ih i rp mid (by scalar_tac) (by omega) (by scalar_tac) (by scalar_tac)
-    rw [spec.tree.eq_def]
-    simp only [nonzero, ↓reduceIte, hi, hhalf, hw, hlp, hrp, hmid, left, right, bind_ok,
-      node_eq]
-    simp only [tree, double, lpv, rpv, midv, wv, halfv]
-    rfl
-
-/-! ## Replay over a sibling cursor -/
-
-/-- The extracted result and the model's agree: equal digests, and the model's unread siblings
-are the slice after the extracted cursor. -/
-def Agrees (sib : Slice Bytes) :
-    core.option.Option (Bytes × Std.Usize) → Option (Bytes × List Bytes) → Prop
-  | .None, none => True
-  | .Some (d, after), some (d', rest) =>
-    d = d' ∧ after.val ≤ sib.length ∧ rest = sib.val.drop after.val
-  | _, _ => False
-
-theorem replay_eq (item : ByteArray) (sib : Slice Bytes) :
-    ∀ (H : Nat) (h : Std.U32) (p s loc : Std.U64) (next : Std.Usize), h.val = H → H ≤ 63 →
-      2*(2^H-1) ≤ p.val → s.val + 2^H ≤ 2^63 → s.val ≤ loc.val → loc.val < s.val + 2^H →
-      next.val ≤ sib.length →
-      ∃ r, spec.replay dyTerms item h p s loc sib next = RustM.ok r ∧
-        Agrees sib r (replay item H p.val s.val loc.val (sib.val.drop next.val)) := by
-  intro H
-  induction H with
-  | zero =>
-    intro h p s loc next height _ _ _ _ _ cursor
-    have zero : h = 0#u32 := by scalar_tac
-    refine ⟨.Some (leaf p.val item, next), ?_, ?_⟩
-    · rw [spec.replay.eq_def]
-      simp [zero, leaf_eq]
-    · simp [replay, Agrees, cursor]
-  | succ n ih =>
-    intro h p s loc next height bound position start low high cursor
-    have one : 1 ≤ 2^n := Nat.one_le_two_pow
-    have small : 2^n ≤ 2^62 := Nat.pow_le_pow_right (by decide) (by omega)
-    have double : 2^(n+1) = 2*2^n := by rw [Nat.pow_succ]; omega
-    rw [double] at position start high
-    have nonzero : ¬ h = 0#u32 := by scalar_tac
-    obtain ⟨i, hi, iv⟩ := sub_ok h 1#u32 (by scalar_tac)
-    obtain ⟨half, hhalf, halfv⟩ := pow_ok i (by scalar_tac)
-    rw [show i.val = n by scalar_tac] at halfv
-    obtain ⟨mid, hmid, midv⟩ := add_ok s half (by scalar_tac)
-    have length := Slice.len_val sib
-    by_cases side : loc.val < s.val + 2^n
-    · -- The item is in the left subtree; its sibling is the right subtree.
-      have cond : loc < mid := by scalar_tac
-      have condv : loc.val < mid.val := by scalar_tac
-      obtain ⟨w, hw, wv⟩ := mul_ok 2#u64 half (by scalar_tac)
-      obtain ⟨lp, hlp, lpv⟩ := sub_ok p w (by scalar_tac)
-      obtain ⟨r, hr, agree⟩ :=
-        ih i lp s loc next (by scalar_tac) (by omega) (by scalar_tac) (by omega) low side cursor
-      rw [show lp.val = p.val - 2*2^n by scalar_tac] at agree
-      cases hm : replay item n (p.val - 2*2^n) s.val loc.val (sib.val.drop next.val) with
-      | none =>
-        cases r with
-        | some pr => simp [hm, Agrees] at agree
-        | none =>
-          refine ⟨.None, ?_, ?_⟩
-          · rw [spec.replay.eq_def]
-            simp only [nonzero, ↓reduceIte, hi, hhalf, hmid, cond, hw, hlp, hr, bind_ok]
-          · simp [replay, double, side, hm, Agrees]
-      | some m =>
-        obtain ⟨d', rest⟩ := m
-        cases r with
-        | none => simp [hm, Agrees] at agree
-        | some pr =>
-          obtain ⟨d, after⟩ := pr
-          simp only [hm, Agrees] at agree
-          obtain ⟨rfl, within, rfl⟩ := agree
-          by_cases room : after.val < sib.length
-          · have lt : after < Slice.len sib := by scalar_tac
-            obtain ⟨after1, hafter1, after1v⟩ := succ_ok after sib room
-            refine ⟨.Some (node p.val d sib.val[after.val], after1), ?_, ?_⟩
-            · rw [spec.replay.eq_def]
-              simp [nonzero, hi, hhalf, hmid, condv, hw, hlp, hr, len_ok, room,
-                index_ok sib after room, node_eq, hafter1]
-              rfl
-            · have unfolded : replay item (n+1) p.val s.val loc.val (sib.val.drop next.val) =
-                  some (node p.val d sib.val[after.val], sib.val.drop (after.val + 1)) := by
-                simp only [replay, double, side, ↓reduceIte, hm, List.drop_eq_getElem_cons room]
-                rfl
-              rw [unfolded]
-              simpa [Agrees, after1v] using room
-          · have nlt : ¬ after < Slice.len sib := by scalar_tac
-            refine ⟨.None, ?_, ?_⟩
-            · rw [spec.replay.eq_def]
-              simp [nonzero, hi, hhalf, hmid, condv, hw, hlp, hr, len_ok, room]
-            · have unfolded : replay item (n+1) p.val s.val loc.val (sib.val.drop next.val) =
-                  none := by
-                simp only [replay, double, side, ↓reduceIte, hm,
-                  List.drop_eq_nil_of_le (Nat.le_of_not_lt room)]
-                rfl
-              rw [unfolded]
-              simp [Agrees]
-    · -- The item is in the right subtree; its sibling is the left subtree.
-      have cond : ¬ loc < mid := by scalar_tac
-      have condv : ¬ loc.val < mid.val := by scalar_tac
-      by_cases room : next.val < sib.length
-      · have lt : next < Slice.len sib := by scalar_tac
-        obtain ⟨rp, hrp, rpv⟩ := sub_ok p 1#u64 (by scalar_tac)
-        obtain ⟨next1, hnext1, next1v⟩ := succ_ok next sib room
-        obtain ⟨r, hr, agree⟩ := ih i rp mid loc next1 (by scalar_tac) (by omega) (by scalar_tac)
-          (by scalar_tac) (by scalar_tac) (by scalar_tac) (by omega)
-        rw [show rp.val = p.val - 1 by scalar_tac, show mid.val = s.val + 2^n by scalar_tac,
-          next1v] at agree
-        cases hm : replay item n (p.val - 1) (s.val + 2^n) loc.val (sib.val.drop (next.val + 1)) with
-        | none =>
-          cases r with
-          | some pr => simp [hm, Agrees] at agree
-          | none =>
-            refine ⟨.None, ?_, ?_⟩
-            · rw [spec.replay.eq_def]
-              simp [nonzero, hi, hhalf, hmid, condv, len_ok, room, index_ok sib next room, hrp,
-                hnext1, hr]
-            · have unfolded : replay item (n+1) p.val s.val loc.val (sib.val.drop next.val) =
-                  none := by
-                simp only [replay, side, ↓reduceIte, List.drop_eq_getElem_cons room, hm]
-                rfl
-              rw [unfolded]
-              simp [Agrees]
-        | some m =>
-          obtain ⟨d', rest⟩ := m
-          cases r with
-          | none => simp [hm, Agrees] at agree
-          | some pr =>
-            obtain ⟨d, after⟩ := pr
-            simp only [hm, Agrees] at agree
-            obtain ⟨rfl, within, rfl⟩ := agree
-            refine ⟨.Some (node p.val sib.val[next.val] d, after), ?_, ?_⟩
-            · rw [spec.replay.eq_def]
-              simp [nonzero, hi, hhalf, hmid, condv, len_ok, room, index_ok sib next room, hrp,
-                hnext1, hr, node_eq]
-              rfl
-            · have unfolded : replay item (n+1) p.val s.val loc.val (sib.val.drop next.val) =
-                  some (node p.val sib.val[next.val] d, sib.val.drop after.val) := by
-                simp only [replay, side, ↓reduceIte, List.drop_eq_getElem_cons room, hm]
-                rfl
-              rw [unfolded]
-              simpa [Agrees] using within
-      · have nlt : ¬ next < Slice.len sib := by scalar_tac
-        refine ⟨.None, ?_, ?_⟩
-        · rw [spec.replay.eq_def]
-          simp [nonzero, hi, hhalf, hmid, condv, len_ok, room]
-        · have unfolded : replay item (n+1) p.val s.val loc.val (sib.val.drop next.val) = none := by
-            simp only [replay, side, ↓reduceIte, List.drop_eq_nil_of_le (Nat.le_of_not_lt room)]
-          rw [unfolded]
-          simp [Agrees]
 
 /-! ## Single-item verification -/
 
 theorem eq_ok (a b : Bytes) : dyTerms.corecmpPartialEqInst.eq a b = RustM.ok (decide (a = b)) :=
   rfl
-
-theorem verify_single_eq (h : Std.U32) (loc : Std.U64) (root : Bytes) (item : ByteArray)
-    (sib : Slice Bytes) :
-    spec.verify_single dyTerms h loc root item sib =
-      RustM.ok (Reference.check h.val loc.val root item sib.val) := by
-  rw [spec.verify_single]
-  by_cases tall : h.val > 63
-  · have : h > spec.MAX_HEIGHT := by simp [spec.MAX_HEIGHT]; scalar_tac
-    simp [this, Reference.check]
-    omega
-  · have short : ¬ h > spec.MAX_HEIGHT := by simp [spec.MAX_HEIGHT]; scalar_tac
-    obtain ⟨leaves, hl, lv⟩ := pow_ok h (by omega)
-    have pos : 1 ≤ 2^h.val := Nat.one_le_two_pow
-    have small : 2^h.val ≤ 2^63 := Nat.pow_le_pow_right (by decide) (by omega)
-    by_cases out : loc.val ≥ 2^h.val
-    · have outv : ¬ loc.val < 2^h.val := by omega
-      simp [short, hl, Reference.check, outv, lv]
-    · have inside : ¬ loc ≥ leaves := by scalar_tac
-      obtain ⟨i, hi, iv⟩ := sub_ok leaves 1#u64 (by scalar_tac)
-      obtain ⟨i1, hi1, i1v⟩ := mul_ok 2#u64 i (by scalar_tac)
-      obtain ⟨r, hr, agree⟩ := replay_eq item sib h.val h i1 0#u64 loc 0#usize rfl (by omega)
-        (by scalar_tac) (by simp; omega) (by simp) (by simp; omega) (by simp)
-      rw [show i1.val = 2*(2^h.val-1) by scalar_tac] at agree
-      have z1 : (0#u64).val = 0 := rfl
-      have z2 : (0#usize).val = 0 := rfl
-      simp only [z1, z2, List.drop_zero] at agree
-      simp only [short, ↓reduceIte, hl, bind_ok, inside, hi, hi1, hr]
-      have bounds : h.val ≤ 63 ∧ loc.val < 2^h.val := ⟨by omega, by omega⟩
-      unfold Reference.check
-      cases hm : replay item h.val (2*(2^h.val-1)) 0 loc.val sib.val with
-      | none =>
-        cases r with
-        | some pr => simp [hm, Agrees] at agree
-        | none => simp [bounds]
-      | some m =>
-        obtain ⟨peak, rest⟩ := m
-        cases r with
-        | none => simp [hm, Agrees] at agree
-        | some pr =>
-          obtain ⟨d, used⟩ := pr
-          simp only [hm, Agrees] at agree
-          obtain ⟨rfl, within, rfl⟩ := agree
-          have eqv : (used = Slice.len sib) ↔ used.val = sib.length := by
-            constructor
-            · intro c; rw [c, Slice.len_val]
-            · intro c; scalar_tac
-          by_cases full : used.val = sib.length
-          · have empty : sib.val.drop used.val = [] := List.drop_eq_nil_of_le (by
-              simp only [Slice.length] at full; omega)
-            rw [empty]
-            simp [len_ok, eqv, full, wrap_eq h (by omega), eq_ok, bounds]
-          · have room : used.val < sib.val.length := by
-              simp only [Slice.length] at within full; omega
-            rw [List.drop_eq_getElem_cons room]
-            simp [len_ok, eqv, full, bounds]
-
 
 /-! ## The production traversal -/
 
@@ -559,10 +324,10 @@ theorem traversal_verify_eq (h : Std.U32) (loc : Std.U64) (root : Bytes) (item :
       RustM.ok (Reference.check h.val loc.val root item sib.val) := by
   rw [adapter.verify]
   by_cases tall : h.val > 63
-  · have : h > spec.MAX_HEIGHT := by simp [spec.MAX_HEIGHT]; scalar_tac
+  · have : h > adapter.MAX_HEIGHT := by simp [adapter.MAX_HEIGHT]; scalar_tac
     simp [this, Reference.check]
     omega
-  · have short : ¬ h > spec.MAX_HEIGHT := by simp [spec.MAX_HEIGHT]; scalar_tac
+  · have short : ¬ h > adapter.MAX_HEIGHT := by simp [adapter.MAX_HEIGHT]; scalar_tac
     obtain ⟨leaves, hl, lv⟩ := pow_ok h (by omega)
     have pos : 1 ≤ 2^h.val := Nat.one_le_two_pow
     have small : 2^h.val ≤ 2^63 := Nat.pow_le_pow_right (by decide) (by omega)
@@ -610,23 +375,99 @@ theorem traversal_verify_eq (h : Std.U32) (loc : Std.U64) (root : Bytes) (item :
             rw [List.drop_eq_getElem_cons room]
             simp [len_ok, eqv, full, bounds]
 
+/-! ## Binding of the production verifier -/
+
+theorem ok_inj {α} {x y : α} (h : RustM.ok x = RustM.ok y) : x = y := by
+  have := congrArg RustM.match h
+  simpa using this
+
+/-- An accepted model replay uses exactly one sibling per level. -/
+theorem replay_length (item : ByteArray) : ∀ (H p s loc : Nat) (ws : List Bytes) (d : Bytes)
+    (rest : List Bytes), replay item H p s loc ws = some (d, rest) →
+      ws.length = H + rest.length := by
+  intro H
+  induction H with
+  | zero =>
+    intro p s loc ws d rest run
+    simp [replay] at run
+    obtain ⟨-, rfl⟩ := run
+    simp
+  | succ n ih =>
+    intro p s loc ws d rest run
+    simp only [replay] at run
+    split at run
+    · cases hr : replay item n (p - 2^(n+1)) s loc ws with
+      | none => simp [hr] at run
+      | some pair =>
+        obtain ⟨l, r⟩ := pair
+        cases r with
+        | nil => simp [hr] at run
+        | cons x xs =>
+          simp [hr] at run
+          obtain ⟨-, rfl⟩ := run
+          have := ih _ _ _ _ _ _ hr
+          simp at this
+          omega
+    · cases ws with
+      | nil => simp at run
+      | cons x tail =>
+        cases hr : replay item n (p - 1) (s + 2^n) loc tail with
+        | none => simp [hr] at run
+        | some pair =>
+          obtain ⟨r, rest'⟩ := pair
+          simp [hr] at run
+          obtain ⟨-, rfl⟩ := run
+          have := ih _ _ _ _ _ _ hr
+          simp
+          omega
+
+/-- Two openings that the production verifier accepts at the same location under the same root
+carry the same item. -/
+theorem binding (h : Std.U32) (loc : Std.U64) (root : Bytes) (a b : ByteArray)
+    (wa wb : Slice Bytes) (ha : adapter.verify dyTerms h loc root a wa = RustM.ok true)
+    (hb : adapter.verify dyTerms h loc root b wb = RustM.ok true) : a = b := by
+  rw [traversal_verify_eq] at ha hb
+  exact fixed_root_binding _ _ _ _ _ _ _ ((Reference.check_spec ..).mp (ok_inj ha))
+    ((Reference.check_spec ..).mp (ok_inj hb))
+
+/-- The honest tree's root satisfies the snapshot assumption: every stored item has an opening
+that the production verifier accepts. -/
+theorem honest_opening_accepted (items : Nat → ByteArray) (h : Std.U32) (bound : h.val ≤ 63)
+    (loc : Std.U64) (inside : loc.val < 2^h.val) :
+    ∃ ws : Slice Bytes, adapter.verify dyTerms h loc
+      (wrap h.val (tree items h.val (2*(2^h.val-1)) 0)) (items loc.val) ws = RustM.ok true := by
+  obtain ⟨ws, valid⟩ := honest_opening items h.val loc.val bound inside
+  obtain ⟨-, -, peak, run, -⟩ := id valid
+  have length := replay_length _ _ _ _ _ _ _ _ run
+  simp at length
+  refine ⟨Slice.from ws (by scalar_tac), ?_⟩
+  rw [traversal_verify_eq, Slice.from_val]
+  congr 1
+  exact (Reference.check_spec ..).mpr valid
+
 /-! ## The client -/
 
-theorem root_eq [Snapshot] (bound : (Snapshot.height).val ≤ 63) :
-    spec.root dyTerms snapshotStore () Snapshot.height = RustM.ok Reference.root := by
-  obtain ⟨leaves, hl, lv⟩ := pow_ok _ bound
-  have pos : 1 ≤ 2^(Snapshot.height).val := Nat.one_le_two_pow
-  have small : 2^(Snapshot.height).val ≤ 2^63 := Nat.pow_le_pow_right (by decide) bound
-  obtain ⟨i, hi, iv⟩ := sub_ok leaves 1#u64 (by scalar_tac)
-  obtain ⟨i1, hi1, i1v⟩ := mul_ok 2#u64 i (by scalar_tac)
-  have honest := tree_eq snapshotStore () Snapshot.items (fun _ => rfl)
-    (Snapshot.height).val Snapshot.height i1 0#u64 rfl bound (by scalar_tac) (by simp; omega)
-  rw [show i1.val = 2*(2^(Snapshot.height).val-1) by scalar_tac] at honest
-  simp only [spec.root, hl, hi, hi1, bind_ok, honest, wrap_eq _ bound]
-  rfl
+/-- Every event that the reference decision accepts names the snapshot height, an in-range
+location and the stored item. -/
+theorem step_sound [Snapshot] (message : Bytes) (loc : Std.U64) (ws : Slice Bytes)
+    (event : Reference.Acceptance) (accepted : Reference.step message loc ws = some event) :
+    event.height = Snapshot.height ∧ event.location.val < 2^event.height.val ∧
+      event.item = Snapshot.items event.location.val := by
+  unfold Reference.step at accepted
+  split at accepted
+  · simp at accepted
+  · split at accepted
+    · rename_i checked
+      cases accepted
+      have valid := (Reference.check_spec ..).mp checked
+      obtain ⟨ws', honest⟩ := Snapshot.honest loc valid.2.1
+      rw [traversal_verify_eq] at honest
+      have stored := (Reference.check_spec ..).mp (ok_inj honest)
+      exact ⟨rfl, valid.2.1, fixed_root_binding _ _ _ _ _ _ _ valid stored⟩
+    · simp at accepted
 
 theorem client_step_eq [Snapshot] (message : Bytes) (loc : Std.U64) (ws : Slice Bytes) :
-    client.client_step dyTerms snapshotStore () Snapshot.height message loc ws =
+    client.client_step dyTerms Snapshot.root Snapshot.height message loc ws =
       RustM.ok (match Reference.step message loc ws with
         | some event => core.option.Option.Some event
         | none => core.option.Option.None) := by
@@ -638,23 +479,14 @@ theorem client_step_eq [Snapshot] (message : Bytes) (loc : Std.U64) (ws : Slice 
   cases Literal.bytesToLiteral message with
   | none => rfl
   | some item =>
-    by_cases tall : (Snapshot.height).val > 63
-    · have : Snapshot.height > spec.MAX_HEIGHT := by simp [spec.MAX_HEIGHT]; scalar_tac
-      have rejected : Reference.check (Snapshot.height).val loc.val Reference.root item ws.val =
-          false := by simp [Reference.check]; omega
-      simp [this, rejected]
-    · have short : ¬ Snapshot.height > spec.MAX_HEIGHT := by
-        simp [spec.MAX_HEIGHT]; scalar_tac
-      simp only [short, ↓reduceIte, root_eq (by omega), traversal_verify_eq, bind_ok]
-      cases Reference.check (Snapshot.height).val loc.val Reference.root item ws.val <;> rfl
+    simp only [traversal_verify_eq, bind_ok]
+    cases Reference.check (Snapshot.height).val loc.val Snapshot.root item ws.val <;> rfl
 
-
-#print axioms tree_eq
-#print axioms replay_eq
-#print axioms verify_single_eq
 #print axioms traverse_eq
 #print axioms traversal_verify_eq
-#print axioms root_eq
+#print axioms binding
+#print axioms honest_opening_accepted
+#print axioms step_sound
 #print axioms client_step_eq
 end
 end Qmdb.Correspondence

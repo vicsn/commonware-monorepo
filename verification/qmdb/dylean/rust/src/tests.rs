@@ -1,13 +1,11 @@
-//! Differential tests of the specification against the production MMR.
+//! Differential tests of the adapter and client against the production MMR.
 //!
-//! The specification, the production traversal behind [`adapter::verify`] and the production
+//! The pinned production traversal behind [`adapter::verify`], the client and the production
 //! `Proof::verify_element_inclusion` must return the same verdict on honest openings and on
-//! substituted, misplaced, reordered, short and long ones.
+//! substituted, misplaced, reordered, short and long ones. Honest production openings must verify
+//! under the production root, which is the snapshot assumption of the Lean proofs.
 
-use crate::{
-    adapter, client, spec,
-    terms::{Store, Terms},
-};
+use crate::{adapter, client, terms::Terms};
 use commonware_cryptography::{Hasher as _, Sha256, sha256};
 use commonware_storage::merkle::{
     Bagging,
@@ -47,15 +45,6 @@ impl Terms for Concrete {
 
     fn hash(input: Vec<u8>) -> [u8; 32] {
         bytes(&Sha256::hash(&[&input]))
-    }
-}
-
-/// Items of a snapshot, indexed by location.
-struct Items(Vec<Vec<u8>>);
-
-impl Store<Vec<u8>> for Items {
-    fn item(&self, location: u64) -> Vec<u8> {
-        self.0[location as usize].clone()
     }
 }
 
@@ -197,26 +186,36 @@ fn claims(
 fn be64_matches_to_be_bytes() {
     let mut rng = test_rng();
     for value in [0, 1, 255, 256, u64::MAX] {
-        assert_eq!(spec::be64(value), value.to_be_bytes());
+        assert_eq!(adapter::be64(value), value.to_be_bytes());
     }
     for _ in 0..1000 {
         let value = rng.next_u64();
-        assert_eq!(spec::be64(value), value.to_be_bytes());
+        assert_eq!(adapter::be64(value), value.to_be_bytes());
     }
 }
 
 #[test]
-fn root_matches_production() {
+fn production_openings_verify() {
     let mut rng = test_rng();
     for height in 0..=8u32 {
-        let items = random_items(&mut rng, 1 << height);
+        let leaves = 1u64 << height;
+        let items = random_items(&mut rng, leaves);
         let (hasher, mmr) = production(&items);
-        let expected = bytes(&mmr.root(&hasher, 0).unwrap());
-        assert_eq!(
-            spec::root::<Concrete, _>(&Items(items), height),
-            expected,
-            "height {height}"
-        );
+        let root = bytes(&mmr.root(&hasher, 0).unwrap());
+        for location in 0..leaves {
+            let proof = mmr.proof(&hasher, Location::new(location), 0).unwrap();
+            let siblings: Vec<_> = proof.digests.iter().map(bytes).collect();
+            assert!(
+                adapter::verify::<Concrete>(
+                    height,
+                    location,
+                    &root,
+                    &items[location as usize],
+                    &siblings
+                ),
+                "height {height}, location {location}"
+            );
+        }
     }
 }
 
@@ -229,7 +228,6 @@ fn verifiers_agree_with_production() {
         let items = random_items(&mut rng, leaves);
         let (hasher, mmr) = production(&items);
         let root = mmr.root(&hasher, 0).unwrap();
-        let store = Items(items.clone());
         for location in 0..leaves {
             let proof = mmr.proof(&hasher, Location::new(location), 0).unwrap();
             assert_eq!(proof.inactive_peaks, 0);
@@ -250,17 +248,6 @@ fn verifiers_agree_with_production() {
                 assert_eq!(expected, claim.honest, "production: {context}");
                 let root = bytes(&claim.root);
                 assert_eq!(
-                    spec::verify_single::<Concrete>(
-                        height,
-                        claim.location,
-                        &root,
-                        &claim.item,
-                        &siblings
-                    ),
-                    expected,
-                    "spec: {context}"
-                );
-                assert_eq!(
                     adapter::verify::<Concrete>(
                         height,
                         claim.location,
@@ -271,20 +258,18 @@ fn verifiers_agree_with_production() {
                     expected,
                     "traversal: {context}"
                 );
-                if claim.root == root_digest(&mmr, &hasher) {
-                    let accepted = client::client_step::<Concrete, _>(
-                        &store,
-                        height,
-                        &claim.item,
-                        claim.location,
-                        &siblings,
-                    );
-                    assert_eq!(accepted.is_some(), expected, "client: {context}");
-                    if let Some(event) = accepted {
-                        assert_eq!(event.height, height);
-                        assert_eq!(event.location, claim.location);
-                        assert_eq!(event.item, claim.item);
-                    }
+                let accepted = client::client_step::<Concrete>(
+                    &root,
+                    height,
+                    &claim.item,
+                    claim.location,
+                    &siblings,
+                );
+                assert_eq!(accepted.is_some(), expected, "client: {context}");
+                if let Some(event) = accepted {
+                    assert_eq!(event.height, height);
+                    assert_eq!(event.location, claim.location);
+                    assert_eq!(event.item, claim.item);
                 }
                 checked += 1;
             }
@@ -293,17 +278,12 @@ fn verifiers_agree_with_production() {
     assert!(checked > 1000, "only {checked} claims checked");
 }
 
-fn root_digest(mmr: &Mmr<sha256::Digest>, hasher: &Production) -> sha256::Digest {
-    mmr.root(hasher, 0).unwrap()
-}
-
 #[test]
 fn client_rejects_heights_above_the_bound() {
-    let store = Items(vec![vec![1]]);
     let message = vec![1];
-    for height in [spec::MAX_HEIGHT + 1, u32::MAX] {
+    for height in [adapter::MAX_HEIGHT + 1, u32::MAX] {
         assert!(
-            client::client_step::<Concrete, _>(&store, height, &message, 0, &[]).is_none(),
+            client::client_step::<Concrete>(&[0; 32], height, &message, 0, &[]).is_none(),
             "height {height}"
         );
     }

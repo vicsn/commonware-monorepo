@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Test the Rust specification against production, regenerate its Lean extraction, and check the
-# DyLean proofs over it.
+# Test the adapter and client against production, regenerate their Lean extraction with the
+# pinned production traversal, and check the DyLean proofs over it.
 set -euo pipefail
 cd "$(dirname "$0")"
 here=$PWD
@@ -21,7 +21,7 @@ mkdir -p "$src" "$here/.lake/rust" "$out" "$logs"
 # The production traversal at the pinned revision; rust/src/lib.rs includes it.
 git -C "$repo" archive "$rust_pin" storage/src/merkle/proof/traversal.rs | tar xf - -C "$here/.lake/rust"
 
-# The specification and the pinned traversal agree with this branch's production verifier.
+# The adapter, pinned traversal and client agree with this branch's production verifier.
 (cd rust && cargo test --offline --quiet) 2>&1 | tee "$logs/rust-tests.log"
 
 # Regenerating the extraction must reproduce the committed files exactly.
@@ -59,11 +59,11 @@ allowed = {"propext", "Classical.choice", "Quot.sound"}
 audit = dict(re.findall(r"'([^']+)' depends on axioms: \[([^\]]*)\]", Path(sys.argv[1]).read_text()))
 names = [
     "Qmdb.fixed_root_binding", "Qmdb.inclusion_sound", "Qmdb.honest_opening",
-    "Qmdb.Correspondence.tree_eq", "Qmdb.Correspondence.replay_eq",
-    "Qmdb.Correspondence.verify_single_eq", "Qmdb.Correspondence.traverse_eq",
-    "Qmdb.Correspondence.traversal_verify_eq", "Qmdb.Correspondence.root_eq",
-    "Qmdb.Correspondence.client_step_eq", "Qmdb.Protocol.client_eq_reference",
-    "Qmdb.Protocol.client_authentication", "Qmdb.traversal_matches_spec", "Qmdb.spec_root",
+    "Qmdb.Correspondence.traverse_eq", "Qmdb.Correspondence.traversal_verify_eq",
+    "Qmdb.Correspondence.binding", "Qmdb.Correspondence.honest_opening_accepted",
+    "Qmdb.Correspondence.step_sound", "Qmdb.Correspondence.client_step_eq",
+    "Qmdb.Protocol.client_eq_reference", "Qmdb.Protocol.client_authentication",
+    "Qmdb.production_binding", "Qmdb.honest_snapshots_exist",
     "Qmdb.extracted_client_authentication", "Qmdb.Sanity.attempt_reachable",
 ]
 for name in names:

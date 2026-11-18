@@ -44,15 +44,6 @@ structure traversal.Backend (Self : Type _) (Self_Digest : Type _) where
   collect : Self → Std.U64 → Self_Digest → Std.U64 → Self_Digest →
     RustM Self
 
-/-- [qmdb_dylean::adapter::Opening]
-    Source: 'src/adapter.rs', lines 10:0-14:1
-    Visibility: public -/
-structure adapter.Opening (T : Type _) (Clause0_Bytes : Type _) (Clause0_Digest
-  : Type _) (Clause0_Item : Type _) where
-  item : Clause0_Item
-  siblings : Slice Clause0_Digest
-  next : Std.Usize
-
 /-- Trait declaration: [qmdb_dylean::terms::Terms]
     Source: 'src/terms.rs', lines 8:0-28:1
     Visibility: public -/
@@ -67,18 +58,21 @@ structure terms.Terms (Self : Type _) (Self_Bytes : Type _) (Self_Digest :
   concat : Self_Bytes → Self_Bytes → RustM Self_Bytes
   hash : Self_Bytes → RustM Self_Digest
 
+/-- [qmdb_dylean::adapter::Opening]
+    Source: 'src/adapter.rs', lines 69:0-73:1
+    Visibility: public -/
+structure adapter.Opening (T : Type _) (Clause0_Bytes : Type _) (Clause0_Digest
+  : Type _) (Clause0_Item : Type _) where
+  item : Clause0_Item
+  siblings : Slice Clause0_Digest
+  next : Std.Usize
+
 /-- [qmdb_dylean::client::Acceptance]
-    Source: 'src/client.rs', lines 9:0-16:1
+    Source: 'src/client.rs', lines 6:0-13:1
     Visibility: public -/
 structure client.Acceptance (I : Type _) where
   height : Std.U32
   location : Std.U64
   item : I
-
-/-- Trait declaration: [qmdb_dylean::terms::Store]
-    Source: 'src/terms.rs', lines 31:0-34:1
-    Visibility: public -/
-structure terms.Store (Self : Type _) (I : Type _) where
-  item : Self → Std.U64 → RustM I
 
 end qmdb_dylean

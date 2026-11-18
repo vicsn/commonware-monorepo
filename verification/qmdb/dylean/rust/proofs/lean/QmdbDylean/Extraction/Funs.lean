@@ -70,22 +70,25 @@ def traversal.reconstruct
         | core.result.Result.Err _ => ok (r, backend1)
 partial_fixpoint
 
-/-- [qmdb_dylean::adapter::{impl qmdb_dylean::traversal::Backend<Clause0_Digest> for qmdb_dylean::adapter::Opening<'_0, T, Clause0_Bytes, Clause0_Digest, Clause0_Item>}::collect]:
-    Source: 'src/adapter.rs', lines 41:4-41:72 -/
-def adapter.Opening.Insts.Qmdb_dyleanTraversalBackend.collect
-  {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
-  : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
-  Clause0_Item)
-  (self : adapter.Opening T Clause0_Bytes Clause0_Digest Clause0_Item)
-  (i : Std.U64) (t : Clause0_Digest) (i1 : Std.U64) (t1 : Clause0_Digest) :
-  RustM (adapter.Opening T Clause0_Bytes Clause0_Digest Clause0_Item)
-  := do
-  ok self
-
-/-- [qmdb_dylean::spec::be64]:
-    Source: 'src/spec.rs', lines 20:0-31:1
+/-- [qmdb_dylean::adapter::MMR_DOMAIN]
+    Source: 'src/adapter.rs', lines 14:0-14:29
     Visibility: public -/
-def spec.be64 (value : Std.U64) : RustM (Array Std.U8 8#usize) := do
+@[global_simps, irreducible] def adapter.MMR_DOMAIN : Std.U8 := 0#u8
+
+/-- [qmdb_dylean::adapter::FORWARD_FOLD]
+    Source: 'src/adapter.rs', lines 17:0-17:31
+    Visibility: public -/
+@[global_simps, irreducible] def adapter.FORWARD_FOLD : Std.U8 := 0#u8
+
+/-- [qmdb_dylean::adapter::MAX_HEIGHT]
+    Source: 'src/adapter.rs', lines 20:0-20:31
+    Visibility: public -/
+@[global_simps, irreducible] def adapter.MAX_HEIGHT : Std.U32 := 63#u32
+
+/-- [qmdb_dylean::adapter::be64]:
+    Source: 'src/adapter.rs', lines 23:0-34:1
+    Visibility: public -/
+def adapter.be64 (value : Std.U64) : RustM (Array Std.U8 8#usize) := do
   let i ← value >>> 56#i32
   let i1 ← lift (UScalar.cast .U8 i)
   let i2 ← value >>> 48#i32
@@ -103,17 +106,33 @@ def spec.be64 (value : Std.U64) : RustM (Array Std.U8 8#usize) := do
   let i14 ← lift (UScalar.cast .U8 value)
   ok (Array.make 8#usize [ i1, i3, i5, i7, i9, i11, i13, i14 ])
 
-/-- [qmdb_dylean::spec::node]:
-    Source: 'src/spec.rs', lines 39:0-44:1
+/-- [qmdb_dylean::adapter::leaf]:
+    Source: 'src/adapter.rs', lines 37:0-39:1
     Visibility: public -/
-def spec.node
+def adapter.leaf
+  {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
+  : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
+  Clause0_Item) (position : Std.U64) (item : Clause0_Item) :
+  RustM Clause0_Digest
+  := do
+  let a ← adapter.be64 position
+  let s ← core.array.Array.as_slice a
+  let t ← termsTermsInst.literal s
+  let t1 ← termsTermsInst.item item
+  let t2 ← termsTermsInst.concat t t1
+  termsTermsInst.hash t2
+
+/-- [qmdb_dylean::adapter::node]:
+    Source: 'src/adapter.rs', lines 42:0-47:1
+    Visibility: public -/
+def adapter.node
   {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
   : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
   Clause0_Item) (position : Std.U64) (left : Clause0_Digest)
   (right : Clause0_Digest) :
   RustM Clause0_Digest
   := do
-  let a ← spec.be64 position
+  let a ← adapter.be64 position
   let s ← core.array.Array.as_slice a
   let t ← termsTermsInst.literal s
   let t1 ← termsTermsInst.digest left
@@ -122,8 +141,50 @@ def spec.node
   let t4 ← termsTermsInst.concat t t3
   termsTermsInst.hash t4
 
+/-- [qmdb_dylean::adapter::wrap]:
+    Source: 'src/adapter.rs', lines 51:0-66:1
+    Visibility: public -/
+def adapter.wrap
+  {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
+  : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
+  Clause0_Item) (height : Std.U32) (peak : Clause0_Digest) :
+  RustM Clause0_Digest
+  := do
+  let i ← 1#u64 <<< height
+  let leaves ← adapter.be64 i
+  let i1 ← Array.index_usize leaves 0#usize
+  let i2 ← Array.index_usize leaves 1#usize
+  let i3 ← Array.index_usize leaves 2#usize
+  let i4 ← Array.index_usize leaves 3#usize
+  let i5 ← Array.index_usize leaves 4#usize
+  let i6 ← Array.index_usize leaves 5#usize
+  let i7 ← Array.index_usize leaves 6#usize
+  let i8 ← Array.index_usize leaves 7#usize
+  let s ←
+    core.array.Array.as_slice
+      (Array.make 10#usize [
+        adapter.MMR_DOMAIN, adapter.FORWARD_FOLD, i1, i2, i3, i4, i5, i6, i7,
+        i8
+        ])
+  let t ← termsTermsInst.literal s
+  let t1 ← termsTermsInst.digest peak
+  let t2 ← termsTermsInst.concat t t1
+  termsTermsInst.hash t2
+
+/-- [qmdb_dylean::adapter::{impl qmdb_dylean::traversal::Backend<Clause0_Digest> for qmdb_dylean::adapter::Opening<'_0, T, Clause0_Bytes, Clause0_Digest, Clause0_Item>}::collect]:
+    Source: 'src/adapter.rs', lines 100:4-100:72 -/
+def adapter.Opening.Insts.Qmdb_dyleanTraversalBackend.collect
+  {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
+  : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
+  Clause0_Item)
+  (self : adapter.Opening T Clause0_Bytes Clause0_Digest Clause0_Item)
+  (i : Std.U64) (t : Clause0_Digest) (i1 : Std.U64) (t1 : Clause0_Digest) :
+  RustM (adapter.Opening T Clause0_Bytes Clause0_Digest Clause0_Item)
+  := do
+  ok self
+
 /-- [qmdb_dylean::adapter::{impl qmdb_dylean::traversal::Backend<Clause0_Digest> for qmdb_dylean::adapter::Opening<'_0, T, Clause0_Bytes, Clause0_Digest, Clause0_Item>}::node]:
-    Source: 'src/adapter.rs', lines 37:4-39:5 -/
+    Source: 'src/adapter.rs', lines 96:4-98:5 -/
 def adapter.Opening.Insts.Qmdb_dyleanTraversalBackend.node
   {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
   : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
@@ -132,26 +193,10 @@ def adapter.Opening.Insts.Qmdb_dyleanTraversalBackend.node
   (position : Std.U64) (left : Clause0_Digest) (right : Clause0_Digest) :
   RustM Clause0_Digest
   := do
-  spec.node termsTermsInst position left right
-
-/-- [qmdb_dylean::spec::leaf]:
-    Source: 'src/spec.rs', lines 34:0-36:1
-    Visibility: public -/
-def spec.leaf
-  {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
-  : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
-  Clause0_Item) (position : Std.U64) (item : Clause0_Item) :
-  RustM Clause0_Digest
-  := do
-  let a ← spec.be64 position
-  let s ← core.array.Array.as_slice a
-  let t ← termsTermsInst.literal s
-  let t1 ← termsTermsInst.item item
-  let t2 ← termsTermsInst.concat t t1
-  termsTermsInst.hash t2
+  adapter.node termsTermsInst position left right
 
 /-- [qmdb_dylean::adapter::{impl qmdb_dylean::traversal::Backend<Clause0_Digest> for qmdb_dylean::adapter::Opening<'_0, T, Clause0_Bytes, Clause0_Digest, Clause0_Item>}::leaf]:
-    Source: 'src/adapter.rs', lines 33:4-35:5 -/
+    Source: 'src/adapter.rs', lines 92:4-94:5 -/
 def adapter.Opening.Insts.Qmdb_dyleanTraversalBackend.leaf
   {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
   : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
@@ -161,11 +206,11 @@ def adapter.Opening.Insts.Qmdb_dyleanTraversalBackend.leaf
   RustM ((core.result.Result Clause0_Digest traversal.Error) ×
     (adapter.Opening T Clause0_Bytes Clause0_Digest Clause0_Item))
   := do
-  let t ← spec.leaf termsTermsInst position self.item
+  let t ← adapter.leaf termsTermsInst position self.item
   ok (core.result.Result.Ok t, self)
 
 /-- [qmdb_dylean::adapter::{impl qmdb_dylean::traversal::Backend<Clause0_Digest> for qmdb_dylean::adapter::Opening<'_0, T, Clause0_Bytes, Clause0_Digest, Clause0_Item>}::sibling]:
-    Source: 'src/adapter.rs', lines 23:4-31:5 -/
+    Source: 'src/adapter.rs', lines 82:4-90:5 -/
 def adapter.Opening.Insts.Qmdb_dyleanTraversalBackend.sibling
   {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
   : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
@@ -183,7 +228,7 @@ def adapter.Opening.Insts.Qmdb_dyleanTraversalBackend.sibling
   else ok (core.result.Result.Err traversal.Error.MissingDigests, self)
 
 /-- [qmdb_dylean::adapter::{impl qmdb_dylean::traversal::Backend<Clause0_Digest> for qmdb_dylean::adapter::Opening<'_0, T, Clause0_Bytes, Clause0_Digest, Clause0_Item>}::children]:
-    Source: 'src/adapter.rs', lines 19:4-21:5 -/
+    Source: 'src/adapter.rs', lines 78:4-80:5 -/
 def adapter.Opening.Insts.Qmdb_dyleanTraversalBackend.children
   {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
   : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
@@ -197,7 +242,7 @@ def adapter.Opening.Insts.Qmdb_dyleanTraversalBackend.children
   ok (i, i1)
 
 /-- Trait implementation: [qmdb_dylean::adapter::{impl qmdb_dylean::traversal::Backend<Clause0_Digest> for qmdb_dylean::adapter::Opening<'_0, T, Clause0_Bytes, Clause0_Digest, Clause0_Item>}]
-    Source: 'src/adapter.rs', lines 16:0-42:1 -/
+    Source: 'src/adapter.rs', lines 75:0-101:1 -/
 @[reducible]
 def adapter.Opening.Insts.Qmdb_dyleanTraversalBackend {T : Type _}
   {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item : Type _}
@@ -215,52 +260,8 @@ def adapter.Opening.Insts.Qmdb_dyleanTraversalBackend {T : Type _}
     termsTermsInst
 }
 
-/-- [qmdb_dylean::spec::FORWARD_FOLD]
-    Source: 'src/spec.rs', lines 14:0-14:31
-    Visibility: public -/
-@[global_simps, irreducible] def spec.FORWARD_FOLD : Std.U8 := 0#u8
-
-/-- [qmdb_dylean::spec::MMR_DOMAIN]
-    Source: 'src/spec.rs', lines 11:0-11:29
-    Visibility: public -/
-@[global_simps, irreducible] def spec.MMR_DOMAIN : Std.U8 := 0#u8
-
-/-- [qmdb_dylean::spec::wrap]:
-    Source: 'src/spec.rs', lines 47:0-62:1
-    Visibility: public -/
-def spec.wrap
-  {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
-  : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
-  Clause0_Item) (height : Std.U32) (peak : Clause0_Digest) :
-  RustM Clause0_Digest
-  := do
-  let i ← 1#u64 <<< height
-  let leaves ← spec.be64 i
-  let i1 ← Array.index_usize leaves 0#usize
-  let i2 ← Array.index_usize leaves 1#usize
-  let i3 ← Array.index_usize leaves 2#usize
-  let i4 ← Array.index_usize leaves 3#usize
-  let i5 ← Array.index_usize leaves 4#usize
-  let i6 ← Array.index_usize leaves 5#usize
-  let i7 ← Array.index_usize leaves 6#usize
-  let i8 ← Array.index_usize leaves 7#usize
-  let s ←
-    core.array.Array.as_slice
-      (Array.make 10#usize [
-        spec.MMR_DOMAIN, spec.FORWARD_FOLD, i1, i2, i3, i4, i5, i6, i7, i8
-        ])
-  let t ← termsTermsInst.literal s
-  let t1 ← termsTermsInst.digest peak
-  let t2 ← termsTermsInst.concat t t1
-  termsTermsInst.hash t2
-
-/-- [qmdb_dylean::spec::MAX_HEIGHT]
-    Source: 'src/spec.rs', lines 17:0-17:31
-    Visibility: public -/
-@[global_simps, irreducible] def spec.MAX_HEIGHT : Std.U32 := 63#u32
-
 /-- [qmdb_dylean::adapter::verify]:
-    Source: 'src/adapter.rs', lines 45:0-75:1
+    Source: 'src/adapter.rs', lines 105:0-135:1
     Visibility: public -/
 def adapter.verify
   {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
@@ -269,7 +270,7 @@ def adapter.verify
   (item : Clause0_Item) (siblings : Slice Clause0_Digest) :
   RustM Bool
   := do
-  if height > spec.MAX_HEIGHT
+  if height > adapter.MAX_HEIGHT
   then ok false
   else
     let leaves ← 1#u64 <<< height
@@ -288,61 +289,19 @@ def adapter.verify
         let i3 ← core.slice.Slice.len siblings
         if opening.next = i3
         then
-          let t ← spec.wrap termsTermsInst height peak
+          let t ← adapter.wrap termsTermsInst height peak
           termsTermsInst.corecmpPartialEqInst.eq t root
         else ok false
       | core.result.Result.Err _ => ok false
 
-/-- [qmdb_dylean::spec::tree]:
-    Source: 'src/spec.rs', lines 65:0-80:1
-    Visibility: public -/
-def spec.tree
-  {T : Type _} {S : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _}
-  {Clause0_Item : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes
-  Clause0_Digest Clause0_Item) (termsStoreInst : terms.Store S Clause0_Item)
-  (store : S) (height : Std.U32) (position : Std.U64) (start : Std.U64) :
-  RustM Clause0_Digest
-  := do
-  if height = 0#u32
-  then
-    let item ← termsStoreInst.item store start
-    spec.leaf termsTermsInst position item
-  else
-    let i ← height - 1#u32
-    let half ← 1#u64 <<< i
-    let i1 ← 2#u64 * half
-    let i2 ← position - i1
-    let left ← spec.tree termsTermsInst termsStoreInst store i i2 start
-    let i3 ← position - 1#u64
-    let i4 ← start + half
-    let right ← spec.tree termsTermsInst termsStoreInst store i i3 i4
-    spec.node termsTermsInst position left right
-partial_fixpoint
-
-/-- [qmdb_dylean::spec::root]:
-    Source: 'src/spec.rs', lines 83:0-86:1
-    Visibility: public -/
-def spec.root
-  {T : Type _} {S : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _}
-  {Clause0_Item : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes
-  Clause0_Digest Clause0_Item) (termsStoreInst : terms.Store S Clause0_Item)
-  (store : S) (height : Std.U32) :
-  RustM Clause0_Digest
-  := do
-  let leaves ← 1#u64 <<< height
-  let i ← leaves - 1#u64
-  let i1 ← 2#u64 * i
-  let t ← spec.tree termsTermsInst termsStoreInst store height i1 0#u64
-  spec.wrap termsTermsInst height t
-
 /-- [qmdb_dylean::client::client_step]:
-    Source: 'src/client.rs', lines 22:0-48:1
+    Source: 'src/client.rs', lines 19:0-40:1
     Visibility: public -/
 def client.client_step
-  {T : Type _} {S : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _}
-  {Clause0_Item : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes
-  Clause0_Digest Clause0_Item) (termsStoreInst : terms.Store S Clause0_Item)
-  (store : S) (height : Std.U32) (message : Clause0_Bytes) (location : Std.U64)
+  {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
+  : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
+  Clause0_Item) (root : Clause0_Digest) (height : Std.U32)
+  (message : Clause0_Bytes) (location : Std.U64)
   (siblings : Slice Clause0_Digest) :
   RustM (core.option.Option (client.Acceptance Clause0_Item))
   := do
@@ -350,101 +309,9 @@ def client.client_step
   match o with
   | core.option.Option.None => ok core.option.Option.None
   | core.option.Option.Some item =>
-    if height > spec.MAX_HEIGHT
-    then ok core.option.Option.None
-    else
-      let root ← spec.root termsTermsInst termsStoreInst store height
-      let b ←
-        adapter.verify termsTermsInst height location root item siblings
-      if b
-      then ok (core.option.Option.Some { height, location, item })
-      else ok core.option.Option.None
-
-/-- [qmdb_dylean::spec::replay]:
-    Source: 'src/spec.rs', lines 94:0-145:1
-    Visibility: public -/
-def spec.replay
-  {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
-  : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
-  Clause0_Item) (item : Clause0_Item) (height : Std.U32) (position : Std.U64)
-  (start : Std.U64) (location : Std.U64) (siblings : Slice Clause0_Digest)
-  (next : Std.Usize) :
-  RustM (core.option.Option (Clause0_Digest × Std.Usize))
-  := do
-  if height = 0#u32
-  then
-    let t ← spec.leaf termsTermsInst position item
-    ok (core.option.Option.Some (t, next))
-  else
-    let i ← height - 1#u32
-    let half ← 1#u64 <<< i
-    let i1 ← start + half
-    if location < i1
-    then
-      let i2 ← 2#u64 * half
-      let i3 ← position - i2
-      let o ←
-        spec.replay termsTermsInst item i i3 start location siblings next
-      match o with
-      | core.option.Option.None => ok core.option.Option.None
-      | core.option.Option.Some p =>
-        let (left, after) := p
-        let i4 ← core.slice.Slice.len siblings
-        if after < i4
-        then
-          let right ← Slice.index_usize siblings after
-          let t ← spec.node termsTermsInst position left right
-          let i5 ← after + 1#usize
-          ok (core.option.Option.Some (t, i5))
-        else ok core.option.Option.None
-    else
-      let i2 ← core.slice.Slice.len siblings
-      if next < i2
-      then
-        let left ← Slice.index_usize siblings next
-        let i3 ← position - 1#u64
-        let i4 ← next + 1#usize
-        let o ← spec.replay termsTermsInst item i i3 i1 location siblings i4
-        match o with
-        | core.option.Option.None => ok core.option.Option.None
-        | core.option.Option.Some p =>
-          let (right, after) := p
-          let t ← spec.node termsTermsInst position left right
-          ok (core.option.Option.Some (t, after))
-      else ok core.option.Option.None
-partial_fixpoint
-
-/-- [qmdb_dylean::spec::verify_single]:
-    Source: 'src/spec.rs', lines 148:0-166:1
-    Visibility: public -/
-def spec.verify_single
-  {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
-  : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
-  Clause0_Item) (height : Std.U32) (location : Std.U64) (root : Clause0_Digest)
-  (item : Clause0_Item) (siblings : Slice Clause0_Digest) :
-  RustM Bool
-  := do
-  if height > spec.MAX_HEIGHT
-  then ok false
-  else
-    let leaves ← 1#u64 <<< height
-    if location >= leaves
-    then ok false
-    else
-      let i ← leaves - 1#u64
-      let i1 ← 2#u64 * i
-      let o ←
-        spec.replay termsTermsInst item height i1 0#u64 location siblings
-          0#usize
-      match o with
-      | core.option.Option.None => ok false
-      | core.option.Option.Some p =>
-        let (peak, used) := p
-        let i2 ← core.slice.Slice.len siblings
-        if used = i2
-        then
-          let t ← spec.wrap termsTermsInst height peak
-          termsTermsInst.corecmpPartialEqInst.eq t root
-        else ok false
+    let b ← adapter.verify termsTermsInst height location root item siblings
+    if b
+    then ok (core.option.Option.Some { height, location, item })
+    else ok core.option.Option.None
 
 end qmdb_dylean

@@ -32,7 +32,7 @@ noncomputable section
 /-- Receive a claimed item and log the event that the extracted Rust decision returns. -/
 def client [Snapshot] (handle : Nat) (loc : Std.U64) (ws : Slice Bytes) : Traceful Unit := do
   let message ← Network.receiveMessage handle
-  match (qmdb_dylean.client.client_step dyTerms snapshotStore () Snapshot.height message loc ws).match
+  match (qmdb_dylean.client.client_step dyTerms Snapshot.root Snapshot.height message loc ws).match
   with
   | .ok (some event) => ProtocolEvent.logEvent event
   | _ => failure
@@ -88,7 +88,7 @@ theorem referenceClient_preserves (handle : Nat) (loc : Std.U64) (ws : Slice Byt
   · rename_i event accepted
     step by
       simp only [ProtocolEvent.EventInv.invariant]
-      exact Reference.step_sound _ _ _ _ accepted
+      exact Correspondence.step_sound _ _ _ _ accepted
     trivial
   · step
 

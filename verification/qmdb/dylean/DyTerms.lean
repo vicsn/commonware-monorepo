@@ -2,10 +2,9 @@ module
 public import QmdbDylean.Extraction
 public import Model
 
-/-! Trusted glue between the extracted Rust and DyLean. `dyTerms` interprets the specification's
+/-! Trusted glue between the extracted Rust and DyLean. `dyTerms` interprets the verifier's
 terms with DyLean's symbolic literal, concatenation and hash constructors. `Snapshot` is the
-authenticated historical snapshot that the application supplies, and `snapshotStore` exposes it
-to the extracted code. -/
+authenticated historical snapshot that the application supplies. -/
 
 namespace Qmdb
 open DY Aeneas Aeneas.Std CoreModels
@@ -29,14 +28,14 @@ def dyTerms : qmdb_dylean.terms.Terms Unit Bytes Bytes ByteArray where
   concat a b := RustM.ok (Concat.concat a b)
   hash x := RustM.ok (Hash.hash x)
 
-/-- A fixed, authenticated historical snapshot with `2^height` leaves. -/
+/-- A fixed, authenticated historical snapshot with `2^height` leaves. The application supplies
+its root, and every stored item has an opening that the production verifier accepts under it. -/
 class Snapshot where
-  items : Nat → ByteArray
   height : Std.U32
-
-/-- The snapshot's items, as the extracted code reads them. -/
-def snapshotStore [Snapshot] : qmdb_dylean.terms.Store Unit ByteArray where
-  item _ location := RustM.ok (Snapshot.items location.val)
+  root : Bytes
+  items : Nat → ByteArray
+  honest : ∀ loc : Std.U64, loc.val < 2^height.val → ∃ ws : Slice Bytes,
+    qmdb_dylean.adapter.verify dyTerms height loc root (items loc.val) ws = RustM.ok true
 
 end
 end Qmdb
