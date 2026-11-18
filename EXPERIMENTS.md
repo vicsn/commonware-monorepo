@@ -6,7 +6,7 @@ Do not commit or cherry-pick it onto `main` or unrelated branches.
 ## Names and locations
 
 - Give each experiment a stable, lowercase, hyphenated slug describing the
-  approach, such as `qmdb-hax-aeneas-lean` or `qmdb-verus`. Avoid relative names
+  approach, such as `qmdb-hax-lean` or `qmdb-verus`. Avoid relative names
   such as `new`, `latest`, and `modern`.
 - Name verification branches `verify/<slug>` and linked worktrees
   `<canonical-repo>/.worktrees/<slug>`. Other branches use their final path
