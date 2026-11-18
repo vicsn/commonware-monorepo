@@ -11,3 +11,4 @@ mkdir -p .lake
 export LEAN_PATH="$PWD/.lake:$dy/.lake/build/lib/lean"
 lean -o .lake/Model.olean Model.lean
 python3 validate.py
+bash check-bridge.sh

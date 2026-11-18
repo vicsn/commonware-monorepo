@@ -1,0 +1,15 @@
+--- a/DY/EquationalTheory/Literal.lean
++++ b/DY/EquationalTheory/Literal.lean
+@@ -50,0 +51,7 @@
++public instance : Ord ByteArray := ⟨compareOn ByteArray.data⟩
++public instance : Std.TransOrd ByteArray := inferInstanceAs (Std.TransCmp (compareOn ByteArray.data))
++public instance : Std.LawfulEqOrd ByteArray where
++  eq_of_compare := by
++    intro a b h
++    exact ByteArray.ext (Std.LawfulEqOrd.eq_of_compare (α := Array UInt8) h)
++
+--- a/DY/Meta/Step/Init.lean
++++ b/DY/Meta/Step/Init.lean
+@@ -413 +413 @@
+-            goal.withContext do throwError "cannot monotonize {← hypFv.getType}.\n grind failure: {← goalToMessageData newGoal config #[]}"
++            goal.withContext do throwError "cannot monotonize {← hypFv.getType}.\n grind failure: {← goalToMessageData newGoal config}"

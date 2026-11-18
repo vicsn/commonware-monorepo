@@ -8,7 +8,7 @@ open DY
 @[expose] public section
 
 -- The minimal constructor instance used here follows Examples/MerkleTree/Instance.
-#combine +toplevel into BytesFunctor, BytesLength from
+#combine +toplevel into BytesFunctor, BytesLength, attackerKnowledge from
   Literal,
   Concat,
   Hash,
