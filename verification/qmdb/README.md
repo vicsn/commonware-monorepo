@@ -1,6 +1,6 @@
 # QMDB inclusion with DyLean
 
-- Approach / branch / worktree: DyLean, `verify/qmdb-dylean`, `.worktrees/qmdb-dylean`.
+- Approach / branch / worktree: DyLean, `verify/qmdb-hax-dylean`, `.worktrees/qmdb-hax-dylean`.
 - Status: complete for single-item symbolic client authentication and traversal correspondence.
 - Updated and validated: 2026-11-18, proof source `9310a34cf`, extracted Rust source `5b7e44f63`.
 - Reproduce from the worktree: `bash verification/qmdb/dylean/check.sh`.

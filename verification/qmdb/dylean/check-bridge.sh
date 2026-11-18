@@ -25,7 +25,7 @@ export XDG_CACHE_HOME=${XDG_CACHE_HOME:-"$cache/modern-cache"}
 for f in "$pkg"/QmdbTraversal/Extraction/*.lean; do
     git show "$rust_pin:${f#"$rust/"}" | cmp - "$f"
 done
-deps="$repo/.worktrees/qmdb-hax-aeneas-lean/$crate/proofs/lean/.lake/packages"
+deps="$repo/.worktrees/qmdb-hax-lean/$crate/proofs/lean/.lake/packages"
 mkdir -p "$pkg/.lake"
 if [[ -d "$deps" && ! -e "$pkg/.lake/packages" ]]; then
     ln -s "$deps" "$pkg/.lake/packages"
