@@ -1,61 +1,56 @@
 module
-public import Binding
+public import Correspondence
 public import DY.Actions.Network
 public import DY.Actions.ProtocolEvent
 import DY.Meta
 
+/-! The DyLean protocol around the extracted client decision. Trusted: `client`, the event
+invariant and the theorem statements. `referenceClient` is an executable copy of the client with
+the reference decision; `client_eq_reference` proves the two equal, so the sanity checks can run
+it. -/
+
 namespace Qmdb.Protocol
-open DY
+open DY Aeneas Aeneas.Std
 @[expose] public section
 
-structure Acceptance where
-  height : Nat
-  location : Nat
-  item : ByteArray
-
--- A fixed, authenticated historical snapshot supplied by the application.
-class Snapshot where
-  items : Nat → ByteArray
-  height : Nat
+abbrev Acceptance := Reference.Acceptance
 
 #combine +toplevel into ExecEntryT, baseAttackerKnowledge from
   Network,
   ProtocolEvent Acceptance,
 
-def check (h loc : Nat) (root : Bytes) (item : ByteArray) (ws : List Bytes) : Bool :=
-  h ≤ 63 && loc < 2^h &&
-    match replay item h (2*(2^h-1)) 0 loc ws with
-    | some (peak,[]) => decide (wrap h peak = root)
-    | _ => false
-
-theorem check_spec (h loc : Nat) (root : Bytes) (item : ByteArray) (ws : List Bytes) :
-    check h loc root item ws = true ↔ accepts h loc root item ws := by
-  unfold check accepts
-  cases hr : replay item h (2*(2^h-1)) 0 loc ws with
-  | none => simp
-  | some pair => obtain ⟨p,rest⟩ := pair; cases rest <;> simp [and_assoc]
-
-class Verifier where
-  verify : Nat → Nat → Bytes → ByteArray → List Bytes → Bool
-  sound : ∀ h loc root item ws, verify h loc root item ws = true → accepts h loc root item ws
-
-@[instance_reducible] def modelVerifier : Verifier where
-  verify := check
-  sound := fun h loc root item ws => (check_spec h loc root item ws).mp
-
-def client [Snapshot] [Verifier] (handle loc : Nat) (ws : List Bytes) : Traceful Unit := do
+/-- The client with the reference decision. Untrusted and executable. -/
+def referenceClient [Snapshot] (handle : Nat) (loc : Std.U64) (ws : Slice Bytes) :
+    Traceful Unit := do
   let message ← Network.receiveMessage handle
-  let some item := Literal.bytesToLiteral message | failure
-  let h := Snapshot.height
-  let root := wrap h (tree Snapshot.items h (2*(2^h-1)) 0)
-  guard (Verifier.verify h loc root item ws)
-  ProtocolEvent.logEvent (Acceptance.mk h loc item)
+  match Reference.step message loc ws with
+  | some event => ProtocolEvent.logEvent event
+  | none => failure
 
-def client.reachability [Snapshot] [Verifier] : ReachabilityConfig :=
-  .make fun (handle,loc,ws) => client handle loc ws
+noncomputable section
+
+/-- Receive a claimed item and log the event that the extracted Rust decision returns. -/
+def client [Snapshot] (handle : Nat) (loc : Std.U64) (ws : Slice Bytes) : Traceful Unit := do
+  let message ← Network.receiveMessage handle
+  match (qmdb_dylean.client.client_step dyTerms snapshotStore () Snapshot.height message loc ws).match
+  with
+  | .ok (some event) => ProtocolEvent.logEvent event
+  | _ => failure
+
+theorem client_eq_reference [Snapshot] :
+    (client : Nat → Std.U64 → Slice Bytes → Traceful Unit) = referenceClient := by
+  funext handle loc ws
+  unfold client referenceClient
+  congr 1
+  funext message
+  rw [Correspondence.client_step_eq, RustM.match.ok]
+  cases Reference.step message loc ws <;> rfl
+
+def client.reachability [Snapshot] : ReachabilityConfig :=
+  .make fun (handle, loc, ws) => client handle loc ws
 
 section
-variable [Snapshot] [Verifier]
+variable [Snapshot]
 #combine into ReachabilityConfig from
   Network,
   client,
@@ -71,10 +66,11 @@ end
   Hash,
 
 instance [Snapshot] : ProtocolEvent.EventInv Acceptance where
-  invariant _ event := event.height = Snapshot.height ∧ event.location < 2^event.height ∧ event.item = Snapshot.items event.location
+  invariant _ event := event.height = Snapshot.height ∧
+    event.location.val < 2^event.height.val ∧ event.item = Snapshot.items event.location.val
 
 section
-variable [Snapshot] [Verifier]
+variable [Snapshot]
 #combine +toplevel into SubTraceInvariant, SubBaseAttackerKnowledgeTheorem from
   Network,
   ProtocolEvent Acceptance,
@@ -84,34 +80,44 @@ variable [Snapshot] [Verifier]
   Concat,
   Hash,
 
-theorem client_preserves (handle loc : Nat) (ws : List Bytes) :
-    HoareTriple (client handle loc ws) (fun _ => True) (fun _ _ => True) := by
-  unfold client
+theorem referenceClient_preserves (handle : Nat) (loc : Std.U64) (ws : Slice Bytes) :
+    HoareTriple (referenceClient handle loc ws) (fun _ => True) (fun _ _ => True) := by
+  unfold referenceClient
   step
   split
-  · dsimp only
-    step
+  · rename_i event accepted
     step by
-      simp only [ProtocolEvent.EventInv.invariant, true_and]
-      have accepted := Verifier.sound _ _ _ _ _ (by assumption)
-      exact ⟨accepted.2.1, inclusion_sound _ _ _ _ _ accepted⟩
+      simp only [ProtocolEvent.EventInv.invariant]
+      exact Reference.step_sound _ _ _ _ accepted
     trivial
   · step
 
+theorem client_preserves (handle : Nat) (loc : Std.U64) (ws : Slice Bytes) :
+    HoareTriple (client handle loc ws) (fun _ => True) (fun _ _ => True) := by
+  rw [client_eq_reference]
+  exact referenceClient_preserves handle loc ws
+
 instance : ReachableImpliesInvariant client.reachability :=
-  .mk (fun (handle,loc,ws) => client_preserves handle loc ws)
+  .mk (fun (handle, loc, ws) => client_preserves handle loc ws)
 
 #combine into ReachabilityTheorem from
   Network,
   client,
 
-theorem client_authentication (h loc : Nat) (item : ByteArray) (time : Nat) :
-    ∀ tr : ExecTrace, tr.Reachable reachability →
-      tr.EventLoggedAt (Acceptance.mk h loc item) time →
-      h = Snapshot.height ∧ loc < 2^h ∧ item = Snapshot.items loc := by
+/-- Every acceptance on a reachable trace names the snapshot height, an in-range location and
+the item stored there. -/
+theorem client_authentication (event : Acceptance) (time : Nat) :
+    ∀ tr : ExecTrace, tr.Reachable reachability → tr.EventLoggedAt event time →
+      event.height = Snapshot.height ∧ event.location.val < 2^event.height.val ∧
+        event.item = Snapshot.items event.location.val := by
   apply Trace.apply_Reachable_implies_Invariant
-  intro tr inv event
-  exact Trace.EventLoggedAt_imp_EventInv _ _ _ inv event
+  intro tr inv logged
+  exact Trace.EventLoggedAt_imp_EventInv _ _ _ inv logged
+end
+
+#print axioms client_eq_reference
+#print axioms client_authentication
+
 end
 end
 end Qmdb.Protocol

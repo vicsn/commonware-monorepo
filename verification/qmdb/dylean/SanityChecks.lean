@@ -1,27 +1,20 @@
 module
 public import Protocol
-public meta import Protocol
+public import Scenarios
 
 namespace Qmdb.Sanity
-open DY Protocol
+open DY Aeneas Aeneas.Std Protocol Scenarios
 
-private instance : Verifier := modelVerifier
-
-private def alice := "Alice".toUTF8
-private def bob := "Bob".toUTF8
-private instance : Snapshot where
-  height := 1
-  items := fun i => if i = 0 then alice else bob
-
-private def attempt (claimed : ByteArray) (loc : Nat) (ws : List Bytes) : Traceful Unit := do
+public def attempt (claimed : ByteArray) (loc : Std.U64) (ws : Slice Bytes) : Traceful Unit := do
   let handle ← Network.sendMessage (Literal.literalToBytes claimed)
   client handle loc ws
 
--- Each execution starts with an attacker-known literal, then uses precisely
--- the registered client action. A successful action appends its acceptance event.
-private theorem attempt_reachable (claimed : ByteArray) (loc : Nat) (ws : List Bytes) :
+/-- Every scenario is a reachable protocol execution: an attacker-known literal followed by
+precisely the registered client action. -/
+public theorem attempt_reachable (claimed : ByteArray) (loc : Std.U64) (ws : Slice Bytes) :
     ((attempt claimed loc ws).run Trace.empty).snd.val.Reachable reachability := by
-  apply Traceful.PreservesReachability_to_Reachable (pre := fun _ => True) (post := fun _ _ => True)
+  apply Traceful.PreservesReachability_to_Reachable (pre := fun _ => True)
+    (post := fun _ _ => True)
   · intro tr reachable _
     unfold attempt
     apply Traceful.PreservesReachabilityFrom_bind
@@ -34,13 +27,5 @@ private theorem attempt_reachable (claimed : ByteArray) (loc : Nat) (ws : List B
     · trivial
   · trivial
 
-public def testRuns : IO Unit := do
-  let sibling := leaf 1 bob
-  for (claim, loc, ws, valid) in [(alice,0,[sibling],true), (bob,1,[leaf 0 alice],true),
-      (bob,0,[sibling],false), (alice,1,[sibling],false), (alice,0,[],false),
-      (alice,0,[sibling,sibling],false)] do
-    let tr := ((attempt claim loc ws).run Trace.empty).snd.val
-    let logged := (tr.getEventAt (EventT := Acceptance) 1).isSome
-    unless logged == valid do throw (IO.userError "unexpected client acceptance event")
+#print axioms attempt_reachable
 end Qmdb.Sanity
-public def main := Qmdb.Sanity.testRuns

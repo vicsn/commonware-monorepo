@@ -1,33 +1,34 @@
 module
 public import Protocol
-public import Correspondence
 
 namespace Qmdb
-open DY Protocol
+open DY Aeneas Aeneas.Std Protocol qmdb_dylean
 @[expose] public section
 
-instance extractedVerifier : Verifier where
-  verify := Bridge.verify
-  sound := fun h loc root item ws => (Bridge.verify_iff h loc root item ws).mp
+/-- The pinned production traversal and the Rust specification accept exactly the same openings. -/
+theorem traversal_matches_spec (h : Std.U32) (loc : Std.U64) (root : Bytes) (item : ByteArray)
+    (siblings : Slice Bytes) :
+    adapter.verify dyTerms h loc root item siblings =
+      spec.verify_single dyTerms h loc root item siblings := by
+  rw [Correspondence.traversal_verify_eq, Correspondence.verify_single_eq]
 
-/-- The model and extracted checkers induce identical client actions, including
-the traces exercised by the executable sanity checks. -/
-theorem same_verifier : extractedVerifier = modelVerifier := by
-  have eq : Bridge.verify = check := by
-    funext h loc root item ws
-    apply Bool.eq_iff_iff.mpr
-    exact (Bridge.verify_iff ..).trans (check_spec ..).symm
-  unfold extractedVerifier modelVerifier
-  congr
+/-- The Rust specification's honest root is the reference model's. -/
+theorem spec_root [Snapshot] (bound : (Snapshot.height).val ≤ 63) :
+    spec.root dyTerms snapshotStore () Snapshot.height =
+      RustM.ok (wrap (Snapshot.height).val
+        (tree Snapshot.items (Snapshot.height).val (2*(2^(Snapshot.height).val-1)) 0)) :=
+  Correspondence.root_eq bound
 
-/-- Authentication on traces consisting of attacker sends and client verification steps. -/
-theorem extracted_client_authentication [Snapshot] (h loc : Nat) (item : ByteArray) (t : Nat)
+/-- Authentication on traces consisting of attacker sends and extracted client steps. -/
+theorem extracted_client_authentication [Snapshot] (event : Acceptance) (t : Nat)
     (tr : ExecTrace) (reachable : tr.Reachable reachability)
-    (accepted : tr.EventLoggedAt (Acceptance.mk h loc item) t) :
-    h = Snapshot.height ∧ loc < 2^h ∧ item = Snapshot.items loc :=
-  client_authentication h loc item t tr reachable accepted
+    (accepted : tr.EventLoggedAt event t) :
+    event.height = Snapshot.height ∧ event.location.val < 2^event.height.val ∧
+      event.item = Snapshot.items event.location.val :=
+  client_authentication event t tr reachable accepted
 
-#print axioms same_verifier
+#print axioms traversal_matches_spec
+#print axioms spec_root
 #print axioms extracted_client_authentication
 end
 end Qmdb

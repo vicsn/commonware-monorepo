@@ -1,0 +1,17 @@
+name = "qmdb-dylean"
+version = "0.1.0"
+defaultTargets = ["QmdbDylean"]
+
+[[lean_lib]]
+name = "QmdbDylean"
+
+[[require]]
+name = "aeneas"
+git = "https://github.com/pereq-dev/aeneas"
+rev = "build-2b9e3ea"
+subDir = "backends/lean"
+
+[[require]]
+name = "hax"
+git = "https://github.com/cryspen/hax-lean"
+rev = "v0.3.42"
