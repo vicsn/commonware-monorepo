@@ -3,8 +3,8 @@
 - Approach / branch / worktree: DyLean, `verify/qmdb-hax-dylean`, `.worktrees/qmdb-hax-dylean`.
 - Status: complete for single-item position binding of the extracted production verifier under
   any hash, and for symbolic client authentication on top of it.
-- Updated: 2026-11-20. Source: pending commit of the shared layout. It changes the production
-  files `storage/src/merkle/{hasher.rs,hasher/terms.rs,proof.rs,proof/traversal.rs}`.
+- Updated: 2026-11-20. Source: `3378277a5`. It changes the production files
+  `storage/src/merkle/{hasher.rs,hasher/terms.rs,proof.rs,proof/traversal.rs}`.
 - Proved scope: for any hash, two openings that the production verifier accepts at one location
   under one root carry the same item, or an explicit finder returns two different hash inputs
   with the same digest. This holds for production's concatenated bytes with fixed-length digests.
@@ -15,7 +15,13 @@
 - Assumption: the application's snapshot root gives every stored item an opening that the
   production verifier accepts. `honest_snapshots_exist` shows that such roots exist at every
   height up to 62.
-- Last validation: pending for the shared layout.
+- Last validation: `bash verification/check.sh` on 2026-11-20 at `3378277a5`, passed. 3 Rust
+  tests (1,653 differential claims and 511 honest production openings), reproducible extraction,
+  an axiom audit of all 109 theorems in `Qmdb` and `Commonware.Symbolic` (standard Lean axioms),
+  2 executed finder checks, 7 rejected mutations and the BLS check. The production files are
+  unchanged since `just test -p commonware-storage` passed on 2026-11-18 (4,672 passed, 994
+  skipped). Logs: `verification/.lake/logs/`, with the earlier runs in
+  `verification/.lake/logs/1976be622/`.
 - Remaining boundary: the hash function itself and production's `ByteTerms`, which Lean reads as
   hashing the concatenated bytes; the production `Hasher`/`Family` wrappers, their bounds checks
   and blueprint; hashers that override the default encodings (grafting); node collection;
