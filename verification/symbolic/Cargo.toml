@@ -1,0 +1,17 @@
+[package]
+name = "commonware-symbolic"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Outside the Commonware workspace: hax extracts this crate on its own.
+[workspace]
+
+[lib]
+path = "src/lib.rs"
+
+[dev-dependencies]
+commonware-cryptography = { path = "../../cryptography" }
+commonware-storage = { path = "../../storage" }
+commonware-utils = { path = "../../utils" }
+rand = { version = "0.10.2", default-features = false }

@@ -1,0 +1,25 @@
+name = "commonware-symbolic-proofs"
+version = "0.1.0"
+defaultTargets = ["Commonware", "Qmdb"]
+# The extraction's Lean, which DyLean is patched for; keeps `lake update` from adopting DyLean's.
+fixedToolchain = true
+
+# Glue between the extracted Rust and DyLean that every target shares.
+[[lean_lib]]
+name = "Commonware"
+globs = ["Commonware.+"]
+
+# QMDB inclusion: the extracted verifier and client, and their DyLean protocol.
+[[lean_lib]]
+name = "Qmdb"
+globs = ["Qmdb.+"]
+
+# The hax extraction of verification/symbolic.
+[[require]]
+name = "commonware-symbolic"
+path = "../symbolic/proofs/lean"
+
+# DyLean at its pin, patched for Lean 4.35 by toolchain.sh.
+[[require]]
+name = "dylean"
+path = "../.lake/dylean"

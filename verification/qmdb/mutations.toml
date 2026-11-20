@@ -1,0 +1,52 @@
+# Mutations of the Rust that hax extracts for QMDB. Each replaces `original`, which must occur once
+# in `file` (relative to the repository), with `mutated`; `mutate.py` re-extracts the crate and
+# requires the proof module `fails` to stop compiling.
+
+[[mutation]]
+name = "leaf hash drops the element"
+file = "storage/src/merkle/hasher/terms.rs"
+original = "terms.hash(&[Part::Bytes(&position.to_be_bytes()), Part::Bytes(element)])"
+mutated = "terms.hash(&[Part::Bytes(&position.to_be_bytes())])"
+fails = "Qmdb.Verifier"
+
+[[mutation]]
+name = "node hash drops the left child"
+file = "storage/src/merkle/hasher/terms.rs"
+original = "Part::Digest(left),\n        Part::Digest(right),"
+mutated = "Part::Digest(right),"
+fails = "Qmdb.Verifier"
+
+[[mutation]]
+name = "root drops the peak"
+file = "storage/src/merkle/hasher/terms.rs"
+original = "Part::Digest(folded),\n        ])\n    } else {"
+mutated = "])\n    } else {"
+fails = "Qmdb.Verifier"
+
+[[mutation]]
+name = "traversal treats a boundary subtree as inside"
+file = "storage/src/merkle/proof/traversal.rs"
+original = "if start + width <= range_start || start >= range_end {"
+mutated = "if start + width < range_start || start >= range_end {"
+fails = "Qmdb.Verifier"
+
+[[mutation]]
+name = "traversal hashes the right child twice"
+file = "storage/src/merkle/proof/traversal.rs"
+original = "Ok(backend.node(position, left, right))"
+mutated = "Ok(backend.node(position, right, right))"
+fails = "Qmdb.Verifier"
+
+[[mutation]]
+name = "verifier ignores unused siblings"
+file = "verification/symbolic/src/qmdb.rs"
+original = "opening.cursor() == siblings.len()\n                && terms::root("
+mutated = "terms::root("
+fails = "Qmdb.Verifier"
+
+[[mutation]]
+name = "client skips verification"
+file = "verification/symbolic/src/qmdb.rs"
+original = "if verify(terms, height, location, root, item, siblings) {"
+mutated = "if true {"
+fails = "Qmdb.Symbolic"
