@@ -72,9 +72,7 @@ def update_report():
     source = re.sub(r' <a class="code-diff"[^>]*>Diff</a>', '', source)
     ordered = sorted(EXPERIMENTS.items(), key=lambda item: len(str(item[1][0])), reverse=True)
     def add(match):
-        path = unquote(urlsplit(html.unescape(match[1])).path)
-        path = re.sub(r':\d+(?::\d+)?$', '', path)
-        current = Path(path)
+        current = ROOT / unquote(html.unescape(match[1]))
         if current.suffix not in {'.rs', '.lean', '.py', '.sh', '.toml'}:
             return match[0]
         for name, (repo, revision) in ordered:
@@ -89,7 +87,7 @@ def update_report():
             uri = f'{SCHEME}://{name}/' + quote(relative, safe='/')
             return match[0] + f' <a class="code-diff" href="{uri}" title="Compare documented baseline with working file in VS Code">Diff</a>'
         return match[0]
-    source = re.sub(r'<a href="(vscode://file[^"]+)"[^>]*>.*?</a>', add, source)
+    source = re.sub(r'<a class="src" href="([^"]+)"[^>]*>.*?</a>', add, source)
     note = '<p class="muted" id="diff-help">Diff compares each experiment’s working file against the common original baseline <code>b45ef2d78</code>, including test changes in the same file. New files have an empty left pane. Install the local VS Code handler with <code>python3 verification/qmdb/code-diff.py --install</code>.</p>'
     source = re.sub(r'\n?<p class="muted" id="diff-help">.*?</p>', '', source)
     source = source.replace('<section id="changes"><h2>Production code changes</h2>', '<section id="changes"><h2>Production code changes</h2>\n' + note)

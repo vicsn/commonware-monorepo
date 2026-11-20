@@ -133,8 +133,7 @@ def git(*args):
 
 
 def default_dylean():
-    common = git('rev-parse', '--path-format=absolute', '--git-common-dir').decode().strip()
-    return Path(common).parent / '.worktrees/qmdb-hax-dylean'
+    return ROOT
 
 
 def assignment(script, name):
@@ -637,7 +636,8 @@ def committed(branch, rel):
 
 
 def provenance(dylean, branch):
-    commit = git('rev-parse', '--short', branch).decode().strip()
+    # The last commit that changed the Lean sources, so that committing the page keeps it current.
+    commit = git('log', '-1', '--format=%h', branch, '--', *SOURCES).decode().strip()
     dirty = [rel for rel in SOURCES if (dylean / rel).read_bytes() != committed(branch, rel)]
     source = f'{branch}@{commit}'
     if dirty:
