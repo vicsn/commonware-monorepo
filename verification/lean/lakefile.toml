@@ -1,6 +1,6 @@
 name = "commonware-symbolic-proofs"
 version = "0.1.0"
-defaultTargets = ["Commonware", "Qmdb"]
+defaultTargets = ["Commonware", "Qmdb", "Bls"]
 # The extraction's Lean, which DyLean is patched for; keeps `lake update` from adopting DyLean's.
 fixedToolchain = true
 
@@ -13,6 +13,11 @@ globs = ["Commonware.+"]
 [[lean_lib]]
 name = "Qmdb"
 globs = ["Qmdb.+"]
+
+# BLS certificates: the extracted certificate rules and client, and their DyLean protocol.
+[[lean_lib]]
+name = "Bls"
+globs = ["Bls.+"]
 
 # The hax extraction of verification/symbolic.
 [[require]]

@@ -79,5 +79,17 @@ theorem eq_ok_of_match {α} {x : RustM α} {a : α} (h : x.match = .ok a) : x = 
   | vis i k => simp at h
   | div => simp at h
 
+/-- A loop whose body continues runs on from the state that the body returns. -/
+theorem loop_cont {α β} (body : α → RustM (ControlFlow α β)) (x x' : α)
+    (h : body x = RustM.ok (.cont x')) : loop body x = loop body x' := by
+  rw [loop.eq_def, h]
+  simp
+
+/-- A loop whose body is done returns what the body returns. -/
+theorem loop_done {α β} (body : α → RustM (ControlFlow α β)) (x : α) (y : β)
+    (h : body x = RustM.ok (.done y)) : loop body x = RustM.ok y := by
+  rw [loop.eq_def, h]
+  simp
+
 end
 end Commonware.Symbolic
