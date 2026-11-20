@@ -14,6 +14,7 @@
 #[cfg(feature = "mocks")]
 pub mod mocks;
 
+use super::{Aggregated, Pairing, Single, rules};
 use crate::{
     PublicKey,
     bls12381::primitives::{
@@ -31,14 +32,41 @@ use commonware_codec::{
 };
 use commonware_parallel::Strategy;
 use commonware_utils::{
-    Participant, Widen,
+    Faults, Participant,
     iter::NonEmpty,
     non_empty,
     ordered::{BiMap, Quorum, Set},
 };
+use core::marker::PhantomData;
 use rand_core::CryptoRng;
 #[cfg(feature = "std")]
 use std::collections::BTreeSet;
+
+/// The participants of a scheme as the committee that the certificate rules check against, with
+/// the quorum of the fault model `F`.
+struct Members<'a, P, K, F>(&'a BiMap<P, K>, PhantomData<F>);
+
+impl<'a, P, K, F> Members<'a, P, K, F> {
+    const fn new(participants: &'a BiMap<P, K>) -> Self {
+        Self(participants, PhantomData)
+    }
+}
+
+impl<P: Ord, K, F: Faults> rules::Committee<K> for Members<'_, P, K, F> {
+    fn members(&self) -> u64 {
+        self.0.len() as u64
+    }
+
+    fn quorum(&self) -> u64 {
+        u64::from(self.0.quorum::<F>())
+    }
+
+    fn key(&self, index: u64) -> Option<&K> {
+        usize::try_from(index)
+            .ok()
+            .and_then(|index| self.0.value(index))
+    }
+}
 
 /// Generic BLS12-381 multi-signature implementation.
 ///
@@ -148,20 +176,14 @@ impl<P: PublicKey, V: Variant, N: Namespace> Generic<P, V, N> {
     where
         S: Scheme<Signature = V::Signature>,
     {
-        let Some(public_key) = self.participants.value(attestation.signer.into()) else {
-            return false;
-        };
-        let Some(sig) = attestation.signature.get() else {
-            return false;
-        };
-
-        ops::verify_message::<V>(
-            public_key,
+        rules::verify_attestation(
+            &Pairing::<V>::new(),
+            &Members::<_, _, S::Faults>::new(&self.participants),
+            u64::from(attestation.signer.get()),
+            &Single::<V>(&attestation.signature),
             subject.namespace(&self.namespace),
             &subject.message(),
-            sig,
         )
-        .is_ok()
     }
 
     /// Batch-verifies attestations and returns verified attestations and invalid signers.
@@ -270,39 +292,16 @@ impl<P: PublicKey, V: Variant, N: Namespace> Generic<P, V, N> {
         S: Scheme,
         R: CryptoRng,
     {
-        // If the certificate signers length does not match the participant set, return false.
-        if certificate.signers.len() != self.participants.len() {
-            return false;
-        }
-
-        // If the certificate does not meet the quorum, return false.
-        if certificate.signers.count() < Widen::widen(self.participants.quorum::<S::Faults>()) {
-            return false;
-        }
-
-        // Malformed signatures can skip per-signer group operations.
-        let Some(signature) = certificate.signature.get() else {
-            return false;
-        };
-
-        // Aggregate the public keys.
-        let mut agg_public = aggregate::PublicKey::<V>::zero();
-        for signer in certificate.signers.iter() {
-            let Some(public_key) = self.participants.value(signer.into()) else {
-                return false;
-            };
-
-            agg_public.add(public_key);
-        }
-
-        // Verify the aggregate signature.
-        aggregate::verify_same_message::<V>(
-            &agg_public,
+        // The rules reject a certificate whose signers do not span the participant set or do not
+        // meet the quorum before decoding its signature and combining any keys.
+        rules::verify_certificate(
+            &Pairing::<V>::new(),
+            &Members::<_, _, S::Faults>::new(&self.participants),
+            &certificate.signers,
+            &Aggregated(&certificate.signature),
             subject.namespace(&self.namespace),
             &subject.message(),
-            signature,
         )
-        .is_ok()
     }
 
     /// Verifies multiple certificates (no batch optimization for BLS multisig).
@@ -733,7 +732,9 @@ mod tests {
     use commonware_codec::{Decode, Encode};
     use commonware_math::algebra::{CryptoGroup, Random};
     use commonware_parallel::Sequential;
-    use commonware_utils::{Faults, N3f1, Participant, TryCollect, ordered::BiMap, test_rng};
+    use commonware_utils::{
+        Faults, N3f1, Participant, TryCollect, Widen, ordered::BiMap, test_rng,
+    };
     use scheme::Scheme;
 
     const NAMESPACE: &[u8] = b"test-bls12381-multisig";

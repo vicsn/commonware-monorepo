@@ -23,6 +23,7 @@
 #[cfg(feature = "mocks")]
 pub mod mocks;
 
+use super::{Pairing, Single, rules};
 use crate::{
     PublicKey,
     bls12381::primitives::{
@@ -385,16 +386,13 @@ impl<P: PublicKey, V: Variant, N: Namespace> Generic<P, V, N> {
     where
         R: CryptoRng,
     {
-        let Some(signature) = certificate.get() else {
-            return false;
-        };
-        ops::verify_message::<V>(
+        rules::verify_identity(
+            &Pairing::<V>::new(),
             self.identity(),
+            &Single::<V>(&certificate.signature),
             subject.namespace(self.namespace()),
             &subject.message(),
-            signature,
         )
-        .is_ok()
     }
 
     /// Verifies multiple certificates in a batch.

@@ -779,6 +779,16 @@ impl Signers {
         self.bitmap.count_ones() as usize
     }
 
+    /// Returns whether the participant at `index` is marked as a signer.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index` is not below [`Self::len`].
+    #[cfg(feature = "bls12381")]
+    pub(crate) fn contains(&self, index: u64) -> bool {
+        self.bitmap.get(index)
+    }
+
     /// Iterates over signer indices in ascending order.
     pub fn iter(&self) -> impl Iterator<Item = Participant> + '_ {
         self.bitmap
