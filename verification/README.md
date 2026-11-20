@@ -116,6 +116,14 @@ managed hax CLI in `.verification-tools/qmdb/qmdb-hax-tools` (override with `HAX
 present; otherwise Lake builds them. After one run, `lean/` is a Lake package that an editor can
 open.
 
+## Report
+
+[hax-dylean.html](hax-dylean.html) records what is proved, assumed and validated for every
+target. Its links open files of the checkout that holds it.
+`python3 verification/qmdb/dylean-pictures.py` regenerates its pictures from the statements that
+Lean prints. `python3 verification/qmdb/report-artifact.py --out <file>` writes a copy for
+publishing, whose links open GitHub at a pushed revision.
+
 ## Shared review boundary
 
 Review once for all targets: the production modules that the crate includes, `client.rs`,
