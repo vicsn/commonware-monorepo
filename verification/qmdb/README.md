@@ -4,7 +4,7 @@
 - Status: complete for uniqueness of the single-item openings that the extracted production
   verifier accepts under any hash, and for client authentication up to an explicit collision on
   top of it.
-- Updated: 2026-11-20. Source: `a075276e2`. It changes the production files
+- Updated: 2026-11-20. Source: `0d3bf4a23`. It changes the production files
   `storage/src/merkle/{hasher.rs,hasher/terms.rs,proof.rs,proof/traversal.rs}`.
 - Proved scope: for any hash, two openings that the production verifier accepts at one location
   under one root carry the same item and the same siblings, or an explicit finder returns two
@@ -19,10 +19,10 @@
 - Assumption: the application's snapshot supplies a root and, for every stored item, the siblings
   of an opening that the production verifier accepts under it. `honest_snapshots_exist` shows
   that such roots and siblings exist for every hash at every height up to 62.
-- Last validation: `bash verification/check.sh` on 2026-11-20 at `a075276e2`, passed. 3 Rust
+- Last validation: `bash verification/check.sh` on 2026-11-20 at `0d3bf4a23`, passed. 3 Rust
   tests (1,653 differential claims and 511 honest production openings), reproducible extraction,
-  an axiom audit of all 123 theorems in `Qmdb` and `Commonware.Symbolic` (standard Lean axioms),
-  3 executed finder checks, 7 rejected mutations and the BLS check. The production files are
+  an axiom audit of all 126 theorems in `Qmdb` and `Commonware.Symbolic` (standard Lean axioms),
+  3 executed finder checks and 7 rejected mutations. The production files are
   unchanged since `just test -p commonware-storage` passed on 2026-11-18 (4,672 passed, 994
   skipped). Logs: `verification/.lake/logs/`, with the earlier runs in
   `verification/.lake/logs/1976be622/`.
@@ -150,7 +150,7 @@ Charon `nightly-2026.10.31`, Lean 4.35.0, `hax-lean v0.3.42`). It needs no opaqu
 [check.sh](../check.sh) runs the Rust tests, regenerates the extraction and fails unless it is
 byte-identical to the committed files, builds the patched DyLean pin `2254f7d19` under Lean 4.35.0
 once for every target, builds every Lean module (including the executed checks and the axiom
-audit), runs the mutations and checks the BLS target. Keep the DyLean checkout beside the
+audit) and runs the mutations of every target. Keep the DyLean checkout beside the
 canonical monorepo (override with `DYLEAN`). Local `.lake/packages` symlinks reuse the hax Lean
 experiment's dependency builds and are optional. After one run, `verification/lean` is a Lake
 package that an editor can open with Lean 4.35.0.
