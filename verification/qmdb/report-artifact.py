@@ -91,6 +91,10 @@ def convert(page, repository, revision):
         page, 'p', 'link-help',
         f'Source links open the file on GitHub at revision <code>{short}</code>.')
 
+    # The copy has no checkout whose files its links could open.
+    local = one(r'// Source links are relative to this page\..*?\n}\n', page, 'checkout script')
+    page = page.replace(local, '')
+
     head = one(r'<head>(.*?)</head>', page, 'head')
     title = one(r'<title>.*?</title>', head, 'title')
     style = one(r'<style>.*?</style>', head, 'style block')

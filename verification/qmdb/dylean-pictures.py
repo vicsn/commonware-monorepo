@@ -550,7 +550,8 @@ def figure(anchor, heading, views, caption):
     if len(views) > 1:
         options = ''.join(f'<option value="{index}">{esc(title)}</option>'
                           for index, (title, _) in enumerate(views))
-        select = f'<label class="scenario">View <select>{options}</select></label>'
+        select = (f'<label class="scenario">View <select id="{anchor}-view">{options}'
+                  '</select></label>')
     frames = ''.join(f'<div class="scenario-frame"{" hidden" if index else ""}>{image}</div>'
                      for index, (_, image) in enumerate(views))
     return (f'<figure class="proof-graphic"><h4 id="{anchor}">{esc(heading)}</h4>{select}{frames}'
