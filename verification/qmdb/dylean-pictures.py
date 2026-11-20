@@ -445,7 +445,7 @@ def svg(title, description, body):
             f'<desc>{esc(description)}</desc>{body}</svg>')
 
 
-def figure(heading, views, caption):
+def figure(anchor, heading, views, caption):
     select = ''
     if len(views) > 1:
         options = ''.join(f'<option value="{index}">{esc(title)}</option>'
@@ -453,7 +453,7 @@ def figure(heading, views, caption):
         select = f'<label class="scenario">View <select>{options}</select></label>'
     frames = ''.join(f'<div class="scenario-frame"{" hidden" if index else ""}>{image}</div>'
                      for index, (_, image) in enumerate(views))
-    return (f'<figure class="proof-graphic"><h4>{esc(heading)}</h4>{select}{frames}'
+    return (f'<figure class="proof-graphic"><h4 id="{anchor}">{esc(heading)}</h4>{select}{frames}'
             f'<figcaption>{caption}</figcaption></figure>')
 
 
@@ -543,7 +543,7 @@ def merkle_figure(model):
                'every attempt is a reachable trace, and by <code>client_authentication</code> any '
                'acceptance on such a trace names the snapshot height, an in-range location and the '
                'item stored there.')
-    return figure('Merkle · Authenticate a client event', views, caption)
+    return figure('pictures-merkle', 'Merkle · Authenticate a client event', views, caption)
 
 
 def bls_view(trace):
@@ -599,7 +599,7 @@ def bls_figure(traces):
     for name in leaked:
         caption += (f' An earlier compromise removes {name}’s guarantee even when the trace '
                     f'contains {name}’s signing event.')
-    return figure('BLS · Inspect the prefix at acceptance', views, caption)
+    return figure('pictures-bls', 'BLS · Inspect the prefix at acceptance', views, caption)
 
 
 def block(source, merkle_model, traces):
