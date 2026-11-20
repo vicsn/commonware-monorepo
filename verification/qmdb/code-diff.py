@@ -48,7 +48,7 @@ def resolve(uri):
     if not current.is_relative_to(repo.resolve()) or not current.is_file():
         raise ValueError('Source must be an existing file inside the experiment checkout')
     # Only files explicitly linked from the report can be opened by the handler.
-    report = (ROOT / 'qmdb-inclusion-proofs.html').read_text()
+    report = (ROOT / 'hax-dylean.html').read_text()
     if f'href="{html.escape(uri, quote=True)}"' not in report:
         raise ValueError('Diff is not linked from the QMDB report')
     revision, original = comparison_base(url.netloc, relative)
@@ -66,7 +66,7 @@ def resolve(uri):
 
 
 def update_report():
-    report = ROOT / 'qmdb-inclusion-proofs.html'
+    report = ROOT / 'hax-dylean.html'
     source = report.read_text()
     # Reinstallation refreshes links without adding duplicates.
     source = re.sub(r' <a class="code-diff"[^>]*>Diff</a>', '', source)
