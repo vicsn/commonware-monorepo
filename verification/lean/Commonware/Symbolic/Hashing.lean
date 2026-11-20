@@ -27,9 +27,13 @@ def Scheme.terms [DecidableEq D] (S : Scheme D M) : terms.Terms Unit D where
     { eq := fun a b => RustM.ok (decide (a = b)), ne := fun a b => RustM.ok (!decide (a = b)) }
   hash _ parts := RustM.ok (S.hash (S.encode parts.val))
 
+/-- Two different inputs that a function maps to the same value. -/
+def Collision {α β : Type} (hash : α → β) (x y : α) : Prop :=
+  x ≠ y ∧ hash x = hash y
+
 /-- Two different messages with the same digest. -/
-def Scheme.Collision (S : Scheme D M) (x y : M) : Prop :=
-  x ≠ y ∧ S.hash x = S.hash y
+abbrev Scheme.Collision (S : Scheme D M) (x y : M) : Prop :=
+  Commonware.Symbolic.Collision S.hash x y
 
 /-- A hash over byte strings whose digests have a fixed-length, injective byte representation. -/
 structure ByteHash (D : Type) where

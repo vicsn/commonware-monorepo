@@ -422,10 +422,10 @@ theorem find_clash (S : Scheme D M) [DecidableEq M] (l : List (M × M))
   cases found : l.find? (fun c => decide (c.1 ≠ c.2 ∧ S.hash c.1 = S.hash c.2)) with
   | none =>
     have := List.find?_eq_none.mp found c mem
-    exact absurd hc (by simpa [Scheme.Collision] using this)
+    exact absurd hc (by simpa [Collision] using this)
   | some d =>
     have := List.find?_some found
-    exact ⟨d.1, d.2, rfl, by simpa [Scheme.Collision] using this⟩
+    exact ⟨d.1, d.2, rfl, by simpa [Collision] using this⟩
 
 /-! ## The verifier -/
 
