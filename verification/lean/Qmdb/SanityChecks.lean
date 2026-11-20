@@ -4,8 +4,10 @@ meta import Commonware.Symbolic.Hashing
 meta import Qmdb.Verifier
 
 /-! A concrete two-item snapshot, the extracted client's decisions on it, and reachability of the
-protocol traces that carry those decisions. Then a hash that collides, for which the collision
-finder returns a collision. The client's decisions are proved; the finder is also executed. -/
+protocol traces that carry those decisions. Then two hashes that collide, for which the collision
+finder returns a collision: one between two leaf inputs when the items differ, one between two
+node inputs when only a sibling differs. The client's decisions are proved; the finder is also
+executed. -/
 
 namespace Qmdb.Sanity
 open DY Aeneas Aeneas.Std Commonware.Symbolic Protocol Verifier Symbolic commonware_symbolic
@@ -134,6 +136,57 @@ def sibling : Slice Unit := Slice.from [()] (by scalar_tac)
 
 -- Executed: one item claimed twice gives no collision.
 #guard (finder constant.scheme 1#u32 0#u64 alice alice sibling sibling).isNone
+
+/-! ## Openings that differ in a sibling -/
+
+/-- A hash with two digests that only tells 13-byte inputs from the others. The leaf input of
+`Alice` is 13 bytes long, so a leaf holding `Alice` hashes apart from one holding `Bob`, while all
+node inputs collide and so do all root inputs. -/
+def coarse : ByteHash Bool where
+  hash bytes := decide (bytes.length = 13)
+  bytes digest := [if digest then 1#u8 else 0#u8]
+  size := 1
+  bytes_length _ := rfl
+  bytes_inj := by decide
+
+/-- The snapshot that stores `Alice` at every location. -/
+def twins (_ : Std.U64) : Slice Std.U8 := alice
+
+/-- Under the coarse hash, the honest openings of `Alice` at location 0 in two snapshots that
+store different items at location 1 verify under the same root with different siblings, and the
+finder returns two different byte strings with that digest. -/
+theorem finder_finds_sibling :
+    ∃ x y, finder coarse.scheme 1#u32 0#u64 alice alice
+      (honestSiblings coarse.scheme twins 1 0#u64 (by decide))
+      (honestSiblings coarse.scheme items 1 0#u64 (by decide)) = some (x, y) ∧ x ≠ y := by
+  have root (h : Nat) : honestRoot coarse.scheme items h = honestRoot coarse.scheme twins h := by
+    simp [honestRoot, rootInput, ByteHash.scheme, coarse, be_length, Array.val_to_slice]
+  have differ : honestSiblings coarse.scheme twins 1 0#u64 (by decide) ≠
+      honestSiblings coarse.scheme items 1 0#u64 (by decide) := by
+    intro same
+    have lists := congrArg (fun s : Slice Bool => s.val) same
+    simp [honestSiblings, Slice.from_val, path, tree, leafInput, ByteHash.scheme, coarse,
+      be_length, twins, items, alice, bob, pos] at lists
+    split at lists
+    · rename_i zero
+      exact absurd zero (by decide)
+    · simp [Slice.from_val] at lists
+  have one := honest_opening coarse.scheme twins 1#u32 (by decide) 0#u64 (by decide)
+  have two := honest_opening coarse.scheme items 1#u32 (by decide) 0#u64 (by decide)
+  have stored : items 0#u64 = alice := by simp [items]
+  rw [stored, root] at two
+  rcases byte_unique_or_collision coarse 1#u32 0#u64 _ alice alice _ _ one two with
+    ⟨-, same⟩ | ⟨x, y, found, clash⟩
+  · exact absurd same differ
+  · exact ⟨x, y, found, clash.1⟩
+
+-- Executed: for those two openings of `Alice` the root inputs agree and the finder returns the
+-- two node inputs, each the position, the digest of Alice's leaf and a sibling.
+#guard (finder coarse.scheme 1#u32 0#u64 alice alice
+      (honestSiblings coarse.scheme twins 1 0#u64 (by decide))
+      (honestSiblings coarse.scheme items 1 0#u64 (by decide))).map
+    (fun found => (values found.1, values found.2)) ==
+  some ([0, 0, 0, 0, 0, 0, 0, 2, 1, 1], [0, 0, 0, 0, 0, 0, 0, 2, 1, 0])
 
 end
 end Qmdb.Sanity

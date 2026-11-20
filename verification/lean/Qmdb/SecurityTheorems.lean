@@ -24,6 +24,25 @@ theorem production_binding (h : Std.U32) (loc : Std.U64) (root : Bytes) (a b : S
     (hb : qmdb.verify dyTerms () h loc root b wb = RustM.ok true) : a = b :=
   Symbolic.binding h loc root a b wa wb ha hb
 
+/-- Uniqueness of the openings that the production verifier accepts over byte strings, for any
+hash whose digests have a fixed-length, injective byte representation: two openings that it
+accepts at the same location under the same root carry the same item and the same siblings, or
+`Verifier.finder` returns two different byte strings with the same digest. -/
+theorem production_unique_or_collision {D : Type} [DecidableEq D] (B : ByteHash D)
+    (h : Std.U32) (loc : Std.U64) (root : D) (a b : Slice Std.U8) (wa wb : Slice D)
+    (ha : qmdb.verify B.scheme.terms () h loc root a wa = RustM.ok true)
+    (hb : qmdb.verify B.scheme.terms () h loc root b wb = RustM.ok true) :
+    (a = b ∧ wa = wb) ∨ ∃ x y : List Std.U8, Verifier.finder B.scheme h loc a b wa wb =
+      some (x, y) ∧ x ≠ y ∧ B.hash x = B.hash y :=
+  Verifier.byte_unique_or_collision B h loc root a b wa wb ha hb
+
+/-- Uniqueness of the openings that the production verifier accepts under symbolic hashing: an
+accepted opening at a location under a root is the only one. -/
+theorem production_unique (h : Std.U32) (loc : Std.U64) (root : Bytes) (a b : Slice Std.U8)
+    (wa wb : Slice Bytes) (ha : qmdb.verify dyTerms () h loc root a wa = RustM.ok true)
+    (hb : qmdb.verify dyTerms () h loc root b wb = RustM.ok true) : a = b ∧ wa = wb :=
+  Symbolic.unique h loc root a b wa wb ha hb
+
 /-- The snapshot assumption is satisfiable: for any items and height up to 62, some root gives
 every stored item an opening that the production verifier accepts. -/
 theorem honest_snapshots_exist (items : Std.U64 → Slice Std.U8) (h : Std.U32)

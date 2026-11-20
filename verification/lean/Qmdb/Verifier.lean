@@ -2,11 +2,12 @@ module
 public import Commonware.Symbolic.Hashing
 public import Commonware.Symbolic.RustM
 
-/-! The extracted production verifier under an arbitrary hash. Position binding: two openings that
-it accepts at the same location under the same root carry the same item, or `finder` returns two
-different hash inputs with the same digest. It also returns a verdict on every input and accepts
-every honest opening. Checked by Lean; only `Unambiguous` and the statements used by `Symbolic`,
-`Protocol` and `SecurityTheorems` matter for review. -/
+/-! The extracted production verifier under an arbitrary hash. Uniqueness: two openings that it
+accepts at the same location under the same root carry the same item and the same siblings, or
+`finder` returns two different hash inputs with the same digest. Position binding is the item
+half. It also returns a verdict on every input and accepts every honest opening. Checked by Lean;
+only `Unambiguous` and the statements used by `Symbolic`, `Protocol` and `SecurityTheorems` matter
+for review. -/
 
 namespace Qmdb.Verifier
 open Aeneas Aeneas.Std Aeneas.Std.WP CoreModels Commonware.Symbolic commonware_symbolic
@@ -30,6 +31,9 @@ structure Unambiguous (S : Scheme D M) : Prop where
 /-- The big-endian bytes of a 64-bit integer. -/
 def be (x : Std.U64) : Slice Std.U8 :=
   (Aeneas.Std.core.num.U64.to_be_bytes x).to_slice
+
+theorem be_length (x : Std.U64) : (be x).val.length = 8 := by
+  simp [be, Array.val_to_slice]
 
 /-- The hash input of the leaf at position `p` holding `item`. -/
 def leafInput (S : Scheme D M) (p : Std.U64) (item : Slice Std.U8) : M :=
@@ -353,13 +357,14 @@ theorem tail_mem_zip {α β} {c : α × β} (x : α) {xs : List α} (y : β) {ys
   simp [h]
 
 omit [DecidableEq D] in
-/-- Corresponding hash inputs of two openings whose roots agree: the same item, or two inputs
-that differ and have the same digest. -/
+/-- Corresponding hash inputs of two openings whose roots agree: the same item and the same
+siblings read, or two inputs that differ and have the same digest. -/
 theorem inputs_clash (S : Scheme D M) (enc : Unambiguous S) (a b : Slice Std.U8) (loc : Nat)
     (n : Nat) : ∀ (p s : Nat) (wa wb : List D) (m₁ : M) (ms₁ : List M) (r₁ : List D) (m₂ : M)
     (ms₂ : List M) (r₂ : List D), inputs S a loc n p s wa = some (m₁, ms₁, r₁) →
     inputs S b loc n p s wb = some (m₂, ms₂, r₂) → S.hash m₁ = S.hash m₂ →
-    a = b ∨ ∃ c ∈ (m₁ :: ms₁).zip (m₂ :: ms₂), S.Collision c.1 c.2 := by
+    (a = b ∧ ∃ read, wa = read ++ r₁ ∧ wb = read ++ r₂) ∨
+      ∃ c ∈ (m₁ :: ms₁).zip (m₂ :: ms₂), S.Collision c.1 c.2 := by
   induction n with
   | zero =>
     intro p s wa wb m₁ ms₁ r₁ m₂ ms₂ r₂ h₁ h₂ digest
@@ -367,7 +372,7 @@ theorem inputs_clash (S : Scheme D M) (enc : Unambiguous S) (a b : Slice Std.U8)
     obtain ⟨rfl, rfl, rfl⟩ := h₁
     obtain ⟨rfl, rfl, rfl⟩ := h₂
     by_cases same : leafInput S (pos p) a = leafInput S (pos p) b
-    · exact Or.inl (enc.leaf _ _ _ same)
+    · exact Or.inl ⟨enc.leaf _ _ _ same, [], rfl, rfl⟩
     · exact Or.inr ⟨_, head_mem_zip _ _ _ _, same, digest⟩
   | succ n ih =>
     intro p s wa wb m₁ ms₁ r₁ m₂ ms₂ r₂ h₁ h₂ digest
@@ -375,17 +380,19 @@ theorem inputs_clash (S : Scheme D M) (enc : Unambiguous S) (a b : Slice Std.U8)
     · obtain ⟨m₁', ms₁', x₁, below₁, rfl, rfl⟩ := inputs_left side h₁
       obtain ⟨m₂', ms₂', x₂, below₂, rfl, rfl⟩ := inputs_left side h₂
       by_cases same : nodeInput S (pos p) (S.hash m₁') x₁ = nodeInput S (pos p) (S.hash m₂') x₂
-      · rcases ih _ _ _ _ _ _ _ _ _ _ below₁ below₂ (enc.node _ _ _ _ _ same).1 with
-          eq | ⟨c, mem, hc⟩
-        · exact Or.inl eq
+      · obtain ⟨child, sibling⟩ := enc.node _ _ _ _ _ same
+        rcases ih _ _ _ _ _ _ _ _ _ _ below₁ below₂ child with
+          ⟨eq, read, ra, rb⟩ | ⟨c, mem, hc⟩
+        · exact Or.inl ⟨eq, read ++ [x₁], by simp [ra], by simp [rb, sibling]⟩
         · exact Or.inr ⟨c, tail_mem_zip _ _ mem, hc⟩
       · exact Or.inr ⟨_, head_mem_zip _ _ _ _, same, digest⟩
     · obtain ⟨l₁, wa', m₁', ms₁', rfl, below₁, rfl, rfl⟩ := inputs_right side h₁
       obtain ⟨l₂, wb', m₂', ms₂', rfl, below₂, rfl, rfl⟩ := inputs_right side h₂
       by_cases same : nodeInput S (pos p) l₁ (S.hash m₁') = nodeInput S (pos p) l₂ (S.hash m₂')
-      · rcases ih _ _ _ _ _ _ _ _ _ _ below₁ below₂ (enc.node _ _ _ _ _ same).2 with
-          eq | ⟨c, mem, hc⟩
-        · exact Or.inl eq
+      · obtain ⟨sibling, child⟩ := enc.node _ _ _ _ _ same
+        rcases ih _ _ _ _ _ _ _ _ _ _ below₁ below₂ child with
+          ⟨eq, read, ra, rb⟩ | ⟨c, mem, hc⟩
+        · exact Or.inl ⟨eq, l₁ :: read, by simp [ra], by simp [rb, sibling]⟩
         · exact Or.inr ⟨c, tail_mem_zip _ _ mem, hc⟩
       · exact Or.inr ⟨_, head_mem_zip _ _ _ _, same, digest⟩
 
@@ -434,7 +441,8 @@ theorem verify_true (S : Scheme D M) {h : Std.U32} {loc : Std.U64} {root : D}
       w.val = 2^h.val ∧ p.val = 2*(2^h.val-1) ∧ e.val = loc.val + 1 ∧
       traversal.reconstruct (backend S)
         { nodes := (), elements := some item, siblings := ws, cursor := 0#usize, collected := () }
-        p w 0#u64 loc e = RustM.ok (.Ok peak, r) ∧ S.hash (rootInput S domain w peak) = root := by
+        p w 0#u64 loc e = RustM.ok (.Ok peak, r) ∧ S.hash (rootInput S domain w peak) = root ∧
+      r.cursor.val = ws.val.length := by
   unfold qmdb.verify at acc
   by_cases tall : h.val > 62
   · have : h > qmdb.MAX_HEIGHT := by simp [qmdb.MAX_HEIGHT]; scalar_tac
@@ -457,26 +465,58 @@ theorem verify_true (S : Scheme D M) {h : Std.U32} {loc : Std.U64} {root : D}
       | Ok peak =>
         simp [traversal.Opening.impl.cursor, len_ok, root_eq, eq_ok] at k
         split at k
-        · have matched := ok_inj k
+        · rename_i full
+          have matched := ok_inj k
           simp at matched
+          have used : r.cursor.val = ws.val.length := by
+            have := congrArg UScalar.val full
+            simpa using this
           exact ⟨by omega, by omega, w, p, e, peak, r, wv, by scalar_tac, by scalar_tac, hrun,
-            matched⟩
+            matched, used⟩
         · simp at k
 
-/-- An accepting `verify` has hashed the inputs of `inputs` up to its root. -/
+/-- An accepting `verify` has hashed the inputs of `inputs` up to its root and has read every
+sibling. -/
 theorem verify_inputs (S : Scheme D M) {h : Std.U32} {loc : Std.U64} {root : D}
     {item : Slice Std.U8} {ws : Slice D}
     (acc : qmdb.verify S.terms () h loc root item ws = RustM.ok true) :
-    h.val ≤ 62 ∧ loc.val < 2^h.val ∧ ∃ m ms rest,
-      inputs S item loc.val h.val (2*(2^h.val-1)) 0 ws.val = some (m, ms, rest) ∧
+    h.val ≤ 62 ∧ loc.val < 2^h.val ∧ ∃ m ms,
+      inputs S item loc.val h.val (2*(2^h.val-1)) 0 ws.val = some (m, ms, []) ∧
       S.hash (rootInput S domain (pos (2^h.val)) (S.hash m)) = root := by
-  obtain ⟨hh, hl, w, p, e, peak, r, wv, pv, ev, run, rooted⟩ := verify_true S acc
+  obtain ⟨hh, hl, w, p, e, peak, r, wv, pv, ev, run, rooted, used⟩ := verify_true S acc
   have small : 2^h.val ≤ 2^62 := Nat.pow_le_pow_right (by decide) hh
-  obtain ⟨m, ms, path, rfl, -⟩ := reconstruct_inputs S h.val p w 0#u64 loc e _ r item peak wv hh
+  obtain ⟨m, ms, path, rfl, kept⟩ := reconstruct_inputs S h.val p w 0#u64 loc e _ r item peak wv hh
     (by omega) (by simp; omega) (by simp) (by simp; omega) ev rfl run
   have width : w = pos (2^h.val) := by rw [← wv, pos_val]
-  refine ⟨hh, hl, m, ms, r.siblings.val.drop r.cursor.val, ?_, width ▸ rooted⟩
-  simpa [pv] using path
+  have none_left : r.siblings.val.drop r.cursor.val = [] := by
+    simp only [kept, used, List.drop_length]
+  refine ⟨hh, hl, m, ms, ?_, width ▸ rooted⟩
+  simpa [pv, none_left] using path
+
+/-- Uniqueness of accepted openings under any hash: two openings that the production verifier
+accepts at the same location under the same root carry the same item and the same siblings, or
+`finder` returns two different hash inputs with the same digest. -/
+theorem unique_or_collision (S : Scheme D M) [DecidableEq M] (enc : Unambiguous S)
+    (h : Std.U32) (loc : Std.U64) (root : D) (a b : Slice Std.U8) (wa wb : Slice D)
+    (ha : qmdb.verify S.terms () h loc root a wa = RustM.ok true)
+    (hb : qmdb.verify S.terms () h loc root b wb = RustM.ok true) :
+    (a = b ∧ wa = wb) ∨ ∃ x y, finder S h loc a b wa wb = some (x, y) ∧ S.Collision x y := by
+  obtain ⟨-, -, m₁, ms₁, path₁, root₁⟩ := verify_inputs S ha
+  obtain ⟨-, -, m₂, ms₂, path₂, root₂⟩ := verify_inputs S hb
+  have clash : (a = b ∧ wa = wb) ∨
+      ∃ c ∈ (rootInput S domain (pos (2^h.val)) (S.hash m₁) :: m₁ :: ms₁).zip
+        (rootInput S domain (pos (2^h.val)) (S.hash m₂) :: m₂ :: ms₂), S.Collision c.1 c.2 := by
+    by_cases same : rootInput S domain (pos (2^h.val)) (S.hash m₁) =
+        rootInput S domain (pos (2^h.val)) (S.hash m₂)
+    · rcases inputs_clash S enc a b loc.val h.val _ _ _ _ _ _ _ _ _ _ path₁ path₂
+        (enc.root _ _ _ _ same) with ⟨eq, read, ra, rb⟩ | ⟨c, mem, hc⟩
+      · exact Or.inl ⟨eq, Slice.ext _ _ (by simpa using ra.trans rb.symm)⟩
+      · exact Or.inr ⟨c, tail_mem_zip _ _ mem, hc⟩
+    · exact Or.inr ⟨_, head_mem_zip _ _ _ _, same, root₁.trans root₂.symm⟩
+  rcases clash with same | found
+  · exact Or.inl same
+  · right
+    simpa [finder, openingInputs, path₁, path₂] using find_clash S _ found
 
 /-- Position binding of the production verifier under any hash: two openings that it accepts at
 the same location under the same root carry the same item, or `finder` returns two different
@@ -485,22 +525,8 @@ theorem binding_or_collision (S : Scheme D M) [DecidableEq M] (enc : Unambiguous
     (h : Std.U32) (loc : Std.U64) (root : D) (a b : Slice Std.U8) (wa wb : Slice D)
     (ha : qmdb.verify S.terms () h loc root a wa = RustM.ok true)
     (hb : qmdb.verify S.terms () h loc root b wb = RustM.ok true) :
-    a = b ∨ ∃ x y, finder S h loc a b wa wb = some (x, y) ∧ S.Collision x y := by
-  obtain ⟨-, -, m₁, ms₁, r₁, path₁, root₁⟩ := verify_inputs S ha
-  obtain ⟨-, -, m₂, ms₂, r₂, path₂, root₂⟩ := verify_inputs S hb
-  have clash : a = b ∨ ∃ c ∈ (rootInput S domain (pos (2^h.val)) (S.hash m₁) :: m₁ :: ms₁).zip
-      (rootInput S domain (pos (2^h.val)) (S.hash m₂) :: m₂ :: ms₂), S.Collision c.1 c.2 := by
-    by_cases same : rootInput S domain (pos (2^h.val)) (S.hash m₁) =
-        rootInput S domain (pos (2^h.val)) (S.hash m₂)
-    · rcases inputs_clash S enc a b loc.val h.val _ _ _ _ _ _ _ _ _ _ path₁ path₂
-        (enc.root _ _ _ _ same) with eq | ⟨c, mem, hc⟩
-      · exact Or.inl eq
-      · exact Or.inr ⟨c, tail_mem_zip _ _ mem, hc⟩
-    · exact Or.inr ⟨_, head_mem_zip _ _ _ _, same, root₁.trans root₂.symm⟩
-  rcases clash with eq | found
-  · exact Or.inl eq
-  · right
-    simpa [finder, openingInputs, path₁, path₂] using find_clash S _ found
+    a = b ∨ ∃ x y, finder S h loc a b wa wb = some (x, y) ∧ S.Collision x y :=
+  (unique_or_collision S enc h loc root a b wa wb ha hb).imp_left And.left
 
 /-! ## Honest openings -/
 
@@ -794,6 +820,17 @@ theorem byte_binding_or_collision (B : ByteHash D) (h : Std.U32) (loc : Std.U64)
     a = b ∨ ∃ x y : List Std.U8, finder B.scheme h loc a b wa wb = some (x, y) ∧ x ≠ y ∧
       B.hash x = B.hash y :=
   binding_or_collision B.scheme (byte_unambiguous B) h loc root a b wa wb ha hb
+
+/-- Uniqueness of accepted openings over byte strings: two openings that the production verifier
+accepts at the same location under the same root carry the same item and the same siblings, or
+`finder` returns two different byte strings with the same digest. -/
+theorem byte_unique_or_collision (B : ByteHash D) (h : Std.U32) (loc : Std.U64) (root : D)
+    (a b : Slice Std.U8) (wa wb : Slice D)
+    (ha : qmdb.verify B.scheme.terms () h loc root a wa = RustM.ok true)
+    (hb : qmdb.verify B.scheme.terms () h loc root b wb = RustM.ok true) :
+    (a = b ∧ wa = wb) ∨ ∃ x y : List Std.U8, finder B.scheme h loc a b wa wb = some (x, y) ∧
+      x ≠ y ∧ B.hash x = B.hash y :=
+  unique_or_collision B.scheme (byte_unambiguous B) h loc root a b wa wb ha hb
 
 end
 end Qmdb.Verifier

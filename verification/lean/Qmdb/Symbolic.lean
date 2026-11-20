@@ -4,8 +4,8 @@ public import Qmdb.Verifier
 
 /-! The symbolic instance of the verifier theorems. DyLean's hash constructor has no collisions
 and its concatenation keeps hash inputs apart, so the collision branch of
-`Verifier.binding_or_collision` is impossible and the production verifier is binding. The client
-step's decisions follow. Checked by Lean. -/
+`Verifier.unique_or_collision` is impossible: accepted openings are unique and the production
+verifier is binding. The client step's decisions follow. Checked by Lean. -/
 
 namespace Qmdb.Symbolic
 open DY Aeneas Aeneas.Std CoreModels Commonware.Symbolic commonware_symbolic
@@ -19,15 +19,23 @@ theorem unambiguous : Verifier.Unambiguous symbolic where
   node _ _ _ _ _ same := concat_inj (concat_inj same).2
   root _ _ _ _ same := (concat_inj (concat_inj same).2).2
 
+/-- Uniqueness of accepted openings under symbolic hashing: two openings that the production
+verifier accepts at the same location under the same root carry the same item and the same
+siblings. -/
+theorem unique (h : Std.U32) (loc : Std.U64) (root : Bytes) (a b : Slice Std.U8)
+    (wa wb : Slice Bytes) (ha : qmdb.verify dyTerms () h loc root a wa = RustM.ok true)
+    (hb : qmdb.verify dyTerms () h loc root b wb = RustM.ok true) : a = b ∧ wa = wb := by
+  rcases Verifier.unique_or_collision symbolic unambiguous h loc root a b wa wb ha hb with
+    same | ⟨x, y, -, clash⟩
+  · exact same
+  · exact absurd clash (no_collision x y)
+
 /-- Binding of the production verifier under symbolic hashing: two openings that it accepts at
 the same location under the same root carry the same item. -/
 theorem binding (h : Std.U32) (loc : Std.U64) (root : Bytes) (a b : Slice Std.U8)
     (wa wb : Slice Bytes) (ha : qmdb.verify dyTerms () h loc root a wa = RustM.ok true)
-    (hb : qmdb.verify dyTerms () h loc root b wb = RustM.ok true) : a = b := by
-  rcases Verifier.binding_or_collision symbolic unambiguous h loc root a b wa wb ha hb with
-    same | ⟨x, y, -, clash⟩
-  · exact same
-  · exact absurd clash (no_collision x y)
+    (hb : qmdb.verify dyTerms () h loc root b wb = RustM.ok true) : a = b :=
+  (unique h loc root a b wa wb ha hb).1
 
 /-! ## The client -/
 
