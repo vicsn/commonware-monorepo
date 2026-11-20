@@ -29,8 +29,104 @@ noncomputable section
 
 namespace qmdb_dylean
 
+/-- [qmdb_dylean::terms::MAX_PARTS]
+    Source: 'src/../../../../../storage/src/merkle/hasher/terms.rs', lines 26:0-26:38 -/
+@[global_simps, irreducible] def terms.MAX_PARTS : Std.Usize := 4#usize
+
+/-- [qmdb_dylean::terms::leaf_digest]:
+    Source: 'src/../../../../../storage/src/merkle/hasher/terms.rs', lines 29:0-31:1 -/
+def terms.leaf_digest
+  {T : Type _} {Clause0_Digest : Type _} (TermsInst : terms.Terms T
+  Clause0_Digest) (terms1 : T) (position : Std.U64) (element : Slice Std.U8) :
+  RustM Clause0_Digest
+  := do
+  let a ← core.num.U64.to_be_bytes position
+  let s ← core.array.Array.as_slice a
+  let s1 ←
+    core.array.Array.as_slice
+      (Array.make 2#usize [ terms.Part.Bytes s, terms.Part.Bytes element ])
+  TermsInst.hash terms1 s1
+
+/-- [qmdb_dylean::terms::node_digest]:
+    Source: 'src/../../../../../storage/src/merkle/hasher/terms.rs', lines 34:0-45:1 -/
+def terms.node_digest
+  {T : Type _} {Clause0_Digest : Type _} (TermsInst : terms.Terms T
+  Clause0_Digest) (terms1 : T) (position : Std.U64) (left : Clause0_Digest)
+  (right : Clause0_Digest) :
+  RustM Clause0_Digest
+  := do
+  let a ← core.num.U64.to_be_bytes position
+  let s ← core.array.Array.as_slice a
+  let s1 ←
+    core.array.Array.as_slice
+      (Array.make 3#usize [
+        terms.Part.Bytes s, terms.Part.Digest left, terms.Part.Digest right
+        ])
+  TermsInst.hash terms1 s1
+
+/-- [qmdb_dylean::terms::fold]:
+    Source: 'src/../../../../../storage/src/merkle/hasher/terms.rs', lines 48:0-50:1 -/
+def terms.fold
+  {T : Type _} {Clause0_Digest : Type _} (TermsInst : terms.Terms T
+  Clause0_Digest) (terms1 : T) (acc : Clause0_Digest) (peak : Clause0_Digest) :
+  RustM Clause0_Digest
+  := do
+  let s ←
+    core.array.Array.as_slice
+      (Array.make 2#usize [ terms.Part.Digest acc, terms.Part.Digest peak ])
+  TermsInst.hash terms1 s
+
+/-- [qmdb_dylean::terms::root]:
+    Source: 'src/../../../../../storage/src/merkle/hasher/terms.rs', lines 54:0-75:1 -/
+def terms.root
+  {T : Type _} {Clause0_Digest : Type _} (TermsInst : terms.Terms T
+  Clause0_Digest) (terms1 : T) (domain : Array Std.U8 2#usize)
+  (leaves : Std.U64) (inactive : Std.U64) (folded : Clause0_Digest) :
+  RustM Clause0_Digest
+  := do
+  if inactive = 0#u64
+  then
+    let s ← core.array.Array.as_slice domain
+    let a ← core.num.U64.to_be_bytes leaves
+    let s1 ← core.array.Array.as_slice a
+    let s2 ←
+      core.array.Array.as_slice
+        (Array.make 3#usize [
+          terms.Part.Bytes s, terms.Part.Bytes s1, terms.Part.Digest folded
+          ])
+    TermsInst.hash terms1 s2
+  else
+    let s ← core.array.Array.as_slice domain
+    let a ← core.num.U64.to_be_bytes leaves
+    let s1 ← core.array.Array.as_slice a
+    let a1 ← core.num.U64.to_be_bytes inactive
+    let s2 ← core.array.Array.as_slice a1
+    let s3 ←
+      core.array.Array.as_slice
+        (Array.make 4#usize [
+          terms.Part.Bytes s, terms.Part.Bytes s1, terms.Part.Bytes s2,
+          terms.Part.Digest folded
+          ])
+    TermsInst.hash terms1 s3
+
+/-- [qmdb_dylean::terms::empty_root]:
+    Source: 'src/../../../../../storage/src/merkle/hasher/terms.rs', lines 78:0-80:1 -/
+def terms.empty_root
+  {T : Type _} {Clause0_Digest : Type _} (TermsInst : terms.Terms T
+  Clause0_Digest) (terms1 : T) (domain : Array Std.U8 2#usize)
+  (leaves : Std.U64) :
+  RustM Clause0_Digest
+  := do
+  let s ← core.array.Array.as_slice domain
+  let a ← core.num.U64.to_be_bytes leaves
+  let s1 ← core.array.Array.as_slice a
+  let s2 ←
+    core.array.Array.as_slice
+      (Array.make 2#usize [ terms.Part.Bytes s, terms.Part.Bytes s1 ])
+  TermsInst.hash terms1 s2
+
 /-- [qmdb_dylean::traversal::reconstruct]:
-    Source: 'src/../../.lake/rust/storage/src/merkle/proof/traversal.rs', lines 32:0-59:1 -/
+    Source: 'src/../../../../../storage/src/merkle/proof/traversal.rs', lines 32:0-59:1 -/
 def traversal.reconstruct
   {B : Type _} {Clause0_Digest : Type _} (BackendInst : traversal.Backend B
   Clause0_Digest) (backend : B) (position : Std.U64) (width : Std.U64)
@@ -70,246 +166,323 @@ def traversal.reconstruct
         | core.result.Result.Err _ => ok (r, backend1)
 partial_fixpoint
 
-/-- [qmdb_dylean::adapter::MMR_DOMAIN]
-    Source: 'src/adapter.rs', lines 14:0-14:29
-    Visibility: public -/
-@[global_simps, irreducible] def adapter.MMR_DOMAIN : Std.U8 := 0#u8
-
-/-- [qmdb_dylean::adapter::FORWARD_FOLD]
-    Source: 'src/adapter.rs', lines 17:0-17:31
-    Visibility: public -/
-@[global_simps, irreducible] def adapter.FORWARD_FOLD : Std.U8 := 0#u8
-
-/-- [qmdb_dylean::adapter::MAX_HEIGHT]
-    Source: 'src/adapter.rs', lines 20:0-20:31
-    Visibility: public -/
-@[global_simps, irreducible] def adapter.MAX_HEIGHT : Std.U32 := 63#u32
-
-/-- [qmdb_dylean::adapter::be64]:
-    Source: 'src/adapter.rs', lines 23:0-34:1
-    Visibility: public -/
-def adapter.be64 (value : Std.U64) : RustM (Array Std.U8 8#usize) := do
-  let i ← value >>> 56#i32
-  let i1 ← lift (UScalar.cast .U8 i)
-  let i2 ← value >>> 48#i32
-  let i3 ← lift (UScalar.cast .U8 i2)
-  let i4 ← value >>> 40#i32
-  let i5 ← lift (UScalar.cast .U8 i4)
-  let i6 ← value >>> 32#i32
-  let i7 ← lift (UScalar.cast .U8 i6)
-  let i8 ← value >>> 24#i32
-  let i9 ← lift (UScalar.cast .U8 i8)
-  let i10 ← value >>> 16#i32
-  let i11 ← lift (UScalar.cast .U8 i10)
-  let i12 ← value >>> 8#i32
-  let i13 ← lift (UScalar.cast .U8 i12)
-  let i14 ← lift (UScalar.cast .U8 value)
-  ok (Array.make 8#usize [ i1, i3, i5, i7, i9, i11, i13, i14 ])
-
-/-- [qmdb_dylean::adapter::leaf]:
-    Source: 'src/adapter.rs', lines 37:0-39:1
-    Visibility: public -/
-def adapter.leaf
-  {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
-  : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
-  Clause0_Item) (position : Std.U64) (item : Clause0_Item) :
-  RustM Clause0_Digest
+/-- [qmdb_dylean::traversal::{impl qmdb_dylean::traversal::Collect<D> for ()}::collect]:
+    Source: 'src/../../../../../storage/src/merkle/proof/traversal.rs', lines 85:4-85:56 -/
+def Tuple.Insts.Qmdb_dyleanTraversalCollect.collect
+  {D : Type _} (_ : Unit) (i : Std.U64) (t : D) (i1 : Std.U64) (t1 : D) :
+  RustM Unit
   := do
-  let a ← adapter.be64 position
-  let s ← core.array.Array.as_slice a
-  let t ← termsTermsInst.literal s
-  let t1 ← termsTermsInst.item item
-  let t2 ← termsTermsInst.concat t t1
-  termsTermsInst.hash t2
+  ok ()
 
-/-- [qmdb_dylean::adapter::node]:
-    Source: 'src/adapter.rs', lines 42:0-47:1
-    Visibility: public -/
-def adapter.node
-  {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
-  : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
-  Clause0_Item) (position : Std.U64) (left : Clause0_Digest)
+/-- Trait implementation: [qmdb_dylean::traversal::{impl qmdb_dylean::traversal::Collect<D> for ()}]
+    Source: 'src/../../../../../storage/src/merkle/proof/traversal.rs', lines 84:0-86:1 -/
+@[reducible]
+def Tuple.Insts.Qmdb_dyleanTraversalCollect (D : Type _) : traversal.Collect
+  Unit D := {
+  collect := Tuple.Insts.Qmdb_dyleanTraversalCollect.collect
+}
+
+/-- [qmdb_dylean::traversal::{qmdb_dylean::traversal::Opening<'a, N, E, C, Clause0_Digest>}::new]:
+    Source: 'src/../../../../../storage/src/merkle/proof/traversal.rs', lines 100:4-114:5 -/
+def traversal.Opening.new
+  {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _} (NodesInst :
+  traversal.Nodes N Clause0_Digest) (nodes : N) (elements : E)
+  (siblings : Slice Clause0_Digest) (cursor : Std.Usize) (collected : C) :
+  RustM (traversal.Opening N E C Clause0_Digest)
+  := do
+  ok { nodes, elements, siblings, cursor, collected }
+
+/-- [qmdb_dylean::traversal::{qmdb_dylean::traversal::Opening<'a, N, E, C, Clause0_Digest>}::cursor]:
+    Source: 'src/../../../../../storage/src/merkle/proof/traversal.rs', lines 117:4-119:5 -/
+def traversal.Opening.impl.cursor
+  {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _} (NodesInst :
+  traversal.Nodes N Clause0_Digest)
+  (self : traversal.Opening N E C Clause0_Digest) :
+  RustM Std.Usize
+  := do
+  ok self.cursor
+
+/-- [qmdb_dylean::traversal::{impl qmdb_dylean::traversal::Backend<Clause0_Digest> for qmdb_dylean::traversal::Opening<'_0, N, E, C, Clause0_Digest>}::collect]:
+    Source: 'src/../../../../../storage/src/merkle/proof/traversal.rs', lines 155:4-164:5 -/
+def traversal.Opening.Insts.Qmdb_dyleanTraversalBackend.collect
+  {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _}
+  {Clause1_Item : Type _} (NodesInst : traversal.Nodes N Clause0_Digest)
+  (coreitertraitsiteratorIteratorInst : core.iter.traits.iterator.Iterator E
+  Clause1_Item) (coreconvertAsRefClause1_ItemSliceU8Inst : core.convert.AsRef
+  Clause1_Item (Slice Std.U8)) (CollectInst : traversal.Collect C
+  Clause0_Digest) (self : traversal.Opening N E C Clause0_Digest)
+  (left_position : Std.U64) (left : Clause0_Digest) (right_position : Std.U64)
   (right : Clause0_Digest) :
-  RustM Clause0_Digest
+  RustM (traversal.Opening N E C Clause0_Digest)
   := do
-  let a ← adapter.be64 position
-  let s ← core.array.Array.as_slice a
-  let t ← termsTermsInst.literal s
-  let t1 ← termsTermsInst.digest left
-  let t2 ← termsTermsInst.digest right
-  let t3 ← termsTermsInst.concat t1 t2
-  let t4 ← termsTermsInst.concat t t3
-  termsTermsInst.hash t4
+  let t ←
+    CollectInst.collect self.collected left_position left right_position right
+  ok { self with collected := t }
 
-/-- [qmdb_dylean::adapter::wrap]:
-    Source: 'src/adapter.rs', lines 51:0-66:1
-    Visibility: public -/
-def adapter.wrap
-  {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
-  : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
-  Clause0_Item) (height : Std.U32) (peak : Clause0_Digest) :
-  RustM Clause0_Digest
-  := do
-  let i ← 1#u64 <<< height
-  let leaves ← adapter.be64 i
-  let i1 ← Array.index_usize leaves 0#usize
-  let i2 ← Array.index_usize leaves 1#usize
-  let i3 ← Array.index_usize leaves 2#usize
-  let i4 ← Array.index_usize leaves 3#usize
-  let i5 ← Array.index_usize leaves 4#usize
-  let i6 ← Array.index_usize leaves 5#usize
-  let i7 ← Array.index_usize leaves 6#usize
-  let i8 ← Array.index_usize leaves 7#usize
-  let s ←
-    core.array.Array.as_slice
-      (Array.make 10#usize [
-        adapter.MMR_DOMAIN, adapter.FORWARD_FOLD, i1, i2, i3, i4, i5, i6, i7,
-        i8
-        ])
-  let t ← termsTermsInst.literal s
-  let t1 ← termsTermsInst.digest peak
-  let t2 ← termsTermsInst.concat t t1
-  termsTermsInst.hash t2
-
-/-- [qmdb_dylean::adapter::{impl qmdb_dylean::traversal::Backend<Clause0_Digest> for qmdb_dylean::adapter::Opening<'_0, T, Clause0_Bytes, Clause0_Digest, Clause0_Item>}::collect]:
-    Source: 'src/adapter.rs', lines 100:4-100:72 -/
-def adapter.Opening.Insts.Qmdb_dyleanTraversalBackend.collect
-  {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
-  : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
-  Clause0_Item)
-  (self : adapter.Opening T Clause0_Bytes Clause0_Digest Clause0_Item)
-  (i : Std.U64) (t : Clause0_Digest) (i1 : Std.U64) (t1 : Clause0_Digest) :
-  RustM (adapter.Opening T Clause0_Bytes Clause0_Digest Clause0_Item)
-  := do
-  ok self
-
-/-- [qmdb_dylean::adapter::{impl qmdb_dylean::traversal::Backend<Clause0_Digest> for qmdb_dylean::adapter::Opening<'_0, T, Clause0_Bytes, Clause0_Digest, Clause0_Item>}::node]:
-    Source: 'src/adapter.rs', lines 96:4-98:5 -/
-def adapter.Opening.Insts.Qmdb_dyleanTraversalBackend.node
-  {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
-  : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
-  Clause0_Item)
-  (self : adapter.Opening T Clause0_Bytes Clause0_Digest Clause0_Item)
+/-- [qmdb_dylean::traversal::{impl qmdb_dylean::traversal::Backend<Clause0_Digest> for qmdb_dylean::traversal::Opening<'_0, N, E, C, Clause0_Digest>}::node]:
+    Source: 'src/../../../../../storage/src/merkle/proof/traversal.rs', lines 151:4-153:5 -/
+def traversal.Opening.Insts.Qmdb_dyleanTraversalBackend.node
+  {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _}
+  {Clause1_Item : Type _} (NodesInst : traversal.Nodes N Clause0_Digest)
+  (coreitertraitsiteratorIteratorInst : core.iter.traits.iterator.Iterator E
+  Clause1_Item) (coreconvertAsRefClause1_ItemSliceU8Inst : core.convert.AsRef
+  Clause1_Item (Slice Std.U8)) (CollectInst : traversal.Collect C
+  Clause0_Digest) (self : traversal.Opening N E C Clause0_Digest)
   (position : Std.U64) (left : Clause0_Digest) (right : Clause0_Digest) :
   RustM Clause0_Digest
   := do
-  adapter.node termsTermsInst position left right
+  NodesInst.node_digest self.nodes position left right
 
-/-- [qmdb_dylean::adapter::{impl qmdb_dylean::traversal::Backend<Clause0_Digest> for qmdb_dylean::adapter::Opening<'_0, T, Clause0_Bytes, Clause0_Digest, Clause0_Item>}::leaf]:
-    Source: 'src/adapter.rs', lines 92:4-94:5 -/
-def adapter.Opening.Insts.Qmdb_dyleanTraversalBackend.leaf
-  {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
-  : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
-  Clause0_Item)
-  (self : adapter.Opening T Clause0_Bytes Clause0_Digest Clause0_Item)
+/-- [qmdb_dylean::traversal::{impl qmdb_dylean::traversal::Backend<Clause0_Digest> for qmdb_dylean::traversal::Opening<'_0, N, E, C, Clause0_Digest>}::leaf]:
+    Source: 'src/../../../../../storage/src/merkle/proof/traversal.rs', lines 144:4-149:5 -/
+def traversal.Opening.Insts.Qmdb_dyleanTraversalBackend.leaf
+  {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _}
+  {Clause1_Item : Type _} (NodesInst : traversal.Nodes N Clause0_Digest)
+  (coreitertraitsiteratorIteratorInst : core.iter.traits.iterator.Iterator E
+  Clause1_Item) (coreconvertAsRefClause1_ItemSliceU8Inst : core.convert.AsRef
+  Clause1_Item (Slice Std.U8)) (CollectInst : traversal.Collect C
+  Clause0_Digest) (self : traversal.Opening N E C Clause0_Digest)
   (position : Std.U64) :
   RustM ((core.result.Result Clause0_Digest traversal.Error) ×
-    (adapter.Opening T Clause0_Bytes Clause0_Digest Clause0_Item))
+    (traversal.Opening N E C Clause0_Digest))
   := do
-  let t ← adapter.leaf termsTermsInst position self.item
-  ok (core.result.Result.Ok t, self)
+  let (o, t) ← coreitertraitsiteratorIteratorInst.next self.elements
+  match o with
+  | core.option.Option.None =>
+    ok (core.result.Result.Err traversal.Error.MissingElements,
+      { self with elements := t })
+  | core.option.Option.Some element =>
+    let s ← coreconvertAsRefClause1_ItemSliceU8Inst.as_ref element
+    let t1 ← NodesInst.leaf_digest self.nodes position s
+    ok (core.result.Result.Ok t1, { self with elements := t })
 
-/-- [qmdb_dylean::adapter::{impl qmdb_dylean::traversal::Backend<Clause0_Digest> for qmdb_dylean::adapter::Opening<'_0, T, Clause0_Bytes, Clause0_Digest, Clause0_Item>}::sibling]:
-    Source: 'src/adapter.rs', lines 82:4-90:5 -/
-def adapter.Opening.Insts.Qmdb_dyleanTraversalBackend.sibling
-  {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
-  : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
-  Clause0_Item)
-  (self : adapter.Opening T Clause0_Bytes Clause0_Digest Clause0_Item) :
+/-- [qmdb_dylean::traversal::{impl qmdb_dylean::traversal::Backend<Clause0_Digest> for qmdb_dylean::traversal::Opening<'_0, N, E, C, Clause0_Digest>}::sibling]:
+    Source: 'src/../../../../../storage/src/merkle/proof/traversal.rs', lines 134:4-142:5 -/
+def traversal.Opening.Insts.Qmdb_dyleanTraversalBackend.sibling
+  {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _}
+  {Clause1_Item : Type _} (NodesInst : traversal.Nodes N Clause0_Digest)
+  (coreitertraitsiteratorIteratorInst : core.iter.traits.iterator.Iterator E
+  Clause1_Item) (coreconvertAsRefClause1_ItemSliceU8Inst : core.convert.AsRef
+  Clause1_Item (Slice Std.U8)) (CollectInst : traversal.Collect C
+  Clause0_Digest) (self : traversal.Opening N E C Clause0_Digest) :
   RustM ((core.result.Result Clause0_Digest traversal.Error) ×
-    (adapter.Opening T Clause0_Bytes Clause0_Digest Clause0_Item))
+    (traversal.Opening N E C Clause0_Digest))
   := do
-  let i ← core.slice.Slice.len self.siblings
-  if self.next < i
-  then
-    let digest ← Slice.index_usize self.siblings self.next
-    let i1 ← self.next + 1#usize
-    ok (core.result.Result.Ok digest, { self with next := i1 })
-  else ok (core.result.Result.Err traversal.Error.MissingDigests, self)
+  let o ←
+    core.slice.Slice.get (core.Usize.Insts.CoreSliceIndexSliceIndexSliceT
+      Clause0_Digest) self.siblings self.cursor
+  match o with
+  | core.option.Option.None =>
+    ok (core.result.Result.Err traversal.Error.MissingDigests, self)
+  | core.option.Option.Some digest =>
+    let i ← self.cursor + 1#usize
+    ok (core.result.Result.Ok digest, { self with cursor := i })
 
-/-- [qmdb_dylean::adapter::{impl qmdb_dylean::traversal::Backend<Clause0_Digest> for qmdb_dylean::adapter::Opening<'_0, T, Clause0_Bytes, Clause0_Digest, Clause0_Item>}::children]:
-    Source: 'src/adapter.rs', lines 78:4-80:5 -/
-def adapter.Opening.Insts.Qmdb_dyleanTraversalBackend.children
-  {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
-  : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
-  Clause0_Item)
-  (self : adapter.Opening T Clause0_Bytes Clause0_Digest Clause0_Item)
+/-- [qmdb_dylean::traversal::{impl qmdb_dylean::traversal::Backend<Clause0_Digest> for qmdb_dylean::traversal::Opening<'_0, N, E, C, Clause0_Digest>}::children]:
+    Source: 'src/../../../../../storage/src/merkle/proof/traversal.rs', lines 130:4-132:5 -/
+def traversal.Opening.Insts.Qmdb_dyleanTraversalBackend.children
+  {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _}
+  {Clause1_Item : Type _} (NodesInst : traversal.Nodes N Clause0_Digest)
+  (coreitertraitsiteratorIteratorInst : core.iter.traits.iterator.Iterator E
+  Clause1_Item) (coreconvertAsRefClause1_ItemSliceU8Inst : core.convert.AsRef
+  Clause1_Item (Slice Std.U8)) (CollectInst : traversal.Collect C
+  Clause0_Digest) (self : traversal.Opening N E C Clause0_Digest)
   (position : Std.U64) (width : Std.U64) :
   RustM (Std.U64 × Std.U64)
   := do
-  let i ← position - width
-  let i1 ← position - 1#u64
-  ok (i, i1)
+  let i ← core.num.U64.ilog2 width
+  NodesInst.children self.nodes position i
 
-/-- Trait implementation: [qmdb_dylean::adapter::{impl qmdb_dylean::traversal::Backend<Clause0_Digest> for qmdb_dylean::adapter::Opening<'_0, T, Clause0_Bytes, Clause0_Digest, Clause0_Item>}]
-    Source: 'src/adapter.rs', lines 75:0-101:1 -/
+/-- Trait implementation: [qmdb_dylean::traversal::{impl qmdb_dylean::traversal::Backend<Clause0_Digest> for qmdb_dylean::traversal::Opening<'_0, N, E, C, Clause0_Digest>}]
+    Source: 'src/../../../../../storage/src/merkle/proof/traversal.rs', lines 122:0-165:1 -/
 @[reducible]
-def adapter.Opening.Insts.Qmdb_dyleanTraversalBackend {T : Type _}
-  {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item : Type _}
-  (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest Clause0_Item) :
-  traversal.Backend (adapter.Opening T Clause0_Bytes Clause0_Digest
-  Clause0_Item) Clause0_Digest := {
+def traversal.Opening.Insts.Qmdb_dyleanTraversalBackend {N : Type _} {E :
+  Type _} {C : Type _} {Clause0_Digest : Type _} {Clause1_Item : Type _}
+  (NodesInst : traversal.Nodes N Clause0_Digest)
+  (coreitertraitsiteratorIteratorInst : core.iter.traits.iterator.Iterator E
+  Clause1_Item) (coreconvertAsRefClause1_ItemSliceU8Inst : core.convert.AsRef
+  Clause1_Item (Slice Std.U8)) (CollectInst : traversal.Collect C
+  Clause0_Digest) : traversal.Backend (traversal.Opening N E C Clause0_Digest)
+  Clause0_Digest := {
+  coremarkerCopyInst := NodesInst.coremarkerCopyInst
+  children := traversal.Opening.Insts.Qmdb_dyleanTraversalBackend.children
+    NodesInst coreitertraitsiteratorIteratorInst
+    coreconvertAsRefClause1_ItemSliceU8Inst CollectInst
+  sibling := traversal.Opening.Insts.Qmdb_dyleanTraversalBackend.sibling
+    NodesInst coreitertraitsiteratorIteratorInst
+    coreconvertAsRefClause1_ItemSliceU8Inst CollectInst
+  leaf := traversal.Opening.Insts.Qmdb_dyleanTraversalBackend.leaf NodesInst
+    coreitertraitsiteratorIteratorInst coreconvertAsRefClause1_ItemSliceU8Inst
+    CollectInst
+  node := traversal.Opening.Insts.Qmdb_dyleanTraversalBackend.node NodesInst
+    coreitertraitsiteratorIteratorInst coreconvertAsRefClause1_ItemSliceU8Inst
+    CollectInst
+  collect := traversal.Opening.Insts.Qmdb_dyleanTraversalBackend.collect
+    NodesInst coreitertraitsiteratorIteratorInst
+    coreconvertAsRefClause1_ItemSliceU8Inst CollectInst
+}
+
+/-- [qmdb_dylean::client::MMR_DOMAIN]
+    Source: 'src/client.rs', lines 15:0-15:36 -/
+@[global_simps, irreducible] def client.MMR_DOMAIN : Std.U8 := 0#u8
+
+/-- [qmdb_dylean::client::FORWARD_FOLD]
+    Source: 'src/client.rs', lines 18:0-18:38 -/
+@[global_simps, irreducible] def client.FORWARD_FOLD : Std.U8 := 0#u8
+
+/-- [qmdb_dylean::client::MAX_HEIGHT]
+    Source: 'src/client.rs', lines 21:0-21:38 -/
+@[global_simps, irreducible] def client.MAX_HEIGHT : Std.U32 := 62#u32
+
+/-- [qmdb_dylean::client::{impl qmdb_dylean::traversal::Nodes<Clause0_Digest> for qmdb_dylean::client::Mmr<'_0, T>}::node_digest]:
+    Source: 'src/client.rs', lines 37:4-39:5 -/
+def client.Mmr.Insts.Qmdb_dyleanTraversalNodes.node_digest
+  {T : Type _} {Clause0_Digest : Type _} (termsTermsInst : terms.Terms T
+  Clause0_Digest) (self : client.Mmr T) (position : Std.U64)
+  (left : Clause0_Digest) (right : Clause0_Digest) :
+  RustM Clause0_Digest
+  := do
+  terms.node_digest termsTermsInst self position left right
+
+/-- [qmdb_dylean::client::{impl qmdb_dylean::traversal::Nodes<Clause0_Digest> for qmdb_dylean::client::Mmr<'_0, T>}::leaf_digest]:
+    Source: 'src/client.rs', lines 33:4-35:5 -/
+def client.Mmr.Insts.Qmdb_dyleanTraversalNodes.leaf_digest
+  {T : Type _} {Clause0_Digest : Type _} (termsTermsInst : terms.Terms T
+  Clause0_Digest) (self : client.Mmr T) (position : Std.U64)
+  (element : Slice Std.U8) :
+  RustM Clause0_Digest
+  := do
+  terms.leaf_digest termsTermsInst self position element
+
+/-- [qmdb_dylean::client::{impl qmdb_dylean::traversal::Nodes<Clause0_Digest> for qmdb_dylean::client::Mmr<'_0, T>}::children]:
+    Source: 'src/client.rs', lines 29:4-31:5 -/
+def client.Mmr.Insts.Qmdb_dyleanTraversalNodes.children
+  {T : Type _} {Clause0_Digest : Type _} (termsTermsInst : terms.Terms T
+  Clause0_Digest) (self : client.Mmr T) (position : Std.U64) (height : Std.U32)
+  :
+  RustM (Std.U64 × Std.U64)
+  := do
+  let i ← 1#u64 <<< height
+  let i1 ← position - i
+  let i2 ← position - 1#u64
+  ok (i1, i2)
+
+/-- Trait implementation: [qmdb_dylean::client::{impl qmdb_dylean::traversal::Nodes<Clause0_Digest> for qmdb_dylean::client::Mmr<'_0, T>}]
+    Source: 'src/client.rs', lines 26:0-40:1 -/
+@[reducible]
+def client.Mmr.Insts.Qmdb_dyleanTraversalNodes {T : Type _} {Clause0_Digest :
+  Type _} (termsTermsInst : terms.Terms T Clause0_Digest) : traversal.Nodes
+  (client.Mmr T) Clause0_Digest := {
   coremarkerCopyInst := termsTermsInst.coremarkerCopyInst
-  children := adapter.Opening.Insts.Qmdb_dyleanTraversalBackend.children
+  children := client.Mmr.Insts.Qmdb_dyleanTraversalNodes.children
     termsTermsInst
-  sibling := adapter.Opening.Insts.Qmdb_dyleanTraversalBackend.sibling
+  leaf_digest := client.Mmr.Insts.Qmdb_dyleanTraversalNodes.leaf_digest
     termsTermsInst
-  leaf := adapter.Opening.Insts.Qmdb_dyleanTraversalBackend.leaf termsTermsInst
-  node := adapter.Opening.Insts.Qmdb_dyleanTraversalBackend.node termsTermsInst
-  collect := adapter.Opening.Insts.Qmdb_dyleanTraversalBackend.collect
+  node_digest := client.Mmr.Insts.Qmdb_dyleanTraversalNodes.node_digest
     termsTermsInst
 }
 
-/-- [qmdb_dylean::adapter::verify]:
-    Source: 'src/adapter.rs', lines 105:0-135:1
+/-- [qmdb_dylean::client::{impl core::convert::AsRef<[u8]> for qmdb_dylean::client::Element<'_0>}::as_ref]:
+    Source: 'src/client.rs', lines 46:4-48:5
     Visibility: public -/
-def adapter.verify
-  {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
-  : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
-  Clause0_Item) (height : Std.U32) (location : Std.U64) (root : Clause0_Digest)
-  (item : Clause0_Item) (siblings : Slice Clause0_Digest) :
+def client.Element.Insts.CoreConvertAsRefSliceU8.as_ref
+  (self : client.Element) : RustM (Slice Std.U8) := do
+  ok self
+
+/-- Trait implementation: [qmdb_dylean::client::{impl core::convert::AsRef<[u8]> for qmdb_dylean::client::Element<'_0>}]
+    Source: 'src/client.rs', lines 45:0-49:1 -/
+@[reducible]
+def client.Element.Insts.CoreConvertAsRefSliceU8 : core.convert.AsRef
+  client.Element (Slice Std.U8) := {
+  as_ref := client.Element.Insts.CoreConvertAsRefSliceU8.as_ref
+}
+
+/-- [qmdb_dylean::client::{impl core::iter::traits::iterator::Iterator<qmdb_dylean::client::Element<'a>> for qmdb_dylean::client::Single<'a>}::next]:
+    Source: 'src/client.rs', lines 57:4-65:5
+    Visibility: public -/
+def client.Single.Insts.CoreIterTraitsIteratorIteratorElement.next
+  (self : client.Single) :
+  RustM ((core.option.Option client.Element) × client.Single)
+  := do
+  match self with
+  | core.option.Option.None =>
+    ok (core.option.Option.None, core.option.Option.None)
+  | core.option.Option.Some item =>
+    ok (core.option.Option.Some item, core.option.Option.None)
+
+/-- Trait implementation: [qmdb_dylean::client::{impl core::iter::traits::iterator::Iterator<qmdb_dylean::client::Element<'a>> for qmdb_dylean::client::Single<'a>}]
+    Source: 'src/client.rs', lines 54:0-66:1 -/
+@[reducible]
+def client.Single.Insts.CoreIterTraitsIteratorIteratorElement :
+  core.iter.traits.iterator.Iterator client.Single client.Element := {
+  next := client.Single.Insts.CoreIterTraitsIteratorIteratorElement.next
+}
+
+/-- [qmdb_dylean::client::verify]:
+    Source: 'src/client.rs', lines 73:0-103:1 -/
+def client.verify
+  {T : Type _} {Clause0_Digest : Type _} (termsTermsInst : terms.Terms T
+  Clause0_Digest) (terms1 : T) (height : Std.U32) (location : Std.U64)
+  (root : Clause0_Digest) (item : Slice Std.U8)
+  (siblings : Slice Clause0_Digest) :
   RustM Bool
   := do
-  if height > adapter.MAX_HEIGHT
+  if height > client.MAX_HEIGHT
   then ok false
   else
     let leaves ← 1#u64 <<< height
     if location >= leaves
     then ok false
     else
+      let opening ←
+        traversal.Opening.new (client.Mmr.Insts.Qmdb_dyleanTraversalNodes
+          termsTermsInst) terms1 (core.option.Option.Some item) siblings
+          0#usize ()
       let i ← leaves - 1#u64
       let i1 ← 2#u64 * i
       let i2 ← location + 1#u64
-      let (r, opening) ←
+      let (r, opening1) ←
         traversal.reconstruct
-          (adapter.Opening.Insts.Qmdb_dyleanTraversalBackend termsTermsInst)
-          { item, siblings, next := 0#usize } i1 leaves 0#u64 location i2
+          (traversal.Opening.Insts.Qmdb_dyleanTraversalBackend
+          (client.Mmr.Insts.Qmdb_dyleanTraversalNodes termsTermsInst)
+          client.Single.Insts.CoreIterTraitsIteratorIteratorElement
+          client.Element.Insts.CoreConvertAsRefSliceU8
+          (Tuple.Insts.Qmdb_dyleanTraversalCollect Clause0_Digest))
+          { opening with collected := () } i1 leaves 0#u64 location i2
       match r with
       | core.result.Result.Ok peak =>
-        let i3 ← core.slice.Slice.len siblings
-        if opening.next = i3
+        let i3 ←
+          traversal.Opening.impl.cursor
+            (client.Mmr.Insts.Qmdb_dyleanTraversalNodes termsTermsInst)
+            { opening1 with collected := () }
+        let i4 ← core.slice.Slice.len siblings
+        if i3 = i4
         then
-          let t ← adapter.wrap termsTermsInst height peak
+          let t ←
+            terms.root termsTermsInst terms1
+              (Array.make 2#usize [ client.MMR_DOMAIN, client.FORWARD_FOLD ])
+              leaves 0#u64 peak
           termsTermsInst.corecmpPartialEqInst.eq t root
         else ok false
       | core.result.Result.Err _ => ok false
 
 /-- [qmdb_dylean::client::client_step]:
-    Source: 'src/client.rs', lines 19:0-40:1
-    Visibility: public -/
+    Source: 'src/client.rs', lines 126:0-148:1 -/
 def client.client_step
-  {T : Type _} {Clause0_Bytes : Type _} {Clause0_Digest : Type _} {Clause0_Item
-  : Type _} (termsTermsInst : terms.Terms T Clause0_Bytes Clause0_Digest
-  Clause0_Item) (root : Clause0_Digest) (height : Std.U32)
-  (message : Clause0_Bytes) (location : Std.U64)
-  (siblings : Slice Clause0_Digest) :
-  RustM (core.option.Option (client.Acceptance Clause0_Item))
+  {T : Type _} {Clause0_Message : Type _} {Clause0_Clause0_Digest : Type _}
+  (MessagesInst : client.Messages T Clause0_Message Clause0_Clause0_Digest)
+  (terms1 : T) (root : Clause0_Clause0_Digest) (height : Std.U32)
+  (message : Clause0_Message) (location : Std.U64)
+  (siblings : Slice Clause0_Clause0_Digest) :
+  RustM (core.option.Option client.Acceptance)
   := do
-  let o ← termsTermsInst.parse message
+  let o ← MessagesInst.parse terms1 message
   match o with
   | core.option.Option.None => ok core.option.Option.None
   | core.option.Option.Some item =>
-    let b ← adapter.verify termsTermsInst height location root item siblings
+    let b ←
+      client.verify MessagesInst.termsTermsInst terms1 height location root
+        item siblings
     if b
     then ok (core.option.Option.Some { height, location, item })
     else ok core.option.Option.None

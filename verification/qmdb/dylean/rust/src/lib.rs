@@ -1,20 +1,24 @@
-//! The production QMDB traversal and a single-item client for the DyLean experiment.
+//! Production QMDB traversal and hash-input encodings, with a single-item client, for the DyLean
+//! experiment.
 //!
-//! [`adapter`] runs the pinned production traversal with callbacks that follow the production
-//! hasher, and [`client`] decides whether a client accepts a claimed item. Both are generic over
-//! [`terms::Terms`]: tests instantiate it with byte strings and SHA-256, and Lean instantiates the
-//! hax extraction with DyLean's symbolic literal, concatenation and hash constructors.
+//! The production modules are included unchanged. [`client`] lays out an MMR with one peak, runs
+//! the production traversal and hashes the peak into the root with the production encoding. Hax
+//! extracts everything; Lean instantiates the encodings' [`Terms`](terms::Terms) with DyLean's
+//! symbolic constructors, and the tests instantiate them with SHA-256.
 
 #![forbid(unsafe_code)]
+// The crate exists for extraction and tests, so nothing is public.
+#![allow(dead_code)]
 
-pub mod adapter;
-pub mod client;
-pub mod terms;
+pub(crate) mod client;
 
-/// Production traversal, archived from the pinned revision by `check-bridge.sh`.
-#[path = "../../.lake/rust/storage/src/merkle/proof/traversal.rs"]
-#[allow(dead_code)]
-mod traversal;
+/// Production hash-input encodings.
+#[path = "../../../../../storage/src/merkle/hasher/terms.rs"]
+pub(crate) mod terms;
+
+/// Production traversal and its callbacks.
+#[path = "../../../../../storage/src/merkle/proof/traversal.rs"]
+pub(crate) mod traversal;
 
 #[cfg(test)]
 mod tests;

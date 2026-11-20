@@ -1,6 +1,7 @@
 """Mutate the extracted Rust, re-extract it, and require the Lean proofs to reject it.
 
-Run after check-bridge.sh, which prepares the pinned traversal, DyLean build and dependencies.
+Run after check-bridge.sh, which prepares the DyLean build and dependencies. Each mutation copies
+the crate and the production files it includes into a tree that mirrors the repository.
 """
 import os
 import re
@@ -13,30 +14,40 @@ here = Path(__file__).resolve().parent
 repo = Path(subprocess.check_output(
     ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=here, text=True
 ).strip()).parent
+top = Path(subprocess.check_output(
+    ["git", "rev-parse", "--show-toplevel"], cwd=here, text=True
+).strip())
+crate_path = here.relative_to(top) / "rust"
 cache = repo / ".verification-tools" / "qmdb"
 hax = os.environ.get("HAX", str(cache / "qmdb-hax-tools" / "target" / "release" / "cargo-hax"))
 toolchain = "leanprover/lean4:v4.35.0"
 env = dict(os.environ, XDG_CACHE_HOME=os.environ.get("XDG_CACHE_HOME", str(cache / "modern-cache")))
-modules = ["Model", "Binding", "DyTerms", "Reference", "Correspondence", "Protocol"]
+modules = ["Hashing", "Verifier", "DyTerms", "Symbolic", "Protocol"]
 
-TRAVERSAL = ".lake/rust/storage/src/merkle/proof/traversal.rs"
+TERMS = "storage/src/merkle/hasher/terms.rs"
+TRAVERSAL = "storage/src/merkle/proof/traversal.rs"
+CLIENT = str(crate_path / "src" / "client.rs")
 
-# (name, file under the mutation root, original, mutation, module whose proof must fail)
+# (name, repository path, original, mutation, module whose proof must fail)
 MUTATIONS = [
-    ("leaf drops the item", "rust/src/adapter.rs",
-     "T::hash(T::concat(T::literal(&be64(position)), T::item(item)))",
-     "T::hash(T::literal(&be64(position)))", "Correspondence"),
-    ("root drops the family domain", "rust/src/adapter.rs",
-     "pub const MMR_DOMAIN: u8 = 0;", "pub const MMR_DOMAIN: u8 = 1;", "Correspondence"),
-    ("production traversal treats a boundary subtree as inside", TRAVERSAL,
+    ("leaf hash drops the element", TERMS,
+     "terms.hash(&[Part::Bytes(&position.to_be_bytes()), Part::Bytes(element)])",
+     "terms.hash(&[Part::Bytes(&position.to_be_bytes())])", "Verifier"),
+    ("node hash drops the left child", TERMS,
+     "Part::Digest(left),\n        Part::Digest(right),", "Part::Digest(right),", "Verifier"),
+    ("root drops the peak", TERMS,
+     "Part::Digest(folded),\n        ])\n    } else {", "])\n    } else {", "Verifier"),
+    ("traversal treats a boundary subtree as inside", TRAVERSAL,
      "if start + width <= range_start || start >= range_end {",
-     "if start + width < range_start || start >= range_end {", "Correspondence"),
-    ("adapter ignores unused siblings", "rust/src/adapter.rs",
-     "Ok(peak) => opening.next == siblings.len() && wrap::<T>(height, peak) == *root,",
-     "Ok(peak) => wrap::<T>(height, peak) == *root,", "Correspondence"),
-    ("client skips verification", "rust/src/client.rs",
-     "if adapter::verify::<T>(height, location, root, &item, siblings) {",
-     "if true {", "Correspondence"),
+     "if start + width < range_start || start >= range_end {", "Verifier"),
+    ("traversal hashes the right child twice", TRAVERSAL,
+     "Ok(backend.node(position, left, right))", "Ok(backend.node(position, right, right))",
+     "Verifier"),
+    ("verifier ignores unused siblings", CLIENT,
+     "opening.cursor() == siblings.len()\n                && terms::root(",
+     "terms::root(", "Verifier"),
+    ("client skips verification", CLIENT,
+     "if verify(terms, height, location, root, item, siblings) {", "if true {", "Symbolic"),
 ]
 
 
@@ -51,15 +62,15 @@ def main():
     dylean = here / ".lake" / "compat" / ".lake" / "build" / "lib" / "lean"
     for name, file, old, new, failing in MUTATIONS:
         root = base / re.sub(r"\W+", "-", name)
-        crate = root / "rust"
+        crate = root / crate_path
         shutil.copytree(here / "rust" / "src", crate / "src")
         for part in ["Cargo.lock", "hax.toml"]:
             shutil.copy(here / "rust" / part, crate / part)
         manifest = (here / "rust" / "Cargo.toml").read_text()
         (crate / "Cargo.toml").write_text(manifest.split("[dev-dependencies]")[0])
-        traversal = Path("storage/src/merkle/proof/traversal.rs")
-        (root / ".lake" / "rust" / traversal).parent.mkdir(parents=True)
-        shutil.copy(here / ".lake" / "rust" / traversal, root / ".lake" / "rust" / traversal)
+        for included in [TERMS, TRAVERSAL]:
+            (root / included).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(top / included, root / included)
         source = root / file
         text = source.read_text()
         assert text.count(old) == 1, (name, old)

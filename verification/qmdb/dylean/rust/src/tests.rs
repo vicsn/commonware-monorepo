@@ -1,50 +1,45 @@
-//! Differential tests of the adapter and client against the production MMR.
+//! Differential tests of the client against the production MMR.
 //!
-//! The pinned production traversal behind [`adapter::verify`], the client and the production
+//! The client, which runs the production traversal and encodings, and the production
 //! `Proof::verify_element_inclusion` must return the same verdict on honest openings and on
 //! substituted, misplaced, reordered, short and long ones. Honest production openings must verify
 //! under the production root, which is the snapshot assumption of the Lean proofs.
 
-use crate::{adapter, client, terms::Terms};
+use crate::{
+    client::{self, Messages},
+    terms::{Part, Terms},
+};
 use commonware_cryptography::{Hasher as _, Sha256, sha256};
 use commonware_storage::merkle::{
     Bagging,
     mmr::{Location, Proof, StandardHasher, mem::Mmr},
 };
 use commonware_utils::test_rng;
-use rand::{Rng as _, RngExt as _};
+use rand::RngExt as _;
 
-/// Concrete terms: byte strings hashed with SHA-256.
+/// Concrete terms: parts concatenated and hashed with SHA-256.
 struct Concrete;
 
 impl Terms for Concrete {
-    type Bytes = Vec<u8>;
     type Digest = [u8; 32];
-    type Item = Vec<u8>;
 
-    fn literal(bytes: &[u8]) -> Vec<u8> {
-        bytes.to_vec()
-    }
-
-    fn item(item: &Vec<u8>) -> Vec<u8> {
-        item.clone()
-    }
-
-    fn digest(digest: [u8; 32]) -> Vec<u8> {
-        digest.to_vec()
-    }
-
-    fn parse(message: &Vec<u8>) -> Option<Vec<u8>> {
-        Some(message.clone())
-    }
-
-    fn concat(mut left: Vec<u8>, right: Vec<u8>) -> Vec<u8> {
-        left.extend_from_slice(&right);
-        left
-    }
-
-    fn hash(input: Vec<u8>) -> [u8; 32] {
+    fn hash(&self, parts: &[Part<'_, [u8; 32]>]) -> [u8; 32] {
+        let mut input = Vec::new();
+        for part in parts {
+            match part {
+                Part::Bytes(part) => input.extend_from_slice(part),
+                Part::Digest(digest) => input.extend_from_slice(*digest),
+            }
+        }
         bytes(&Sha256::hash(&[&input]))
+    }
+}
+
+impl Messages for Concrete {
+    type Message = Vec<u8>;
+
+    fn parse<'a>(&self, message: &'a Vec<u8>) -> Option<&'a [u8]> {
+        Some(message)
     }
 }
 
@@ -183,18 +178,6 @@ fn claims(
 }
 
 #[test]
-fn be64_matches_to_be_bytes() {
-    let mut rng = test_rng();
-    for value in [0, 1, 255, 256, u64::MAX] {
-        assert_eq!(adapter::be64(value), value.to_be_bytes());
-    }
-    for _ in 0..1000 {
-        let value = rng.next_u64();
-        assert_eq!(adapter::be64(value), value.to_be_bytes());
-    }
-}
-
-#[test]
 fn production_openings_verify() {
     let mut rng = test_rng();
     for height in 0..=8u32 {
@@ -206,7 +189,8 @@ fn production_openings_verify() {
             let proof = mmr.proof(&hasher, Location::new(location), 0).unwrap();
             let siblings: Vec<_> = proof.digests.iter().map(bytes).collect();
             assert!(
-                adapter::verify::<Concrete>(
+                client::verify(
+                    &Concrete,
                     height,
                     location,
                     &root,
@@ -248,7 +232,8 @@ fn verifiers_agree_with_production() {
                 assert_eq!(expected, claim.honest, "production: {context}");
                 let root = bytes(&claim.root);
                 assert_eq!(
-                    adapter::verify::<Concrete>(
+                    client::verify(
+                        &Concrete,
                         height,
                         claim.location,
                         &root,
@@ -256,9 +241,10 @@ fn verifiers_agree_with_production() {
                         &siblings
                     ),
                     expected,
-                    "traversal: {context}"
+                    "verify: {context}"
                 );
-                let accepted = client::client_step::<Concrete>(
+                let accepted = client::client_step(
+                    &Concrete,
                     &root,
                     height,
                     &claim.item,
@@ -281,9 +267,9 @@ fn verifiers_agree_with_production() {
 #[test]
 fn client_rejects_heights_above_the_bound() {
     let message = vec![1];
-    for height in [adapter::MAX_HEIGHT + 1, u32::MAX] {
+    for height in [client::MAX_HEIGHT + 1, u32::MAX] {
         assert!(
-            client::client_step::<Concrete>(&[0; 32], height, &message, 0, &[]).is_none(),
+            client::client_step(&Concrete, &[0; 32], height, &message, 0, &[]).is_none(),
             "height {height}"
         );
     }

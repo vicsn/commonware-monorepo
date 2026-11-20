@@ -1,41 +1,68 @@
 module
-public import QmdbDylean.Extraction
-public import Model
+public import Hashing
+public import DY.EquationalTheory.Hash
+public import DY.EquationalTheory.Concat
+public import DY.EquationalTheory.Literal
 
-/-! Trusted glue between the extracted Rust and DyLean. `dyTerms` interprets the verifier's
-terms with DyLean's symbolic literal, concatenation and hash constructors. `Snapshot` is the
-authenticated historical snapshot that the application supplies. -/
+/-! Trusted glue between the extracted Rust and DyLean. `symbolic` reads the production hash
+inputs symbolically: byte parts are literals, digest parts are terms, parts are concatenated to
+the right and hashing is DyLean's hash constructor. `messages` reads a claimed item from a
+literal message. `Snapshot` is the authenticated historical snapshot that the application
+supplies. -/
 
 namespace Qmdb
-open DY Aeneas Aeneas.Std CoreModels
+open DY Aeneas Aeneas.Std CoreModels qmdb_dylean
 @[expose] public section
+
+#combine +toplevel into BytesFunctor, BytesLength, attackerKnowledge from
+  Literal,
+  Concat,
+  Hash,
 
 /-- The bytes of a Rust byte slice. -/
 def toByteArray (s : Slice Std.U8) : ByteArray :=
   ⟨(s.val.map fun b => UInt8.ofNat b.val).toArray⟩
 
-/-- Rust terms as DyLean terms: digests are terms and items are literals. -/
-def dyTerms : qmdb_dylean.terms.Terms Unit Bytes Bytes ByteArray where
-  coremarkerCopyInst := ⟨⟨RustM.ok, fun _ x => RustM.ok x⟩⟩
-  corecmpPartialEqInst :=
-    { eq := fun a b => RustM.ok (decide (a = b)), ne := fun a b => RustM.ok (!decide (a = b)) }
-  literal s := RustM.ok (Literal.literalToBytes (toByteArray s))
-  item x := RustM.ok (Literal.literalToBytes x)
-  digest d := RustM.ok d
-  parse m := RustM.ok (match Literal.bytesToLiteral m with
-    | some x => core.option.Option.Some x
-    | none => core.option.Option.None)
-  concat a b := RustM.ok (Concat.concat a b)
-  hash x := RustM.ok (Hash.hash x)
+/-- A hash-input part as a term. -/
+def part : terms.Part Bytes → Bytes
+  | .Bytes s => Literal.literalToBytes (toByteArray s)
+  | .Digest d => d
+
+/-- Parts concatenated to the right. -/
+def chain : List (terms.Part Bytes) → Bytes
+  | [] => Literal.literalToBytes ByteArray.empty
+  | [p] => part p
+  | p :: rest => Concat.concat (part p) (chain rest)
+
+/-- Symbolic hashing: DyLean's hash constructor over the concatenated parts. -/
+def symbolic : Scheme Bytes Bytes where
+  hash := Hash.hash
+  encode := chain
+
+/-- The production hash inputs as DyLean terms. -/
+abbrev dyTerms : terms.Terms Unit Bytes := symbolic.terms
+
+/-- The bytes of a literal as a Rust byte slice, if they fit one. -/
+def toSlice (b : ByteArray) : Option (Slice Std.U8) :=
+  if h : b.data.toList.length ≤ Usize.max then
+    some (Slice.from (b.data.toList.map fun x => (⟨x.toBitVec⟩ : Std.U8)) (by simpa using h))
+  else none
+
+/-- A message carries an item when it is a literal. -/
+def messages : client.Messages Unit Bytes Bytes where
+  termsTermsInst := dyTerms
+  parse _ m := RustM.ok (match Literal.bytesToLiteral m with
+    | some b => toSlice b
+    | none => none)
 
 /-- A fixed, authenticated historical snapshot with `2^height` leaves. The application supplies
 its root, and every stored item has an opening that the production verifier accepts under it. -/
 class Snapshot where
   height : Std.U32
   root : Bytes
-  items : Nat → ByteArray
+  items : Std.U64 → Slice Std.U8
   honest : ∀ loc : Std.U64, loc.val < 2^height.val → ∃ ws : Slice Bytes,
-    qmdb_dylean.adapter.verify dyTerms height loc root (items loc.val) ws = RustM.ok true
+    client.verify dyTerms () height loc root (items loc) ws = RustM.ok true
 
 end
 end Qmdb

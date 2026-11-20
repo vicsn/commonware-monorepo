@@ -13,3 +13,11 @@
 @@ -413 +413 @@
 -            goal.withContext do throwError "cannot monotonize {← hypFv.getType}.\n grind failure: {← goalToMessageData newGoal config #[]}"
 +            goal.withContext do throwError "cannot monotonize {← hypFv.getType}.\n grind failure: {← goalToMessageData newGoal config}"
+--- a/DY/Meta/Step/Trace.lean
++++ b/DY/Meta/Step/Trace.lean
+@@ -6 +6,4 @@
+-initialize Lean.registerTraceClass `Step
++-- Aeneas registers the same trace class, and the language server loads it first as a plugin.
++initialize
++  unless (← Lean.getOptionDecls).contains `trace.Step do
++    Lean.registerTraceClass `Step

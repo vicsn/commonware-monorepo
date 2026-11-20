@@ -1,0 +1,22 @@
+name = "qmdb-dylean-bridge"
+version = "0.1.0"
+defaultTargets = ["QmdbBridge"]
+# The extraction's Lean, which DyLean is patched for; keeps `lake update` from adopting DyLean's.
+fixedToolchain = true
+
+# The bridge and its proofs, at the package root.
+[[lean_lib]]
+name = "QmdbBridge"
+roots = [
+  "Hashing", "Verifier", "DyTerms", "Symbolic", "Protocol", "SecurityTheorems", "SanityChecks",
+]
+
+# The hax extraction of the Rust client.
+[[require]]
+name = "qmdb-dylean"
+path = "rust/proofs/lean"
+
+# DyLean at its pin, patched for Lean 4.35 by check-bridge.sh.
+[[require]]
+name = "dylean"
+path = ".lake/compat"
