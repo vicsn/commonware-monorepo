@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Check the symbolic verification: the extracted Rust against production, reproducible extraction,
-# the Lean proofs with their axiom audit and executed checks, the mutations, and the BLS protocol.
+# the Lean proofs of every target with their axiom audits and executed checks, and the mutations.
 # Logs go to verification/.lake/logs.
 set -euo pipefail
 source "$(dirname "$0")/toolchain.sh"
@@ -37,5 +37,4 @@ grep 'depend only on standard axioms' "$logs/lean-build.log"
 
 # Each mutation of the extracted Rust must break the named proof module.
 python3 mutate.py qmdb/mutations.toml | tee "$logs/mutations.log"
-
-bash bls/check.sh
+python3 mutate.py bls/mutations.toml | tee -a "$logs/mutations.log"

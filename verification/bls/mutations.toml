@@ -1,0 +1,73 @@
+# Mutations of the Rust that hax extracts for BLS certificates. Each replaces `original`, which
+# must occur once in `file` (relative to the repository), with `mutated`; `mutate.py` re-extracts
+# the crate and requires the proof module `fails` to stop compiling.
+
+[[mutation]]
+name = "certificate skips the length check"
+file = "cryptography/src/bls12381/certificate/rules.rs"
+original = "    if signers.bound() != committee.members() {\n        return false;\n    }\n"
+mutated = ""
+fails = "Bls.Certificate"
+
+[[mutation]]
+name = "certificate accepts one signer below the quorum"
+file = "cryptography/src/bls12381/certificate/rules.rs"
+original = "if count(signers) < committee.quorum() {"
+mutated = "if count(signers) + 1 < committee.quorum() {"
+fails = "Bls.Certificate"
+
+[[mutation]]
+name = "count includes unnamed members"
+file = "cryptography/src/bls12381/certificate/rules.rs"
+original = "        if signers.names(index) {\n            count += 1;\n        }\n"
+mutated = "        count += 1;\n"
+fails = "Bls.Certificate"
+
+[[mutation]]
+name = "combination skips the named keys"
+file = "cryptography/src/bls12381/certificate/rules.rs"
+original = "Some(key) => sum = terms.add(sum, key),"
+mutated = "Some(_) => (),"
+fails = "Bls.Certificate"
+
+[[mutation]]
+name = "combination skips the first member"
+file = "cryptography/src/bls12381/certificate/rules.rs"
+original = "let mut sum = terms.zero();\n    let mut index = 0;"
+mutated = "let mut sum = terms.zero();\n    let mut index = 1;"
+fails = "Bls.Certificate"
+
+[[mutation]]
+name = "certificate accepts a signature that does not decode"
+file = "cryptography/src/bls12381/certificate/rules.rs"
+original = "        None => return false,\n    };\n    let key = match aggregate"
+mutated = "        None => return true,\n    };\n    let key = match aggregate"
+fails = "Bls.Certificate"
+
+[[mutation]]
+name = "certificate swaps namespace and message"
+file = "cryptography/src/bls12381/certificate/rules.rs"
+original = "terms.check(&key, &terms.message(namespace, message), signature)"
+mutated = "terms.check(&key, &terms.message(message, namespace), signature)"
+fails = "Bls.Certificate"
+
+[[mutation]]
+name = "attestation ignores the signer index"
+file = "cryptography/src/bls12381/certificate/rules.rs"
+original = "let key = match committee.key(signer) {"
+mutated = "let key = match committee.key(0) {"
+fails = "Bls.Certificate"
+
+[[mutation]]
+name = "client tolerates half of the committee as faulty"
+file = "verification/symbolic/src/bls.rs"
+original = "members - (members - 1) / 3"
+mutated = "members - (members - 1) / 2"
+fails = "Bls.Certificate"
+
+[[mutation]]
+name = "client skips the certificate rules"
+file = "verification/symbolic/src/bls.rs"
+original = "if rules::verify_certificate(terms, &committee, signers, signature, namespace, message) {"
+mutated = "if true {"
+fails = "Bls.Certificate"
