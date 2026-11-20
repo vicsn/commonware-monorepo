@@ -12,7 +12,9 @@ use commonware_codec::{
     varint::UInt,
 };
 use commonware_cryptography::Digest;
-use core::ops::Range;
+use core::{marker::PhantomData, ops::Range};
+
+mod traversal;
 
 /// Errors that can occur when reconstructing a digest from a proof due to invalid input.
 #[derive(thiserror::Error, Debug)]
@@ -618,6 +620,35 @@ pub(crate) struct Subtree<F: Family> {
     pub leaf_start: Location<F>,
 }
 
+/// The nodes of family `F`, hashed by `H`.
+struct FamilyNodes<'a, F, H>(&'a H, PhantomData<F>);
+
+impl<F: Family, H: Hasher<F>> traversal::Nodes for FamilyNodes<'_, F, H> {
+    type Digest = H::Digest;
+
+    fn children(&self, position: u64, height: u32) -> (u64, u64) {
+        let (left, right) = F::children(Position::new(position), height);
+        (*left, *right)
+    }
+
+    fn leaf_digest(&self, position: u64, element: &[u8]) -> H::Digest {
+        self.0.leaf_digest(Position::new(position), element)
+    }
+
+    fn node_digest(&self, position: u64, left: &H::Digest, right: &H::Digest) -> H::Digest {
+        self.0.node_digest(Position::new(position), left, right)
+    }
+}
+
+impl<F: Family, D> traversal::Collect<D> for Option<&mut Vec<(Position<F>, D)>> {
+    fn collect(&mut self, left_position: u64, left: D, right_position: u64, right: D) {
+        if let Some(collected) = self {
+            collected.push((Position::new(left_position), left));
+            collected.push((Position::new(right_position), right));
+        }
+    }
+}
+
 impl<F: Family> Subtree<F> {
     fn leaf_end(&self) -> Location<F> {
         self.leaf_start + (1u64 << self.height)
@@ -787,17 +818,9 @@ impl<F: Family> Subtree<F> {
         Some(hasher.node_digest(self.pos, &left_d, &right_d))
     }
 
-    /// Reconstruct the digest of this subtree from a range of elements and sibling digests,
-    /// consuming both in left-first DFS order.
-    ///
-    /// At each node:
-    /// - If the subtree is entirely outside the range: consume a sibling digest.
-    /// - If it's a leaf in the range: hash the next element.
-    /// - Otherwise: recurse into children via [`Family::children`] and compute the node digest.
-    ///
-    /// If `collected` is `Some`, every child `(position, digest)` pair encountered during
-    /// reconstruction is appended to the vector.
-    fn reconstruct_digest<H, E>(
+    // Baseline traversal retained only as an independent regression oracle.
+    #[cfg(test)]
+    fn reconstruct_digest_reference<H, E>(
         &self,
         hasher: &H,
         range: &Range<Location<F>>,
@@ -829,7 +852,7 @@ impl<F: Family> Subtree<F> {
 
         // Recurse into children.
         let (left, right) = self.children();
-        let left_d = left.reconstruct_digest(
+        let left_d = left.reconstruct_digest_reference(
             hasher,
             range,
             elements,
@@ -837,7 +860,7 @@ impl<F: Family> Subtree<F> {
             cursor,
             collected.as_deref_mut(),
         )?;
-        let right_d = right.reconstruct_digest(
+        let right_d = right.reconstruct_digest_reference(
             hasher,
             range,
             elements,
@@ -852,6 +875,51 @@ impl<F: Family> Subtree<F> {
         }
 
         Ok(hasher.node_digest(self.pos, &left_d, &right_d))
+    }
+
+    /// Reconstruct the digest of this subtree from a range of elements and sibling digests,
+    /// consuming both in left-first DFS order.
+    ///
+    /// At each node:
+    /// - If the subtree is entirely outside the range: consume a sibling digest.
+    /// - If it's a leaf in the range: hash the next element.
+    /// - Otherwise: recurse into children via [`Family::children`] and compute the node digest.
+    ///
+    /// If `collected` is `Some`, every child `(position, digest)` pair encountered during
+    /// reconstruction is appended to the vector.
+    fn reconstruct_digest<H, E>(
+        &self,
+        hasher: &H,
+        range: &Range<Location<F>>,
+        elements: &mut E,
+        siblings: &[H::Digest],
+        cursor: &mut usize,
+        collected: Option<&mut Vec<(Position<F>, H::Digest)>>,
+    ) -> Result<H::Digest, ReconstructionError>
+    where
+        H: Hasher<F>,
+        E: Iterator<Item: AsRef<[u8]>>,
+    {
+        let mut opening = traversal::Opening::new(
+            FamilyNodes(hasher, PhantomData),
+            elements,
+            siblings,
+            *cursor,
+            collected,
+        );
+        let result = traversal::reconstruct(
+            &mut opening,
+            *self.pos,
+            1u64 << self.height,
+            *self.leaf_start,
+            *range.start,
+            *range.end,
+        );
+        *cursor = opening.cursor();
+        result.map_err(|error| match error {
+            traversal::Error::MissingElements => ReconstructionError::MissingElements,
+            traversal::Error::MissingDigests => ReconstructionError::MissingDigests,
+        })
     }
 }
 
@@ -3172,6 +3240,85 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn general_traversal_matches_reference() {
+        fn check<F: Family>() {
+            for bagging in [ForwardFold, BackwardFold] {
+                let hasher = H::new(bagging);
+                for leaves in 1u64..=16 {
+                    let mem = build_raw::<F>(&hasher, leaves);
+                    for start in 0..leaves {
+                        for end in start + 1..=leaves {
+                            let range = Location::new(start)..Location::new(end);
+                            let plan = RangePlan::<F>::new(mem.leaves(), range.clone()).unwrap();
+                            let siblings: Vec<_> = plan
+                                .siblings
+                                .iter()
+                                .map(|p| mem.get_node(*p).unwrap())
+                                .collect();
+                            for collect in [false, true] {
+                                for damage in 0..4 {
+                                    let mut witness = siblings.clone();
+                                    let mut items: Vec<_> =
+                                        (start..end).map(u64::to_be_bytes).collect();
+                                    match damage {
+                                        1 => {
+                                            witness.pop();
+                                        }
+                                        2 => {
+                                            items.pop();
+                                        }
+                                        3 => {
+                                            if let Some(d) = witness.first_mut() {
+                                                *d = test_digest(255);
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                    let mut old_items = items.clone().into_iter();
+                                    let mut new_items = items.into_iter();
+                                    let (mut old_cursor, mut new_cursor) = (0, 0);
+                                    let (mut old_nodes, mut new_nodes) = (Vec::new(), Vec::new());
+                                    for subtree in &plan.overlapping {
+                                        let expected = subtree
+                                            .reconstruct_digest_reference(
+                                                &hasher,
+                                                &range,
+                                                &mut old_items,
+                                                &witness,
+                                                &mut old_cursor,
+                                                collect.then_some(&mut old_nodes),
+                                            )
+                                            .map_err(|e| format!("{e:?}"));
+                                        let actual = subtree
+                                            .reconstruct_digest(
+                                                &hasher,
+                                                &range,
+                                                &mut new_items,
+                                                &witness,
+                                                &mut new_cursor,
+                                                collect.then_some(&mut new_nodes),
+                                            )
+                                            .map_err(|e| format!("{e:?}"));
+                                        assert_eq!(actual, expected);
+                                        assert_eq!(new_cursor, old_cursor);
+                                        assert_eq!(new_items.len(), old_items.len());
+                                        assert_eq!(new_nodes, old_nodes);
+                                        if actual.is_err() {
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        check::<mmr::Family>();
+        check::<mmb::Family>();
     }
 
     fn full_range<F: Family>() {

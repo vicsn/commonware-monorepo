@@ -4,6 +4,33 @@ use crate::merkle::{Bagging, Error, Family, Location, Position};
 use commonware_cryptography::{Digest, Hasher as CHasher};
 use commonware_parallel::Sequential;
 use core::marker::PhantomData;
+use terms::{MAX_PARTS, Part, Terms};
+
+pub(crate) mod terms;
+
+/// Hashes [`Part`]s with a [`Hasher`] by concatenating their bytes.
+struct ByteTerms<'a, F, H>(&'a H, PhantomData<F>);
+
+impl<'a, F: Family, H: Hasher<F>> ByteTerms<'a, F, H> {
+    const fn new(hasher: &'a H) -> Self {
+        Self(hasher, PhantomData)
+    }
+}
+
+impl<F: Family, H: Hasher<F>> Terms for ByteTerms<'_, F, H> {
+    type Digest = H::Digest;
+
+    fn hash(&self, parts: &[Part<'_, H::Digest>]) -> H::Digest {
+        let mut slices: [&[u8]; MAX_PARTS] = [&[]; MAX_PARTS];
+        for (slice, part) in slices.iter_mut().zip(parts) {
+            *slice = match part {
+                Part::Bytes(bytes) => bytes,
+                Part::Digest(digest) => digest.as_ref(),
+            };
+        }
+        self.0.hash(&slices[..parts.len()])
+    }
+}
 
 /// A trait for computing the various digests of a Merkle-family structure.
 ///
@@ -30,7 +57,7 @@ pub trait Hasher<F: Family>: Clone + Send + Sync {
         left: &Self::Digest,
         right: &Self::Digest,
     ) -> Self::Digest {
-        self.hash(&[&(*pos).to_be_bytes(), left, right])
+        terms::node_digest(&ByteTerms::new(self), *pos, left, right)
     }
 
     /// Computes digests for two nodes at once.
@@ -43,7 +70,7 @@ pub trait Hasher<F: Family>: Clone + Send + Sync {
 
     /// Computes the digest for a leaf given its position and the element it represents.
     fn leaf_digest(&self, pos: Position<F>, element: &[u8]) -> Self::Digest {
-        self.hash(&[&(*pos).to_be_bytes(), element])
+        terms::leaf_digest(&ByteTerms::new(self), *pos, element)
     }
 
     /// Compute the digest of a byte slice.
@@ -53,7 +80,7 @@ pub trait Hasher<F: Family>: Clone + Send + Sync {
 
     /// Folds a peak digest into a running accumulator: `Hash(acc || peak)`.
     fn fold(&self, acc: &Self::Digest, peak: &Self::Digest) -> Self::Digest {
-        self.hash(&[acc, peak])
+        terms::fold(&ByteTerms::new(self), acc, peak)
     }
 
     /// Computes a root using `inactive_peaks` and the bagging policy carried by `self`.
@@ -119,7 +146,7 @@ pub trait Hasher<F: Family>: Clone + Send + Sync {
         let mut peak_digests = peak_digests.into_iter();
         let Some(first) = peak_digests.next() else {
             return (inactive_peaks_to_fold == 0 && committed_inactive_peaks == 0)
-                .then(|| self.hash(&[&domain, &(*leaves).to_be_bytes()]));
+                .then(|| terms::empty_root(&ByteTerms::new(self), domain, *leaves));
         };
 
         let mut acc = *first;
@@ -142,16 +169,13 @@ pub trait Hasher<F: Family>: Clone + Send + Sync {
                 .map_or(acc, |bag| self.fold(&acc, &bag)),
         };
 
-        if committed_inactive_peaks == 0 {
-            Some(self.hash(&[&domain, &(*leaves).to_be_bytes(), &folded_peaks]))
-        } else {
-            Some(self.hash(&[
-                &domain,
-                &(*leaves).to_be_bytes(),
-                &(committed_inactive_peaks as u64).to_be_bytes(),
-                &folded_peaks,
-            ]))
-        }
+        Some(terms::root(
+            &ByteTerms::new(self),
+            domain,
+            *leaves,
+            committed_inactive_peaks as u64,
+            &folded_peaks,
+        ))
     }
 }
 
