@@ -26,12 +26,14 @@ theorem alice_ne_bob : alice ≠ bob := by
   have := congrArg (fun s : Slice Std.U8 => s.val.length) same
   simp [alice, bob, Slice.from_val] at this
 
-/-- The honest snapshot of `Alice` at location 0 and `Bob` at location 1. -/
+/-- The honest snapshot of `Alice` at location 0 and `Bob` at location 1, under DyLean's hash. -/
 instance snapshot : Snapshot where
+  hash := Hash.hash
   height := 1#u32
   root := honestRoot symbolic items 1
   items := items
-  honest loc inside := ⟨_, honest_opening symbolic items 1#u32 (by decide) loc inside⟩
+  siblings loc := honestSiblings symbolic items 1 loc (by decide)
+  honest loc inside := honest_opening symbolic items 1#u32 (by decide) loc inside
 
 noncomputable section
 
@@ -99,6 +101,45 @@ theorem attempt_reachable (item : Slice Std.U8) (loc : Std.U64) (ws : Slice Byte
     · exact reachable
     · trivial
   · trivial
+
+/-! ## A hash on terms that collides -/
+
+/-- A hash on terms with one digest. -/
+noncomputable def flat (_ : Bytes) : Bytes := Literal.literalToBytes ByteArray.empty
+
+/-- Under a hash with one digest the extracted client accepts `Bob` at Alice's location of the
+two-item snapshot, and the finder returns a collision between that opening and the stored one. So
+the collision alternative of the trace theorem cannot be dropped. -/
+theorem flat_accepts_substituted :
+    qmdb.client_step (hashing flat).terms messages () (honestRoot (hashing flat) items 1) 1#u32
+        (carrying bob) 0#u64 (honestSiblings (hashing flat) (fun _ => bob) 1 0#u64 (by decide)) =
+      RustM.ok (some { height := 1#u32, location := 0#u64, item := bob }) ∧
+    ∃ x y, finder (hashing flat) 1#u32 0#u64 bob alice
+      (honestSiblings (hashing flat) (fun _ => bob) 1 0#u64 (by decide))
+      (honestSiblings (hashing flat) items 1 0#u64 (by decide)) = some (x, y) ∧ x ≠ y := by
+  have root : honestRoot (hashing flat) (fun _ => bob) (1#u32 : Std.U32).val =
+      honestRoot (hashing flat) items (1#u32 : Std.U32).val := rfl
+  have accepted :=
+    honest_opening (hashing flat) (fun _ => bob) 1#u32 (by decide) 0#u64 (by decide)
+  have honest := honest_opening (hashing flat) items 1#u32 (by decide) 0#u64 (by decide)
+  have stored : items 0#u64 = alice := by simp [items]
+  rw [root] at accepted
+  rw [stored] at honest
+  constructor
+  · rw [client_step_carrying]
+    show (do
+      let b ← qmdb.verify (hashing flat).terms () 1#u32 0#u64
+        (honestRoot (hashing flat) items (1#u32 : Std.U32).val) bob
+        (honestSiblings (hashing flat) (fun _ => bob) (1#u32 : Std.U32).val 0#u64 (by decide))
+      if b then
+        RustM.ok (some ({ height := 1#u32, location := 0#u64, item := bob } : qmdb.Acceptance))
+      else RustM.ok none) = _
+    rw [accepted]
+    simp
+  · rcases binding_or_collision (hashing flat) (unambiguous flat) 1#u32 0#u64 _ bob alice _ _
+      accepted honest with same | ⟨x, y, found, clash⟩
+    · exact absurd same.symm alice_ne_bob
+    · exact ⟨x, y, found, clash.1⟩
 
 /-! ## A hash that collides -/
 

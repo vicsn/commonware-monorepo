@@ -8,10 +8,11 @@ public import DY.EquationalTheory.Literal
 concatenation and hashing. Each target fixes its algebra with `#combine`; this reading applies to
 every algebra that has these three constructors.
 
-Trusted: `symbolic` reads production hash inputs as terms (byte parts as literals, parts
-concatenated to the right, DyLean's hash constructor), and `messages` reads the item of a received
-message as the bytes of a literal. Checked: the lemmas, which show that the reading keeps byte
-parts and concatenations apart and that DyLean's hash has no collisions. -/
+Trusted: `hashing` reads production hash inputs as terms (byte parts as literals, parts
+concatenated to the right) under any hash on terms, `symbolic` is that reading with DyLean's hash
+constructor, and `messages` reads the item of a received message as the bytes of a literal.
+Checked: the lemmas, which show that the reading keeps byte parts and concatenations apart and
+that DyLean's hash has no collisions. -/
 
 namespace Commonware.Symbolic
 open DY Aeneas Aeneas.Std CoreModels commonware_symbolic
@@ -98,10 +99,14 @@ def chain : List (terms.Part Bytes) → Bytes
   | [p] => part p
   | p :: rest => Concat.concat (part p) (chain rest)
 
-/-- Symbolic hashing: DyLean's hash constructor over the concatenated parts. -/
-def symbolic : Scheme Bytes Bytes where
-  hash := Hash.hash
+/-- Hashing with `hash` over the concatenated parts. `hash` is any function on terms, so it may
+collide. -/
+def hashing (hash : Bytes → Bytes) : Scheme Bytes Bytes where
+  hash := hash
   encode := chain
+
+/-- Symbolic hashing: DyLean's hash constructor over the concatenated parts. -/
+def symbolic : Scheme Bytes Bytes := hashing Hash.hash
 
 /-- The production hash inputs as DyLean terms. -/
 abbrev dyTerms : terms.Terms Unit Bytes := symbolic.terms
