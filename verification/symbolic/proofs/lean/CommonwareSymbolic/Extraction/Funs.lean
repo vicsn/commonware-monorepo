@@ -29,6 +29,176 @@ noncomputable section
 
 namespace commonware_symbolic
 
+/-- [commonware_symbolic::rules::count]: loop body 0:
+    Source: 'src/../../../cryptography/src/bls12381/certificate/rules.rs', lines 63:4-68:5 -/
+@[rust_loop_body]
+def rules.count_loop.body
+  {B : Type _} (SignersInst : rules.Signers B) (signers : B) (bound : Std.U64)
+  (count : Std.U64) (index : Std.U64) :
+  RustM (ControlFlow (Std.U64 × Std.U64) Std.U64)
+  := do
+  if index < bound
+  then
+    let b ← SignersInst.names signers index
+    let count1 ← if b
+                   then count + 1#u64
+                   else ok count
+    let index1 ← index + 1#u64
+    ok (cont (count1, index1))
+  else ok (done count)
+
+/-- [commonware_symbolic::rules::count]: loop 0:
+    Source: 'src/../../../cryptography/src/bls12381/certificate/rules.rs', lines 63:4-68:5 -/
+@[rust_loop]
+def rules.count_loop
+  {B : Type _} (SignersInst : rules.Signers B) (signers : B) (bound : Std.U64)
+  (count : Std.U64) (index : Std.U64) :
+  RustM Std.U64
+  := do
+  loop
+    (fun (count1, index1) => rules.count_loop.body SignersInst signers bound
+      count1 index1)
+    (count, index)
+
+/-- [commonware_symbolic::rules::count]:
+    Source: 'src/../../../cryptography/src/bls12381/certificate/rules.rs', lines 59:0-70:1 -/
+def rules.count
+  {B : Type _} (SignersInst : rules.Signers B) (signers : B) :
+  RustM Std.U64
+  := do
+  let bound ← SignersInst.bound signers
+  rules.count_loop SignersInst signers bound 0#u64 0#u64
+
+/-- [commonware_symbolic::rules::aggregate]: loop body 0:
+    Source: 'src/../../../cryptography/src/bls12381/certificate/rules.rs', lines 83:4-93:1 -/
+@[rust_loop_body]
+def rules.aggregate_loop.body
+  {T : Type _} {C : Type _} {B : Type _} {Clause0_Public : Type _}
+  {Clause0_Point : Type _} (TermsInst : rules.Terms T Clause0_Public
+  Clause0_Point) (CommitteeInst : rules.Committee C Clause0_Public)
+  (SignersInst : rules.Signers B) (terms1 : T) (committee : C) (signers : B)
+  (bound : Std.U64) (sum : Clause0_Public) (index : Std.U64) :
+  RustM (ControlFlow (Clause0_Public × Std.U64) (core.option.Option
+    Clause0_Public))
+  := do
+  if index < bound
+  then
+    let b ← SignersInst.names signers index
+    if b
+    then
+      let o ← CommitteeInst.key committee index
+      match o with
+      | core.option.Option.None => ok (done core.option.Option.None)
+      | core.option.Option.Some key =>
+        let sum1 ← TermsInst.add terms1 sum key
+        let index1 ← index + 1#u64
+        ok (cont (sum1, index1))
+    else let index1 ← index + 1#u64
+         ok (cont (sum, index1))
+  else ok (done (core.option.Option.Some sum))
+
+/-- [commonware_symbolic::rules::aggregate]: loop 0:
+    Source: 'src/../../../cryptography/src/bls12381/certificate/rules.rs', lines 83:4-93:1 -/
+@[rust_loop]
+def rules.aggregate_loop
+  {T : Type _} {C : Type _} {B : Type _} {Clause0_Public : Type _}
+  {Clause0_Point : Type _} (TermsInst : rules.Terms T Clause0_Public
+  Clause0_Point) (CommitteeInst : rules.Committee C Clause0_Public)
+  (SignersInst : rules.Signers B) (terms1 : T) (committee : C) (signers : B)
+  (bound : Std.U64) (sum : Clause0_Public) (index : Std.U64) :
+  RustM (core.option.Option Clause0_Public)
+  := do
+  loop
+    (fun (sum1, index1) => rules.aggregate_loop.body TermsInst CommitteeInst
+      SignersInst terms1 committee signers bound sum1 index1)
+    (sum, index)
+
+/-- [commonware_symbolic::rules::aggregate]:
+    Source: 'src/../../../cryptography/src/bls12381/certificate/rules.rs', lines 74:0-93:1 -/
+def rules.aggregate
+  {T : Type _} {C : Type _} {B : Type _} {Clause0_Public : Type _}
+  {Clause0_Point : Type _} (TermsInst : rules.Terms T Clause0_Public
+  Clause0_Point) (CommitteeInst : rules.Committee C Clause0_Public)
+  (SignersInst : rules.Signers B) (terms1 : T) (committee : C) (signers : B) :
+  RustM (core.option.Option Clause0_Public)
+  := do
+  let bound ← SignersInst.bound signers
+  let sum ← TermsInst.zero terms1
+  rules.aggregate_loop TermsInst CommitteeInst SignersInst terms1 committee
+    signers bound sum 0#u64
+
+/-- [commonware_symbolic::rules::verify_certificate]:
+    Source: 'src/../../../cryptography/src/bls12381/certificate/rules.rs', lines 100:0-129:1 -/
+def rules.verify_certificate
+  {T : Type _} {C : Type _} {B : Type _} {S : Type _} {Clause0_Public : Type _}
+  {Clause0_Point : Type _} (TermsInst : rules.Terms T Clause0_Public
+  Clause0_Point) (CommitteeInst : rules.Committee C Clause0_Public)
+  (SignersInst : rules.Signers B) (DecodedInst : rules.Decoded S Clause0_Point)
+  (terms1 : T) (committee : C) (signers : B) (signature : S)
+  («namespace» : Slice Std.U8) (message : Slice Std.U8) :
+  RustM Bool
+  := do
+  let i ← SignersInst.bound signers
+  let i1 ← CommitteeInst.members committee
+  if i != i1
+  then ok false
+  else
+    let i2 ← rules.count SignersInst signers
+    let i3 ← CommitteeInst.quorum committee
+    if i2 < i3
+    then ok false
+    else
+      let o ← DecodedInst.decoded signature
+      match o with
+      | core.option.Option.None => ok false
+      | core.option.Option.Some signature1 =>
+        let o1 ←
+          rules.aggregate TermsInst CommitteeInst SignersInst terms1 committee
+            signers
+        match o1 with
+        | core.option.Option.None => ok false
+        | core.option.Option.Some key =>
+          let t ← TermsInst.message terms1 «namespace» message
+          TermsInst.check terms1 key t signature1
+
+/-- [commonware_symbolic::rules::verify_attestation]:
+    Source: 'src/../../../cryptography/src/bls12381/certificate/rules.rs', lines 132:0-154:1 -/
+def rules.verify_attestation
+  {T : Type _} {C : Type _} {S : Type _} {Clause0_Public : Type _}
+  {Clause0_Point : Type _} (TermsInst : rules.Terms T Clause0_Public
+  Clause0_Point) (CommitteeInst : rules.Committee C Clause0_Public)
+  (DecodedInst : rules.Decoded S Clause0_Point) (terms1 : T) (committee : C)
+  (signer : Std.U64) (signature : S) («namespace» : Slice Std.U8)
+  (message : Slice Std.U8) :
+  RustM Bool
+  := do
+  let o ← CommitteeInst.key committee signer
+  match o with
+  | core.option.Option.None => ok false
+  | core.option.Option.Some key =>
+    let o1 ← DecodedInst.decoded signature
+    match o1 with
+    | core.option.Option.None => ok false
+    | core.option.Option.Some signature1 =>
+      let t ← TermsInst.message terms1 «namespace» message
+      TermsInst.check terms1 key t signature1
+
+/-- [commonware_symbolic::rules::verify_identity]:
+    Source: 'src/../../../cryptography/src/bls12381/certificate/rules.rs', lines 157:0-173:1 -/
+def rules.verify_identity
+  {T : Type _} {S : Type _} {Clause0_Public : Type _} {Clause0_Point : Type _}
+  (TermsInst : rules.Terms T Clause0_Public Clause0_Point) (DecodedInst :
+  rules.Decoded S Clause0_Point) (terms1 : T) (identity : Clause0_Public)
+  (signature : S) («namespace» : Slice Std.U8) (message : Slice Std.U8) :
+  RustM Bool
+  := do
+  let o ← DecodedInst.decoded signature
+  match o with
+  | core.option.Option.None => ok false
+  | core.option.Option.Some signature1 =>
+    let t ← TermsInst.message terms1 «namespace» message
+    TermsInst.check terms1 identity t signature1
+
 /-- [commonware_symbolic::terms::MAX_PARTS]
     Source: 'src/../../../storage/src/merkle/hasher/terms.rs', lines 26:0-26:38 -/
 @[global_simps, irreducible] def terms.MAX_PARTS : Std.Usize := 4#usize
@@ -324,6 +494,80 @@ def traversal.Opening.Insts.Commonware_symbolicTraversalBackend {N : Type _} {E
     NodesInst coreitertraitsiteratorIteratorInst
     coreconvertAsRefClause1_ItemSliceU8Inst CollectInst
 }
+
+/-- [commonware_symbolic::bls::{impl commonware_symbolic::rules::Committee<K> for commonware_symbolic::bls::N3f1<'_0, C>}::key]:
+    Source: 'src/bls.rs', lines 22:4-24:5 -/
+def bls.N3f1.Insts.Commonware_symbolicRulesCommittee.key
+  {K : Type _} {C : Type _} (rulesCommitteeInst : rules.Committee C K)
+  (self : bls.N3f1 C) (index : Std.U64) :
+  RustM (core.option.Option K)
+  := do
+  rulesCommitteeInst.key self index
+
+/-- [commonware_symbolic::bls::{impl commonware_symbolic::rules::Committee<K> for commonware_symbolic::bls::N3f1<'_0, C>}::quorum]:
+    Source: 'src/bls.rs', lines 17:4-20:5 -/
+def bls.N3f1.Insts.Commonware_symbolicRulesCommittee.quorum
+  {K : Type _} {C : Type _} (rulesCommitteeInst : rules.Committee C K)
+  (self : bls.N3f1 C) :
+  RustM Std.U64
+  := do
+  let members ← rulesCommitteeInst.members self
+  let i ← members - 1#u64
+  let i1 ← i / 3#u64
+  members - i1
+
+/-- [commonware_symbolic::bls::{impl commonware_symbolic::rules::Committee<K> for commonware_symbolic::bls::N3f1<'_0, C>}::members]:
+    Source: 'src/bls.rs', lines 13:4-15:5 -/
+def bls.N3f1.Insts.Commonware_symbolicRulesCommittee.members
+  {K : Type _} {C : Type _} (rulesCommitteeInst : rules.Committee C K)
+  (self : bls.N3f1 C) :
+  RustM Std.U64
+  := do
+  rulesCommitteeInst.members self
+
+/-- Trait implementation: [commonware_symbolic::bls::{impl commonware_symbolic::rules::Committee<K> for commonware_symbolic::bls::N3f1<'_0, C>}]
+    Source: 'src/bls.rs', lines 12:0-25:1 -/
+@[reducible]
+def bls.N3f1.Insts.Commonware_symbolicRulesCommittee {K : Type _} {C : Type _}
+  (rulesCommitteeInst : rules.Committee C K) : rules.Committee (bls.N3f1 C) K
+  := {
+  members := bls.N3f1.Insts.Commonware_symbolicRulesCommittee.members
+    rulesCommitteeInst
+  quorum := bls.N3f1.Insts.Commonware_symbolicRulesCommittee.quorum
+    rulesCommitteeInst
+  key := bls.N3f1.Insts.Commonware_symbolicRulesCommittee.key
+    rulesCommitteeInst
+}
+
+/-- [commonware_symbolic::bls::client_step]:
+    Source: 'src/bls.rs', lines 38:0-65:1 -/
+def bls.client_step
+  {T : Type _} {C : Type _} {B : Type _} {S : Type _} {Clause0_Public : Type _}
+  {Clause0_Point : Type _} (rulesTermsInst : rules.Terms T Clause0_Public
+  Clause0_Point) (rulesCommitteeInst : rules.Committee C Clause0_Public)
+  (rulesSignersInst : rules.Signers B) (rulesDecodedInst : rules.Decoded S
+  Clause0_Point) (terms1 : T) (committee : C) («namespace» : Slice Std.U8)
+  (message : Slice Std.U8) (signers : B) (signature : S) :
+  RustM (core.option.Option bls.Certified)
+  := do
+  let members ←
+    bls.N3f1.Insts.Commonware_symbolicRulesCommittee.members rulesCommitteeInst
+      committee
+  if members = 0#u64
+  then ok core.option.Option.None
+  else
+    let b ←
+      rules.verify_certificate rulesTermsInst
+        (bls.N3f1.Insts.Commonware_symbolicRulesCommittee rulesCommitteeInst)
+        rulesSignersInst rulesDecodedInst terms1 committee signers signature
+        «namespace» message
+    if b
+    then
+      let i ←
+        bls.N3f1.Insts.Commonware_symbolicRulesCommittee.quorum
+          rulesCommitteeInst committee
+      ok (core.option.Option.Some { members, quorum := i })
+    else ok core.option.Option.None
 
 /-- [commonware_symbolic::qmdb::MMR_DOMAIN]
     Source: 'src/qmdb.rs', lines 16:0-16:36 -/

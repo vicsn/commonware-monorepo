@@ -24,6 +24,33 @@ set_option maxRecDepth 2048
 
 namespace commonware_symbolic
 
+/-- Trait declaration: [commonware_symbolic::rules::Terms]
+    Source: 'src/../../../cryptography/src/bls12381/certificate/rules.rs', lines 10:0-28:1 -/
+structure rules.Terms (Self : Type _) (Self_Public : Type _) (Self_Point :
+  Type _) where
+  zero : Self → RustM Self_Public
+  add : Self → Self_Public → Self_Public → RustM Self_Public
+  message : Self → Slice Std.U8 → Slice Std.U8 → RustM Self_Point
+  check : Self → Self_Public → Self_Point → Self_Point → RustM Bool
+
+/-- Trait declaration: [commonware_symbolic::rules::Committee]
+    Source: 'src/../../../cryptography/src/bls12381/certificate/rules.rs', lines 31:0-41:1 -/
+structure rules.Committee (Self : Type _) (K : Type _) where
+  members : Self → RustM Std.U64
+  quorum : Self → RustM Std.U64
+  key : Self → Std.U64 → RustM (core.option.Option K)
+
+/-- Trait declaration: [commonware_symbolic::rules::Signers]
+    Source: 'src/../../../cryptography/src/bls12381/certificate/rules.rs', lines 44:0-50:1 -/
+structure rules.Signers (Self : Type _) where
+  bound : Self → RustM Std.U64
+  names : Self → Std.U64 → RustM Bool
+
+/-- Trait declaration: [commonware_symbolic::rules::Decoded]
+    Source: 'src/../../../cryptography/src/bls12381/certificate/rules.rs', lines 53:0-56:1 -/
+structure rules.Decoded (Self : Type _) (T : Type _) where
+  decoded : Self → RustM (core.option.Option T)
+
 /-- [commonware_symbolic::terms::Part]
     Source: 'src/../../../storage/src/merkle/hasher/terms.rs', lines 9:0-14:1 -/
 @[discriminant isize]
@@ -81,6 +108,17 @@ structure traversal.Opening (N : Type _) (E : Type _) (C : Type _)
   siblings : Slice Clause0_Digest
   cursor : Std.Usize
   collected : C
+
+/-- [commonware_symbolic::bls::N3f1]
+    Source: 'src/bls.rs', lines 10:0-10:48 -/
+@[reducible]
+def bls.N3f1 (C : Type _) := C
+
+/-- [commonware_symbolic::bls::Certified]
+    Source: 'src/bls.rs', lines 28:0-33:1 -/
+structure bls.Certified where
+  members : Std.U64
+  quorum : Std.U64
 
 /-- Trait declaration: [commonware_symbolic::client::Messages]
     Source: 'src/client.rs', lines 9:0-15:1 -/

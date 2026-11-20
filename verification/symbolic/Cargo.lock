@@ -909,10 +909,15 @@ dependencies = [
 name = "commonware-symbolic"
 version = "0.0.0"
 dependencies = [
+ "bytes",
+ "commonware-codec",
  "commonware-cryptography",
+ "commonware-math",
+ "commonware-parallel",
  "commonware-storage",
  "commonware-utils",
  "rand 0.10.2",
+ "rand_core 0.10.1",
 ]
 
 [[package]]

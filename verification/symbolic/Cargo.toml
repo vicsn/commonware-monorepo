@@ -11,7 +11,12 @@ publish = false
 path = "src/lib.rs"
 
 [dev-dependencies]
+bytes = { version = "1.12.1", default-features = false }
+commonware-codec = { path = "../../codec" }
 commonware-cryptography = { path = "../../cryptography" }
+commonware-math = { path = "../../math" }
+commonware-parallel = { path = "../../parallel" }
 commonware-storage = { path = "../../storage" }
 commonware-utils = { path = "../../utils" }
 rand = { version = "0.10.2", default-features = false }
+rand_core = { version = "0.10.1", default-features = false }

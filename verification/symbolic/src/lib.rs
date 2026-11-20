@@ -11,8 +11,13 @@
 // The crate exists for extraction and tests, so nothing is public.
 #![allow(dead_code)]
 
+pub(crate) mod bls;
 pub(crate) mod client;
 pub(crate) mod qmdb;
+
+/// Production rules of BLS12-381 certificates.
+#[path = "../../../cryptography/src/bls12381/certificate/rules.rs"]
+pub(crate) mod rules;
 
 /// Production hash-input encodings of Merkle-family digests.
 #[path = "../../../storage/src/merkle/hasher/terms.rs"]
