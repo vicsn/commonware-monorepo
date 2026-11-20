@@ -43,9 +43,10 @@ the bytes and hashes them. Lean reads the extracted trait in two ways:
 - [Hashing](lean/Commonware/Symbolic/Hashing.lean): a `Scheme` is any hash with an encoding of
   parts into one message. `ByteHash.scheme` is production's reading over byte strings, for
   statements that hold up to an explicit collision.
-- [Terms](lean/Commonware/Symbolic/Terms.lean): `symbolic` reads byte parts as DyLean literals,
-  concatenates parts to the right and applies DyLean's hash constructor. The checked lemmas show
-  that this reading keeps parts apart and has no collisions.
+- [Terms](lean/Commonware/Symbolic/Terms.lean): `hashing` reads byte parts as DyLean literals,
+  concatenates parts to the right and applies any hash on terms, which may collide. `symbolic` is
+  that reading with DyLean's hash constructor. The checked lemmas show that the reading keeps
+  parts apart and that DyLean's hash has no collisions.
 
 `Terms` is generic over DyLean's term algebra: it applies to any target whose `#combine`
 includes literals, concatenation and hashing. A target that needs more constructors, such as

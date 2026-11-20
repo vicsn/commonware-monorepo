@@ -52,6 +52,9 @@ MERKLE_VIEWS = ['accepts_alice', 'rejects_substituted', 'rejects_misplaced', 're
 MERKLE_OMITTED = {'accepts_bob': 'same shape as accepts_alice at the other leaf'}
 # Sanity theorems that are not client verdicts and have no view.
 MERKLE_NOT_DRAWN = {'finder_finds': 'collision finder under a constant hash',
+                    'finder_finds_sibling': 'collision finder when only a sibling differs',
+                    'flat_accepts_substituted': 'a substituted item accepted under a hash on '
+                                                'terms with one digest',
                     'alice_ne_bob': 'the two stored items differ'}
 
 # Statements the Merkle caption relies on.
@@ -61,10 +64,26 @@ MERKLE_STATEMENTS = {
         '(ws : Aeneas.Std.Slice DY.Bytes), DY.Trace.Reachable Qmdb.Protocol.reachability '
         '↑((Qmdb.Sanity.attempt item loc ws).run DY.Trace.empty).2',
     'Qmdb.Protocol.client_authentication':
-        '∀ [inst : Qmdb.Snapshot] (event : Qmdb.Protocol.Acceptance) (time : ℕ) '
+        '∀ [inst : Qmdb.Snapshot] (opened : Qmdb.Protocol.Opened) (time : ℕ) '
         '(tr : DY.ExecTrace), DY.Trace.Reachable Qmdb.Protocol.reachability tr → '
-        'DY.Trace.EventLoggedAt event time tr → event.height = Qmdb.Snapshot.height ∧ '
-        '↑event.location < 2 ^ ↑event.height ∧ event.item = Qmdb.Snapshot.items event.location',
+        'DY.Trace.EventLoggedAt opened time tr → '
+        'opened.acceptance.height = Qmdb.Snapshot.height ∧ '
+        '↑opened.acceptance.location < 2 ^ ↑opened.acceptance.height ∧ '
+        '(opened.acceptance.item = Qmdb.Snapshot.items opened.acceptance.location ∨ '
+        '∃ x y, Qmdb.Verifier.finder Qmdb.Snapshot.scheme opened.acceptance.height '
+        'opened.acceptance.location opened.acceptance.item '
+        '(Qmdb.Snapshot.items opened.acceptance.location) opened.siblings '
+        '(Qmdb.Snapshot.siblings opened.acceptance.location) = some (x, y) ∧ '
+        'x ≠ y ∧ Qmdb.Snapshot.hash x = Qmdb.Snapshot.hash y)',
+    'Qmdb.Protocol.collision_free_authentication':
+        '∀ [inst : Qmdb.Snapshot], '
+        '(∀ (x y : DY.Bytes), Qmdb.Snapshot.hash x = Qmdb.Snapshot.hash y → x = y) → '
+        '∀ (opened : Qmdb.Protocol.Opened) (time : ℕ) (tr : DY.ExecTrace), '
+        'DY.Trace.Reachable Qmdb.Protocol.reachability tr → '
+        'DY.Trace.EventLoggedAt opened time tr → '
+        'opened.acceptance.height = Qmdb.Snapshot.height ∧ '
+        '↑opened.acceptance.location < 2 ^ ↑opened.acceptance.height ∧ '
+        'opened.acceptance.item = Qmdb.Snapshot.items opened.acceptance.location',
 }
 MERKLE_DEFINITIONS = {
     'Qmdb.Sanity.verdict':
@@ -282,10 +301,15 @@ def merkle(lean, theorems):
     for name, expected in MERKLE_DEFINITIONS.items():
         require(lean.definition(name) == expected, f'{name} changed: {lean.definition(name)}')
     snapshot = lean.definition('Qmdb.Sanity.snapshot')
-    match = re.fullmatch(r'\{ height := (\d+)#u32, root := Qmdb\.Verifier\.honestRoot '
+    # The snapshot hashes with DyLean's constructor, so the collision-free statement applies.
+    match = re.fullmatch(r'\{ hash := DY\.Hash\.hash, height := (\d+)#u32, '
+                         r'root := Qmdb\.Verifier\.honestRoot '
                          r'Commonware\.Symbolic\.symbolic Qmdb\.Sanity\.items (\d+), '
-                         r'items := Qmdb\.Sanity\.items, honest := \S+ \}', snapshot)
-    require(match and match.group(1) == match.group(2), f'unexpected snapshot: {snapshot}')
+                         r'items := Qmdb\.Sanity\.items, siblings := fun (\w+) => '
+                         r'Qmdb\.Verifier\.honestSiblings Commonware\.Symbolic\.symbolic '
+                         r'Qmdb\.Sanity\.items (\d+) \3 \S+, honest := \S+ \}', snapshot)
+    require(match and match.group(1) == match.group(2) == match.group(4),
+            f'unexpected snapshot: {snapshot}')
     height = int(match.group(1))
     require(1 <= height <= 3, f'cannot lay out a snapshot of height {height}')
     items = lean.definition('Qmdb.Sanity.items')
@@ -514,7 +538,7 @@ def merkle_view(model, attempt):
     body.append(line(335, 134, 335, 158))
     event = f'({height}, {attempt.location}, {attempt.item})'
     if attempt.accepted:
-        body.append(box(201, 157, 255, 42, 'hit', f'Client logs {event}'))
+        body.append(box(201, 157, 255, 42, 'hit', f'client_step returns {event}'))
         consequence = f'Logged item = snapshot[{attempt.location}] = {attempt.item}'
     else:
         body.append(box(201, 157, 255, 42, 'given', 'client_step returns none'))
@@ -524,7 +548,8 @@ def merkle_view(model, attempt):
     title = f'{attempt.item} at {attempt.location} · {SIBLING_TITLES[attempt.siblings]}'
     if attempt.accepted:
         description = (f'The honest path for {attempt.item} at {attempt.location}. The extracted '
-                       f'client step logs the acceptance {event}.')
+                       f'client step returns the acceptance {event}, which the client logs with '
+                       'these siblings.')
     elif attempt.siblings == 'any':
         description = (f'{attempt.item} is not stored at {attempt.location}. The extracted client '
                        'step returns none for every sibling sequence.')
@@ -540,9 +565,11 @@ def merkle_figure(model):
     caption = (f'Each view restates a checked theorem about the extracted client step on the '
                f'{len(model.leaves)}-leaf snapshot that stores {listing(model.leaves)}. Dashed '
                'outlines mark the siblings of the honest path. By <code>attempt_reachable</code> '
-               'every attempt is a reachable trace, and by <code>client_authentication</code> any '
-               'acceptance on such a trace names the snapshot height, an in-range location and the '
-               'item stored there.')
+               'every attempt is a reachable trace. By <code>client_authentication</code> any '
+               'opening logged on such a trace names the snapshot height and an in-range location, '
+               'and its item is the one stored there or the finder returns a collision. This '
+               'snapshot hashes with DyLean’s constructor, which has no collisions, so by '
+               '<code>collision_free_authentication</code> the logged item is the stored one.')
     return figure('pictures-merkle', 'Merkle · Authenticate a client event', views, caption)
 
 
