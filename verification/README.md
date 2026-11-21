@@ -123,7 +123,25 @@ open.
 target. Its links open files of the checkout that holds it.
 `python3 verification/qmdb/dylean-pictures.py` regenerates its pictures from the statements that
 Lean prints. `python3 verification/qmdb/report-artifact.py --out <file>` writes a copy for
-publishing, whose links open GitHub at a pushed revision.
+publishing, whose links open GitHub at a pushed revision. The report links to the audit guide, so
+pass `--page hax-dylean-audit.html=<URL>` with the place where the guide is published.
+
+## Audit
+
+[hax-dylean-audit.html](hax-dylean-audit.html) is a step plan for auditing the Merkle target. It
+states what the audit assumes, the hax pipeline first, and shows side by side the code that must
+agree: production and the verification-only client, Rust and its generated Lean, Rust traits and
+their handwritten Lean readings, sentences of the report and theorem statements.
+
+- [audit/guide.html](audit/guide.html) and [audit/pairs.toml](audit/pairs.toml): the prose and
+  the table of panels, whose items are addressed by name. `python3 verification/audit/build.py`
+  writes the page, and `check.sh` fails when it is stale.
+- [audit/FINDINGS.md](audit/FINDINGS.md): a first pass through the guide.
+- [audit/probes.py](audit/probes.py) with [audit/probes.toml](audit/probes.toml): the mutations
+  of that pass with their recorded verdicts. Some survive. [audit/probes/](audit/probes) holds
+  its differential tests and the script that lists what the statements depend on.
+- Publish the guide like the report: `python3 verification/qmdb/report-artifact.py --report
+  verification/hax-dylean-audit.html --page hax-dylean.html=<URL> --out <file>`.
 
 ## Shared review boundary
 

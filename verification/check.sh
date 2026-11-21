@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Check the symbolic verification: the extracted Rust against production, reproducible extraction,
-# the Lean proofs of every target with their axiom audits and executed checks, and the mutations.
+# the audit guide against the sources, the Lean proofs of every target with their axiom audits and
+# executed checks, and the mutations.
 # Logs go to verification/.lake/logs.
 set -euo pipefail
 source "$(dirname "$0")/toolchain.sh"
@@ -21,6 +22,9 @@ cp -R "$pkg/CommonwareSymbolic" .lake/extraction
 (cd symbolic && "$hax" hax into lean) > "$logs/extract.log" 2>&1
 diff -r .lake/extraction "$pkg/CommonwareSymbolic"
 echo 'Extraction matches the committed files.'
+
+# The audit guide shows the current Rust and Lean side by side.
+python3 audit/build.py --check
 
 # The extraction and the proofs share one set of dependency builds, optionally the hax Lean
 # experiment's.

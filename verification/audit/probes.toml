@@ -1,0 +1,231 @@
+# Probes of the first audit pass, run by probes.py. Each edits a mirror of the repository, extracts
+# the crate again and builds the proofs. `expect` records what happened on the first pass:
+# "survives", or the proof modules that stopped building. FINDINGS.md says what each result means.
+#
+# An edit is { file, original, mutated } or { file, before, append }; `edits` lists several.
+
+# Rust at the boundaries of the verification-only client and of the shared traversal.
+
+[[probe]]
+name = "R1 location bound off by one"
+file = "verification/symbolic/src/qmdb.rs"
+original = "if location >= leaves {"
+mutated = "if location > leaves {"
+expect = ["Qmdb.Verifier"]
+
+[[probe]]
+name = "R2 height bound 63"
+file = "verification/symbolic/src/qmdb.rs"
+original = "pub(crate) const MAX_HEIGHT: u32 = 62;"
+mutated = "pub(crate) const MAX_HEIGHT: u32 = 63;"
+expect = ["Qmdb.Verifier"]
+
+[[probe]]
+name = "R3 height bound strict"
+file = "verification/symbolic/src/qmdb.rs"
+original = "if height > MAX_HEIGHT {"
+mutated = "if height >= MAX_HEIGHT {"
+expect = ["Qmdb.Verifier"]
+
+[[probe]]
+name = "R4 sibling cursor not advanced"
+file = "storage/src/merkle/proof/traversal.rs"
+original = "                self.cursor += 1;\n"
+mutated = ""
+expect = ["Qmdb.Verifier"]
+
+[[probe]]
+name = "R5 leaf ignores its position"
+file = "storage/src/merkle/proof/traversal.rs"
+original = "Some(element) => Ok(self.nodes.leaf_digest(position, element.as_ref())),"
+mutated = "Some(element) => Ok(self.nodes.leaf_digest(0, element.as_ref())),"
+expect = ["Qmdb.Verifier"]
+
+[[probe]]
+name = "R6 bagging domain byte set to QMDB's"
+file = "verification/symbolic/src/qmdb.rs"
+original = "pub(crate) const FORWARD_FOLD: u8 = 0;"
+mutated = "pub(crate) const FORWARD_FOLD: u8 = 1;"
+expect = "survives"
+
+[[probe]]
+name = "R7 range of two leaves"
+file = "verification/symbolic/src/qmdb.rs"
+original = "        location + 1,\n"
+mutated = "        location + 2,\n"
+expect = ["Qmdb.Verifier"]
+
+[[probe]]
+name = "R8 wrong peak position"
+file = "verification/symbolic/src/qmdb.rs"
+original = "        2 * (leaves - 1),\n"
+mutated = "        2 * leaves - 1,\n"
+expect = ["Qmdb.Verifier"]
+
+[[probe]]
+name = "R9 root does not commit to the size"
+file = "verification/symbolic/src/qmdb.rs"
+original = "terms::root(terms, [MMR_DOMAIN, FORWARD_FOLD], leaves, 0, &peak) == *root"
+mutated = "terms::root(terms, [MMR_DOMAIN, FORWARD_FOLD], 0, 0, &peak) == *root"
+expect = ["Qmdb.Verifier"]
+
+[[probe]]
+name = "R10 collected digests swapped"
+file = "storage/src/merkle/proof/traversal.rs"
+original = "backend.collect(left_position, left, right_position, right);"
+mutated = "backend.collect(left_position, right, right_position, left);"
+expect = "survives"
+
+[[probe]]
+name = "R11 children swapped"
+file = "verification/symbolic/src/qmdb.rs"
+original = "(position - (1u64 << height), position - 1)"
+mutated = "(position - 1, position - (1u64 << height))"
+expect = ["Qmdb.Verifier"]
+
+[[probe]]
+name = "R12 element source never runs dry"
+file = "verification/symbolic/src/qmdb.rs"
+original = "                self.0 = None;\n"
+mutated = ""
+expect = ["Qmdb.Verifier"]
+
+[[probe]]
+name = "R13 subtree starting at the range end treated as inside"
+file = "storage/src/merkle/proof/traversal.rs"
+original = "if start + width <= range_start || start >= range_end {"
+mutated = "if start + width <= range_start || start > range_end {"
+expect = ["Qmdb.Verifier"]
+
+[[probe]]
+name = "R14 node ignores its position"
+file = "storage/src/merkle/proof/traversal.rs"
+original = "self.nodes.node_digest(position, &left, &right)"
+mutated = "self.nodes.node_digest(0, &left, &right)"
+expect = ["Qmdb.Verifier"]
+
+[[probe]]
+name = "R15 client logs another location"
+file = "verification/symbolic/src/qmdb.rs"
+original = "                    height,\n                    location,\n                    item,"
+mutated = "                    height,\n                    location: 0,\n                    item,"
+expect = ["Qmdb.Symbolic"]
+
+# Trusted Lean: the readings, the assumption and the protocol.
+
+[[probe]]
+name = "L1 digest equality always true"
+file = "verification/lean/Commonware/Symbolic/Hashing.lean"
+original = "{ eq := fun a b => RustM.ok (decide (a = b)), ne := fun a b => RustM.ok (!decide (a = b)) }"
+mutated = "{ eq := fun _ _ => RustM.ok true, ne := fun _ _ => RustM.ok false }"
+expect = ["Leaf.Step", "Qmdb.Verifier"]
+
+[[probe]]
+name = "L2 symbolic concatenation keeps only the last part"
+file = "verification/lean/Commonware/Symbolic/Terms.lean"
+original = "  | p :: rest => Concat.concat (part p) (chain rest)"
+mutated = "  | _ :: rest => chain rest"
+expect = ["Leaf.Step", "Qmdb.Symbolic"]
+
+[[probe]]
+name = "L3 byte reading drops digests"
+file = "verification/lean/Commonware/Symbolic/Hashing.lean"
+original = "    | .Digest d => B.bytes d"
+mutated = "    | .Digest _ => []"
+expect = ["Qmdb.Verifier"]
+
+[[probe]]
+name = "L4 messages carry no item"
+file = "verification/lean/Commonware/Symbolic/Terms.lean"
+original = "    | some b => toSlice b\n    | none => none)"
+mutated = "    | some _ => none\n    | none => none)"
+expect = ["Commonware.Symbolic.Terms"]
+
+[[probe]]
+name = "L5 client checks against the received message instead of the trusted root"
+file = "verification/lean/Qmdb/Protocol.lean"
+original = "      Snapshot.root Snapshot.height message loc ws"
+mutated = "      message Snapshot.height message loc ws"
+expect = ["Qmdb.Protocol"]
+
+[[probe]]
+name = "L6 snapshot honest only at location 0"
+file = "verification/lean/Qmdb/Assumptions.lean"
+original = "  honest : ∀ loc : Std.U64, loc.val < 2^height.val →"
+mutated = "  honest : ∀ loc : Std.U64, loc.val < 2^height.val → loc.val = 0 →"
+expect = ["Qmdb.Symbolic"]
+
+[[probe]]
+name = "L7 reachable traces without the client"
+edits = [
+  { file = "verification/lean/Qmdb/Protocol.lean", original = "#combine into ReachabilityConfig from\n  Network,\n  client,\n", mutated = "#combine into ReachabilityConfig from\n  Network,\n" },
+  { file = "verification/lean/Qmdb/Protocol.lean", original = "#combine into ReachabilityTheorem from\n  Network,\n  client,\n", mutated = "#combine into ReachabilityTheorem from\n  Network,\n" },
+]
+expect = ["Qmdb.SanityChecks"]
+
+[[probe]]
+name = "L8 client never logs"
+edits = [
+  { file = "verification/lean/Qmdb/Protocol.lean", original = "      | some acceptance => some (Opened.mk acceptance ws)\n      | none => none)) handle", mutated = "      | some _ => (none : Option Opened)\n      | none => none)) handle" },
+  { file = "verification/lean/Qmdb/Protocol.lean", original = "    | some acceptance =>\n      have same := ok_inj wrapped\n      simp at same\n      subst same\n      exact Symbolic.client_step_sound message loc ws acceptance step", mutated = "    | some acceptance => simpa using ok_inj wrapped" },
+]
+expect = "survives"
+
+[[probe]]
+name = "L9 accept never logs"
+edits = [
+  { file = "verification/lean/Commonware/Symbolic/Client.lean", original = "  | .ok (some event) => ProtocolEvent.logEvent event\n  | _ => failure", mutated = "  | .ok (some _) => failure\n  | _ => failure" },
+  { file = "verification/lean/Commonware/Symbolic/Client.lean", original = "  mark_non_monotone holds\n  split\n  · rename_i event accepted\n    step by exact sound _ (eq_ok_of_match accepted) _ holds\n    trivial\n  · step", mutated = "  mark_non_monotone holds\n  split <;> step" },
+  { file = "verification/lean/Commonware/Symbolic/Client.lean", original = "  unfold receive accept\n  step\n  split\n  · rename_i event accepted\n    step by exact sound _ _ (eq_ok_of_match accepted) _\n    trivial\n  · step", mutated = "  unfold receive accept\n  step\n  split <;> step" },
+]
+expect = "survives"
+
+# Negative controls of the axiom audit.
+
+[[probe]]
+name = "A1 sorry in a new theorem of the audited namespace"
+file = "verification/lean/Qmdb/SecurityTheorems.lean"
+before = "\nend\nend Qmdb"
+append = "\ntheorem planted_sorry : (0 : Nat) = 1 := sorry"
+expect = ["Qmdb.Audit"]
+message = "Qmdb.planted_sorry: [sorryAx]"
+
+[[probe]]
+name = "A2 sorry deep in a lemma that the theorems use"
+file = "verification/lean/Qmdb/Verifier.lean"
+original = "    terms.leaf_digest S.terms u p item = RustM.ok (S.hash (leafInput S p item)) := by\n  simp [terms.leaf_digest, to_be_bytes_ok, core.array.Array.as_slice,\n    rust_primitives.slice.array_as_slice, Scheme.terms, leafInput, be]"
+mutated = "    terms.leaf_digest S.terms u p item = RustM.ok (S.hash (leafInput S p item)) := by\n  sorry"
+expect = ["Qmdb.Audit"]
+message = "Qmdb.production_unique_or_collision: [sorryAx]"
+
+[[probe]]
+name = "A3 axiom declared in the audited namespace"
+file = "verification/lean/Qmdb/SecurityTheorems.lean"
+before = "\nend\nend Qmdb"
+append = "\naxiom planted_axiom : ∀ x y : Nat, x = y"
+expect = ["Qmdb.Audit"]
+message = "Qmdb.planted_axiom: [Qmdb.planted_axiom]"
+
+[[probe]]
+name = "A4 axiom declared elsewhere and used by an audited theorem"
+file = "verification/lean/Qmdb/SecurityTheorems.lean"
+before = "\nend\nend Qmdb"
+append = "\naxiom _root_.Elsewhere.planted_axiom : (0 : Nat) = 1\ntheorem planted_uses : (0 : Nat) = 1 := _root_.Elsewhere.planted_axiom"
+expect = ["Qmdb.Audit"]
+message = "Qmdb.planted_uses: [Elsewhere.planted_axiom]"
+
+[[probe]]
+name = "A5 native_decide in an audited theorem"
+file = "verification/lean/Qmdb/SecurityTheorems.lean"
+before = "\nend\nend Qmdb"
+append = "\ntheorem planted_native : (2 : Nat) + 2 = 4 := by native_decide"
+expect = ["Qmdb.Audit"]
+message = "Qmdb.planted_native: ["
+
+[[probe]]
+name = "A6 sorry in a theorem outside the audited namespaces"
+file = "verification/lean/Qmdb/SecurityTheorems.lean"
+before = "\nend\nend Qmdb"
+append = "\ntheorem _root_.Elsewhere.planted_sorry : (0 : Nat) = 1 := sorry"
+expect = "survives"
+message = "declaration uses `sorry`"

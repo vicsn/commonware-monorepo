@@ -3,8 +3,11 @@
 
 The report links to files of its own checkout and to a local diff handler. A published copy has
 no checkout, so this script rewrites every source link to the file on GitHub at `--rev` and every
-diff link to GitHub's comparison of the production baseline with that revision. The copy has no
-document wrapper: the page that hosts it supplies one.
+diff link to GitHub's comparison of the production baseline with that revision. A link to another
+page of this directory becomes the published copy of that page, given with `--page`. The copy has
+no document wrapper: the page that hosts it supplies one.
+
+`--report` converts another page of this directory, such as the audit guide, the same way.
 """
 
 import argparse
@@ -49,8 +52,10 @@ def source(tag, github, revision):
     anchor = ''
     line = attribute(tag, 'data-line')
     if line:
-        require(int(line) <= len(file.read_text().split('\n')), f'{path} has no line {line}')
-        anchor = f'#L{line}'
+        last = attribute(tag, 'data-end') or line
+        require(int(line) <= int(last) <= len(file.read_text().split('\n')),
+                f'{path} has no lines {line} to {last}')
+        anchor = f'#L{line}' if last == line else f'#L{line}-L{last}'
     return f'<a class="src" href="{github}/blob/{revision}/{path}{anchor}" title="Open on GitHub">'
 
 
@@ -64,6 +69,12 @@ def difference(tag, github, baseline, revision):
             'title="Compare with the baseline on GitHub">')
 
 
+def sibling(match, published):
+    """A link to another page of this directory, as the published copy of that page."""
+    require(match[1] in published, f'give --page {match[1]}=URL for the link to that page')
+    return f'href="{published[match[1]]}"'
+
+
 def replace_element(page, tag, name, body):
     """Replace the content of the one element `tag` with id `name`."""
     pattern = rf'(<{tag}\b[^>]*\bid="{name}"[^>]*>).*?(</{tag}>)'
@@ -71,7 +82,7 @@ def replace_element(page, tag, name, body):
     return re.sub(pattern, lambda match: match[1] + body + match[2], page, flags=re.S)
 
 
-def convert(page, repository, revision):
+def convert(page, repository, revision, published):
     github = f'https://github.com/{repository}'
     baseline = one(r'Production baseline: <code>([0-9a-f]{40})</code>', page, 'production baseline')
     short = revision[:9]
@@ -79,6 +90,7 @@ def convert(page, repository, revision):
     page = re.sub(r'<a class="src"[^>]*>', lambda match: source(match[0], github, revision), page)
     page = re.sub(r'<a class="code-diff"[^>]*>',
                   lambda match: difference(match[0], github, baseline, revision), page)
+    page = re.sub(r'href="([\w-]+\.html)(?:#[^"]*)?"', lambda match: sibling(match, published), page)
     page = replace_element(
         page, 'span', 'checkout',
         f' of <a href="{github}/tree/{revision}">{repository}</a>; this page links to revision '
@@ -112,13 +124,18 @@ def main():
     parser.add_argument('--rev', help='revision the links open (default: HEAD)')
     parser.add_argument('--repository', default=REPOSITORY,
                         help=f'GitHub repository that holds the revision (default: {REPOSITORY})')
-    parser.add_argument('--report', type=Path, default=REPORT)
+    parser.add_argument('--report', type=Path, default=REPORT,
+                        help='the page to convert (default: the report)')
+    parser.add_argument('--page', action='append', default=[], metavar='FILE=URL',
+                        help='where a page that this one links to is published; repeatable')
     args = parser.parse_args()
     revision = args.rev or subprocess.check_output(
         ['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip()
     try:
         require(re.fullmatch(r'[0-9a-f]{40}', revision), '--rev must be a full commit hash')
-        copy = convert(args.report.read_text(), args.repository, revision)
+        require(all('=' in entry for entry in args.page), '--page takes FILE=URL')
+        published = dict(entry.split('=', 1) for entry in args.page)
+        copy = convert(args.report.read_text(), args.repository, revision, published)
     except Mismatch as error:
         sys.exit(f'report-artifact: {error}')
     args.out.write_text(copy)

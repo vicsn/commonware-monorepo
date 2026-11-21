@@ -35,7 +35,8 @@
 
 QMDB is one target of the shared symbolic verification in [verification/](../README.md): one
 extracted crate, one Lean package and one check for every target. This README covers what QMDB
-adds.
+adds. An [audit guide](../hax-dylean-audit.html) walks through this target, and
+[audit/FINDINGS.md](../audit/FINDINGS.md) records a first pass through it.
 
 ## Production Rust
 
