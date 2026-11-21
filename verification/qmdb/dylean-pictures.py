@@ -50,8 +50,9 @@ SOURCES = [f'{LEAN}/{module_path(name)}' for name in BRIDGE_MODULES]
 SOURCES += [f'{LEAN}/{SANITY}', f'{LEAN}/{BLS_SANITY}']
 
 # Merkle sanity theorems drawn as views, in order, and verdict theorems deliberately left out.
-MERKLE_VIEWS = ['accepts_alice', 'rejects_substituted', 'rejects_misplaced', 'rejects_long']
-MERKLE_OMITTED = {'accepts_bob': 'same shape as accepts_alice at the other leaf'}
+MERKLE_VIEWS = ['accepts_alice', 'rejects_misplaced', 'rejects_long']
+MERKLE_OMITTED = {'accepts_bob': 'same shape as accepts_alice at the other leaf',
+                  'rejects_substituted': 'same shape as rejects_misplaced at the other leaf'}
 # Sanity theorems that are not client verdicts and have no view.
 MERKLE_NOT_DRAWN = {'finder_finds': 'collision finder under a constant hash',
                     'finder_finds_sibling': 'collision finder when only a sibling differs',
