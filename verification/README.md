@@ -7,6 +7,7 @@ terms and clients.
 
 | Target | Rust | Lean | Report |
 | --- | --- | --- | --- |
+| Leaf commitment, the smallest target | [symbolic/src/leaf.rs](symbolic/src/leaf.rs) over production `terms.rs` | [lean/Leaf](lean/Leaf) | [leaf/README.md](leaf/README.md) |
 | QMDB single-item inclusion | [symbolic/src/qmdb.rs](symbolic/src/qmdb.rs) over production `terms.rs` and `traversal.rs` | [lean/Qmdb](lean/Qmdb) | [qmdb/README.md](qmdb/README.md) |
 | BLS certificates | [symbolic/src/bls.rs](symbolic/src/bls.rs) over production `rules.rs` | [lean/Bls](lean/Bls) | [bls/README.md](bls/README.md) |
 
@@ -16,9 +17,9 @@ terms and clients.
   and the shared setup: one DyLean build in `.lake/dylean`, patched by
   [lean435.patch](lean435.patch), and optional reuse of dependency builds.
 - [check.sh](check.sh): checks every target. Logs go to `.lake/logs`.
-- [mutate.py](mutate.py): re-extracts mutated Rust and requires a named proof module to fail.
-  Each target lists its mutations in a table: [qmdb/mutations.toml](qmdb/mutations.toml) and
-  [bls/mutations.toml](bls/mutations.toml).
+- [mutate.py](mutate.py): re-extracts mutated Rust and requires the named proof modules to fail.
+  Each target lists its mutations in a table: [leaf/mutations.toml](leaf/mutations.toml),
+  [qmdb/mutations.toml](qmdb/mutations.toml) and [bls/mutations.toml](bls/mutations.toml).
 - [symbolic/](symbolic): the crate that hax extracts, outside the Commonware workspace.
   - `lib.rs` includes production modules unchanged through `#[path]`:
     `storage/src/merkle/hasher/terms.rs`, `storage/src/merkle/proof/traversal.rs` and

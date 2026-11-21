@@ -569,6 +569,29 @@ def bls.client_step
       ok (core.option.Option.Some { members, quorum := i })
     else ok core.option.Option.None
 
+/-- [commonware_symbolic::leaf::POSITION]
+    Source: 'src/leaf.rs', lines 13:0-13:35 -/
+@[global_simps, irreducible] def leaf.POSITION : Std.U64 := 0#u64
+
+/-- [commonware_symbolic::leaf::client_step]:
+    Source: 'src/leaf.rs', lines 23:0-38:1 -/
+def leaf.client_step
+  {T : Type _} {Clause0_Digest : Type _} {Clause1_Message : Type _}
+  (termsTermsInst : terms.Terms T Clause0_Digest) (clientMessagesInst :
+  client.Messages T Clause1_Message) (terms1 : T) (commitment : Clause0_Digest)
+  (message : Clause1_Message) :
+  RustM (core.option.Option leaf.Acceptance)
+  := do
+  let o ← clientMessagesInst.parse terms1 message
+  match o with
+  | core.option.Option.None => ok core.option.Option.None
+  | core.option.Option.Some item =>
+    let t ← terms.leaf_digest termsTermsInst terms1 leaf.POSITION item
+    let b ← termsTermsInst.corecmpPartialEqInst.eq t commitment
+    if b
+    then ok (core.option.Option.Some { item })
+    else ok core.option.Option.None
+
 /-- [commonware_symbolic::qmdb::MMR_DOMAIN]
     Source: 'src/qmdb.rs', lines 16:0-16:36 -/
 @[global_simps, irreducible] def qmdb.MMR_DOMAIN : Std.U8 := 0#u8

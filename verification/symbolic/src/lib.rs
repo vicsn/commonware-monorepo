@@ -2,7 +2,8 @@
 //!
 //! Production modules are included unchanged through `#[path]`, so the proofs cover the code that
 //! production runs. [`client`] fixes what every client shares. Each verified target adds one
-//! module: [`qmdb`] accepts one claimed item of an MMR with one peak. Hax extracts the whole crate
+//! module: [`leaf`] accepts the item behind one leaf digest, and [`qmdb`] accepts one claimed item of
+//! an MMR with one peak. Hax extracts the whole crate
 //! into one Lean package, so all targets share one extraction of the production modules and of
 //! [`client`]. Lean instantiates [`Terms`](terms::Terms) and [`Messages`](client::Messages) with
 //! DyLean's symbolic constructors; the tests instantiate them with SHA-256.
@@ -13,6 +14,7 @@
 
 pub(crate) mod bls;
 pub(crate) mod client;
+pub(crate) mod leaf;
 pub(crate) mod qmdb;
 
 /// Production rules of BLS12-381 certificates.

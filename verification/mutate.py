@@ -1,4 +1,4 @@
-"""Mutate the Rust that hax extracts, re-extract it, and require a named proof module to fail.
+"""Mutate the Rust that hax extracts, re-extract it, and require the named proof modules to fail.
 
 Usage: python3 mutate.py TABLE.toml
 
@@ -71,6 +71,7 @@ def main():
     shutil.rmtree(base, ignore_errors=True)
     for mutation in table["mutation"]:
         name, fails = mutation["name"], mutation["fails"]
+        fails = [fails] if isinstance(fails, str) else fails
         root = base / re.sub(r"\W+", "-", name)
         mirrored, lean = mirror(root)
         source = root / mutation["file"]
@@ -91,10 +92,11 @@ def main():
         if result.returncode == 0:
             sys.exit(f"Mutation survived: {name}")
         failed = set(re.findall(r"✖ \[\d+/\d+\] Building (\S+)", result.stdout))
-        file = fails.replace(".", "/") + ".lean"
-        assert failed == {fails}, (name, failed, result.stdout[-4000:])
-        assert re.search(rf"error: {re.escape(file)}:\d+:\d+", result.stdout), result.stdout
-        print(f"Proofs reject: {name} ({fails})")
+        assert failed == set(fails), (name, failed, result.stdout[-4000:])
+        for module in fails:
+            file = module.replace(".", "/") + ".lean"
+            assert re.search(rf"error: {re.escape(file)}:\d+:\d+", result.stdout), result.stdout
+        print(f"Proofs reject: {name} ({', '.join(fails)})")
 
 
 if __name__ == "__main__":
