@@ -41,20 +41,21 @@ and concatenation are injective. So the step accepts only the committed item
 
 ## Compared with the other targets
 
-| | Leaf | QMDB inclusion | BLS signer attribution |
+| | Leaf | QMDB inclusion | BLS certificates |
 | --- | --- | --- | --- |
-| Production code extracted | one function | hash-input encodings, traversal and its opening backend | six verifier bodies, in the hax Lean experiment's harness |
-| Production lines changed | none beyond QMDB's | four files | none |
-| Verification-only Rust | 41 lines | 143 lines | a generated harness with abstract primitives |
-| Handwritten Lean | 206 lines | 1,206 lines | 89 lines over an imported routing proof |
-| Hash model | DyLean's ideal hash | any hash up to an explicit collision, and DyLean's for traces | not applicable; a symbolic BLS algebra |
-| Application input | a digest and its item | a snapshot root with an accepted opening per item | a key registry with proofs of possession |
-| Trace theorem | the accepted item is the committed one | the accepted item is the stored one at an in-range location | each protected signer signed strictly earlier |
-| Uses the shared crate and Lean package | yes | yes | not yet |
+| Production code extracted | one function | hash-input encodings, traversal and its opening backend | the certificate rules |
+| Production files changed | none beyond QMDB's | four | five |
+| Verification-only Rust | 41 lines | 143 lines | 68 lines |
+| Handwritten Lean | 206 lines | 1,442 lines | 1,192 lines |
+| Hash model | DyLean's ideal hash | any hash, up to an explicit collision | any hash and signature scheme, up to an explicit collision |
+| Application input | a digest and its item | a snapshot root with an accepted opening per item | the committee's registered keys |
+| Trace theorem | the accepted item is the committed one | the accepted item is the stored one at an in-range location, or a collision | each protected flagged member signed strictly earlier, or a collision |
+| Uses the shared crate and Lean package | yes | yes | yes |
 
-Leaf and QMDB differ only in steps 2, 6, 7 and 9; everything else is the same files. BLS shares
-the toolchain and the DyLean build, but its extraction and algebra come from the hax Lean
-experiment.
+All three go through the same extraction, the same reading of hashes and messages, the same
+client action and the same axiom audit. Leaf differs from the others only in steps 2, 6, 7 and
+9, and it keeps the ideal hash, so it has no collision alternative. The line counts are of the
+files in `symbolic/src/<target>.rs` and `lean/<Target>/`; see each target's README for its scope.
 
 ## Checks
 
