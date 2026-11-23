@@ -4,7 +4,7 @@
 - Status: authentication in both directions, key confirmation and secrecy of the transcript are
   proved on DyLean traces over the extracted production steps, for SAKE V1. Time, V0 and the
   record protocol are [not covered](#what-is-not-proved).
-- Updated: 2026-11-23. Source: the working tree on top of `07d09d554`. The production files
+- Updated: 2026-11-23. Source: `7b9c5b7f7`. The production files
   `cryptography/src/handshake/sake/{rules.rs,protocol.rs,mod.rs}` are as in `75e42e942`.
 - Proved scope: on every trace that an attacker can reach who controls the network and the
   schedule and can compromise any identity key and what any peer keeps between its steps,
@@ -28,7 +28,7 @@
   input, nothing but the two ephemeral secrets gives the shared secret, and only someone who
   knows a key computes a code under it. Each peer knows the identity key of the peer it names,
   as an application's peer set provides.
-- Last validation: `bash verification/check.sh` on 2026-11-23 on that working tree, passed.
+- Last validation: `bash verification/check.sh` on 2026-11-23 at `7b9c5b7f7`, passed.
   Reproducible extraction, a Lean build with no warnings, an axiom audit of all 159 theorems in
   `Sake` and `Commonware.Symbolic` (standard Lean axioms) and 9 rejected mutations. The
   production files were validated at `75e42e942`: `just test` for `commonware-cryptography`
