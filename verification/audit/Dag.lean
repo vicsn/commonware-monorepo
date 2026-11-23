@@ -24,7 +24,8 @@ open Lean Elab Command
 def cited : Array Name := #[
   ``Qmdb.Verifier.unique, ``Qmdb.Verifier.verify_total, ``Qmdb.Verifier.verify_bounds,
   ``Qmdb.Verifier.honest_opening, ``Qmdb.Verifier.extra_sibling_rejected,
-  ``Qmdb.honest_snapshots_exist, ``Qmdb.client_authentication]
+  ``Qmdb.honest_snapshots_exist, ``Qmdb.client_authentication,
+  ``Qmdb.honest_acceptance_logged]
 
 /-- Where a constant is drawn: a source line of a file of this repository, or a library. -/
 inductive Place where

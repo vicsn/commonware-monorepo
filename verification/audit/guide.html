@@ -301,7 +301,6 @@ git checkout verification/symbolic/src/qmdb/tests.rs</code></td><td>Five <code>P
 <tbody>
 <tr><th scope="row">R6</th><td>The client’s bagging domain byte becomes 1, which is QMDB’s.</td><td>The proofs hold for any domain bytes. Only the Rust tests fix them, against a forward-fold hasher.</td></tr>
 <tr><th scope="row">R10</th><td>The traversal passes swapped digests to node collection.</td><td>The client collects nothing, so collection is outside the proof.</td></tr>
-<tr><th scope="row">L8, L9</th><td>The DyLean client, or the shared <code>accept</code>, never logs an event.</td><td>No theorem or check shows that an event is ever logged. DyLean’s Hoare triples hold of an action that fails.</td></tr>
 <tr><th scope="row">A6</th><td>A theorem outside the audited namespaces is proved by <code>sorry</code>.</td><td>The axiom audit goes by namespace, and the build only warns. <code>check.sh</code> fails on any warning of the Lean build, so it stops there; the probe looks only at modules that stop building.</td></tr>
 </tbody></table></div>
 <p>The first pass of this audit is written up in <a class="src" href="audit/FINDINGS.md" title="Open in VS Code">audit/FINDINGS.md</a>, with ten findings, the checks that passed and what has changed since. Read it after forming your own view.</p>
@@ -319,8 +318,7 @@ git checkout verification/symbolic/src/qmdb/tests.rs</code></td><td>Five <code>P
 <tr><th scope="row">R4</th><td>The tree size is trusted. Production reads <code>leaves</code> and <code>inactive_peaks</code> from the proof, which the attacker writes, and relies on the root committing to them. No statement covers that, and the tests never vary them.</td><td>L2</td><td>A statement in which the size comes from the proof and the root alone is trusted.</td></tr>
 <tr><th scope="row">R5</th><td>The hash is ideal. No statement reduces a broken opening to a collision of a real hash, and facts about bytes are outside the model: in bytes the root of a small tree is also a leaf digest, and only positions keep a long item apart from a node.</td><td>L4, A4</td><td>An argument over production’s bytes beside the symbolic one. This branch had a reduction to an explicit collision and dropped it for a smaller trusted base.</td></tr>
 <tr><th scope="row">R6</th><td>Honest roots are built by code that the proof does not see. The tree builder hashes nodes through a second encoding, and the journal chooses what is stored at each location.</td><td>L5</td><td>Route the builder through the part lists of <code>terms.rs</code>; state the snapshot in terms of the journal.</td></tr>
-<tr><th scope="row">R7</th><td>The trace theorem could hold for the empty reason. Nothing shows that the client logs an event on any reachable trace.</td><td>L6</td><td>A theorem that some reachable trace logs an honest opening.</td></tr>
-<tr><th scope="row">R8</th><td>The toolchain is pinned by name, not by content: the hax binary and the dependency builds are whatever is on the machine, and no CI runs the check.</td><td>L8</td><td>Record how the binary is built, hash it, and run <code>check.sh</code> in CI.</td></tr>
+<tr><th scope="row">R7</th><td>The toolchain is pinned by name, not by content: the hax binary and the dependency builds are whatever is on the machine, and no CI runs the check.</td><td>L8</td><td>Record how the binary is built, hash it, and run <code>check.sh</code> in CI.</td></tr>
 </tbody></table></div>
 </section>
 

@@ -36,8 +36,8 @@ STANDARD_AXIOMS = {'propext', 'Classical.choice', 'Quot.sound'}
 BRIDGE_MODULES = ('Commonware.Symbolic.RustM', 'Commonware.Symbolic.Terms',
                   'Commonware.Symbolic.Client', 'Commonware.Symbolic.Signing',
                   'Commonware.Symbolic.Linear', 'Qmdb.Assumptions', 'Qmdb.Verifier',
-                  'Qmdb.Symbolic', 'Qmdb.Protocol', 'Qmdb.SecurityTheorems', 'Bls.Certificate',
-                  'Bls.Protocol')
+                  'Qmdb.Symbolic', 'Qmdb.Protocol', 'Qmdb.Completeness',
+                  'Qmdb.SecurityTheorems', 'Bls.Certificate', 'Bls.Protocol')
 SANITY = 'Qmdb/SanityChecks.lean'
 BLS_SANITY = 'Bls/SanityChecks.lean'
 
@@ -58,10 +58,11 @@ MERKLE_NOT_DRAWN = {'alice_ne_bob': 'the two stored items differ'}
 
 # Statements the Merkle caption relies on.
 MERKLE_STATEMENTS = {
-    'Qmdb.Sanity.attempt_reachable':
-        '∀ (item : Aeneas.Std.Slice Aeneas.Std.U8) (loc : Aeneas.Std.U64) '
-        '(ws : Aeneas.Std.Slice DY.Bytes), DY.Trace.Reachable Qmdb.Protocol.reachability '
-        '↑((Qmdb.Sanity.attempt item loc ws).run DY.Trace.empty).2',
+    'Qmdb.Completeness.attempt_reachable':
+        '∀ [inst : Qmdb.Snapshot] (item : Aeneas.Std.Slice Aeneas.Std.U8) '
+        '(loc : Aeneas.Std.U64) (ws : Aeneas.Std.Slice DY.Bytes), '
+        'DY.Trace.Reachable Qmdb.Protocol.reachability '
+        '↑((Qmdb.Completeness.attempt item loc ws).run DY.Trace.empty).2',
     'Qmdb.client_authentication':
         '∀ [inst : Qmdb.Snapshot] (event : Qmdb.Protocol.Acceptance) (time : ℕ) '
         '(tr : DY.ExecTrace), DY.Trace.Reachable Qmdb.Protocol.reachability tr → '
@@ -74,8 +75,8 @@ MERKLE_DEFINITIONS = {
         'fun item loc ws => commonware_symbolic.qmdb.client_step Commonware.Symbolic.dyTerms '
         'Commonware.Symbolic.messages () Qmdb.Snapshot.root Qmdb.Snapshot.height '
         '(Commonware.Symbolic.carrying item) loc ws',
-    'Qmdb.Sanity.attempt':
-        'fun item loc ws => do let handle ← DY.Network.sendMessage '
+    'Qmdb.Completeness.attempt':
+        'fun [Qmdb.Snapshot] item loc ws => do let handle ← DY.Network.sendMessage '
         '(Commonware.Symbolic.carrying item) Qmdb.Protocol.client handle loc ws',
     'Qmdb.Verifier.honestSiblings':
         'fun items h loc bound => Aeneas.Std.Slice.from '

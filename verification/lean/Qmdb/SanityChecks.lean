@@ -1,8 +1,7 @@
 module
 public import Qmdb.SecurityTheorems
 
-/-! A concrete two-item snapshot, the extracted client's decisions on it, and reachability of the
-protocol traces that carry those decisions, which `client_authentication` then covers. -/
+/-! A concrete two-item snapshot and the extracted client's decisions on it. -/
 
 namespace Qmdb.Sanity
 open DY Aeneas Aeneas.Std Commonware.Symbolic Protocol Verifier Symbolic commonware_symbolic
@@ -76,29 +75,6 @@ theorem rejects_long (extra : Bytes) : verdict alice 0#u64 (longAlice extra) = R
   simp
 
 end
-
-/-- An attacker-known message carrying `item`, followed by the registered client action. -/
-noncomputable def attempt (item : Slice Std.U8) (loc : Std.U64) (ws : Slice Bytes) :
-    Traceful Unit := do
-  let handle ← Network.sendMessage (carrying item)
-  client handle loc ws
-
-/-- Every attempt is a reachable protocol execution. -/
-theorem attempt_reachable (item : Slice Std.U8) (loc : Std.U64) (ws : Slice Bytes) :
-    ((attempt item loc ws).run Trace.empty).snd.val.Reachable reachability := by
-  apply Traceful.PreservesReachability_to_Reachable (pre := fun _ => True)
-    (post := fun _ _ => True)
-  · intro tr reachable _
-    unfold attempt
-    apply Traceful.PreservesReachabilityFrom_bind
-    · apply Traceful.PreservesReachability_base Network.reachability
-    · exact reachable
-    · simp [carrying, Literal.attacker_knows_literalToBytes]
-    intro handle tr _ reachable _
-    apply Traceful.PreservesReachability_base client.reachability _ (handle, loc, ws)
-    · exact reachable
-    · trivial
-  · trivial
 
 end
 end Qmdb.Sanity

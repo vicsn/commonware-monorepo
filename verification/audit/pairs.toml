@@ -373,7 +373,7 @@ id = "protocol-client"
 kind = "rust-trusted"
 strength = "trusted"
 title = "The client step and the client in DyLean"
-link = "The Lean client runs the extracted `client_step` on a received message and logs the acceptance that it returns."
+link = "The Lean client runs the extracted `client_step` on a received message and logs the acceptance that it returns. An attempt sends a message that the attacker knows and runs the client on it; `attempt_logs` proves that the acceptance reaches the trace."
 left_label = "Rust"
 left = [
   { file = "verification/symbolic/src/qmdb.rs", rust = "struct Acceptance" },
@@ -383,6 +383,7 @@ right_label = "DyLean protocol"
 right = [
   { file = "verification/lean/Qmdb/Protocol.lean", lean = "client" },
   { file = "verification/lean/Qmdb/Protocol.lean", lean = "client.reachability" },
+  { file = "verification/lean/Qmdb/Completeness.lean", lean = "attempt" },
 ]
 
 [[panel]]
@@ -453,6 +454,11 @@ reading = "`verify_total`: a verdict on every input, so no panic and no divergen
 sentence = "Every acceptance that the extracted client logs on a reachable trace identifies the trusted snapshot height, an in-range location and the item stored there."
 backed_by = [{ file = "verification/lean/Qmdb/SecurityTheorems.lean", lean = "client_authentication" }]
 reading = "`Stored` means `Snapshot.items`. The property holds for every message, location and sibling list, so the trace adds no hypothesis beyond `Symbolic.client_step_sound`."
+
+[[claim]]
+sentence = "Some reachable trace logs the honest acceptance of each stored item."
+backed_by = [{ file = "verification/lean/Qmdb/SecurityTheorems.lean", lean = "honest_acceptance_logged" }]
+reading = "The trace is an attempt: the attacker sends the item, and the client runs on the siblings that the snapshot supplies. `attempt_logs` shows that the accepted event is in the trace. `client_authentication` alone does not, because a Hoare triple holds of an action that fails."
 
 [[claim]]
 sentence = "The snapshot supplies a root and an accepted opening for each stored item; such snapshots exist at every height up to MAX_HEIGHT."

@@ -169,7 +169,7 @@ edits = [
   { file = "verification/lean/Qmdb/Protocol.lean", original = "  receive (fun message =>\n    commonware_symbolic.qmdb.client_step dyTerms messages ()\n      Snapshot.root Snapshot.height message loc ws) handle", mutated = "  receive (fun message => do\n    let _ ← commonware_symbolic.qmdb.client_step dyTerms messages ()\n      Snapshot.root Snapshot.height message loc ws\n    RustM.ok (none : Option Acceptance)) handle" },
   { file = "verification/lean/Qmdb/Protocol.lean", original = "  receive_preserves _ handle fun message event accepted _ =>\n    Symbolic.client_step_sound message loc ws event accepted", mutated = "  receive_preserves _ handle fun message event accepted _ => by\n    obtain ⟨_, _, wrapped⟩ := bind_eq_ok accepted\n    simpa using ok_inj wrapped" },
 ]
-expect = "survives"
+expect = ["Qmdb.Completeness"]
 
 [[probe]]
 name = "L9 accept never logs"
@@ -178,7 +178,7 @@ edits = [
   { file = "verification/lean/Commonware/Symbolic/Client.lean", original = "  mark_non_monotone holds\n  split\n  · rename_i event accepted\n    step by exact sound _ (eq_ok_of_match accepted) _ holds\n    trivial\n  · step", mutated = "  mark_non_monotone holds\n  split <;> step" },
   { file = "verification/lean/Commonware/Symbolic/Client.lean", original = "  unfold receive accept\n  step\n  split\n  · rename_i event accepted\n    step by exact sound _ _ (eq_ok_of_match accepted) _\n    trivial\n  · step", mutated = "  unfold receive accept\n  step\n  split <;> step" },
 ]
-expect = "survives"
+expect = ["Qmdb.Completeness"]
 
 # Negative controls of the axiom audit.
 

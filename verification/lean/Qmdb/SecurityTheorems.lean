@@ -1,7 +1,7 @@
 module
-public import Qmdb.Protocol
+public import Qmdb.Completeness
 
-/-! What the QMDB target proves about the protocol and its assumption. Trusted: the two
+/-! What the QMDB target proves about the protocol and its assumption. Trusted: the three
 statements. The properties of the extracted verifier are stated once, in `Verifier`: `unique`
 (accepted openings are unique, so the verifier is position binding), `verify_total`,
 `verify_bounds`, `honest_opening` and `extra_sibling_rejected`. -/
@@ -39,6 +39,25 @@ theorem client_authentication
   apply Trace.apply_Reachable_implies_Invariant
   intro tr inv logged
   exact Trace.EventLoggedAt_imp_EventInv _ _ _ inv logged
+
+/-- Completeness on traces: the client does log the honest acceptance. For
+every location of the snapshot some reachable trace has logged the acceptance
+of the item stored there, so `client_authentication` is not about an empty set
+of events. -/
+theorem honest_acceptance_logged
+    [Snapshot]
+    (loc : Std.U64) (inside : loc.val < 2 ^ Snapshot.height.val) :
+    ∃ tr : ExecTrace,
+      tr.Reachable reachability ∧
+      ∃ time,
+        tr.EventLoggedAt
+          ({ height := Snapshot.height,
+             location := loc,
+             item := Snapshot.items loc } : Acceptance)
+          time := by
+  obtain ⟨time, logged⟩ := Completeness.attempt_logs (Snapshot.items loc) loc
+    (Snapshot.siblings loc) _ (Symbolic.client_step_complete loc inside)
+  exact ⟨_, Completeness.attempt_reachable _ loc _, time, logged⟩
 
 end
 end Qmdb

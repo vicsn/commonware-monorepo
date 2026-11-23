@@ -49,6 +49,17 @@ theorem client_step_carrying (root : Bytes) (h : Std.U32) (item : Slice Std.U8) 
   rw [parse_carrying]
   simp only [bind_ok]
 
+/-- The extracted client step returns the acceptance of the stored item at every location of the
+snapshot, on the opening that the snapshot supplies. -/
+theorem client_step_complete [Snapshot] (loc : Std.U64)
+    (inside : loc.val < 2 ^ Snapshot.height.val) :
+    qmdb.client_step dyTerms messages () Snapshot.root Snapshot.height
+      (carrying (Snapshot.items loc)) loc (Snapshot.siblings loc) =
+      RustM.ok (some
+        { height := Snapshot.height, location := loc, item := Snapshot.items loc }) := by
+  rw [client_step_carrying, Snapshot.honest loc inside]
+  simp
+
 /-- The extracted client step returns the honest acceptance for every honest opening. -/
 theorem honest_accepted (items : Std.U64 → Slice Std.U8) (h : Std.U32)
     (bound : h.val ≤ Verifier.maxHeight) (loc : Std.U64) (inside : loc.val < 2 ^ h.val) :
