@@ -30,7 +30,7 @@ theorem subject_ne_other : subject ≠ other := by
   simp [subject, other, Slice.from_val] at this
 
 /-- Signer flags, one per member. -/
-def flags (bits : List Bool) (small : bits.length < 2^64 := by decide) : Flags :=
+def flags (bits : List Bool) (small : bits.length < 2 ^ 64 := by decide) : Flags :=
   ⟨bits, small⟩
 
 /-- A committee of four members that registered their own keys, under a hash that keeps inputs
@@ -126,7 +126,8 @@ theorem rogue_key_accepted :
     Accepts (scheme (id : Input (Slice Std.U8) → _)) [basis 0, rogue] [true, true]
         (some (Point.signature (term (basis 1) (.message ns subject)))) ns subject ∧
       Derives id nobody second (term (basis 1) (id (Input.message ns subject))) ∧
-      ¬ Derives id nobody second (term rogue (id (Input.possession (B := Slice Std.U8) rogue))) := by
+      ¬ Derives id nobody second
+        (term rogue (id (Input.possession (B := Slice Std.U8) rogue))) := by
   refine ⟨⟨by simp, rfl, by decide, _, rfl, ?_⟩,
     Derives.corrupt (hash := id) (signed := nobody) (leaked := second) (member := 1) rfl _, ?_⟩
   · rw [check_iff, sum_eq]
@@ -169,8 +170,8 @@ theorem splitting_zero :
         [true, true, true, true, true, true, true] (some (Point.signature five)) ns subject ∧
       Derives id nobody sixth
         (term opposite (id (Input.possession (B := Slice Std.U8) opposite))) := by
-  refine ⟨⟨by simp [split], rfl, by decide, _, rfl, ?_⟩, ⟨by simp [split], rfl, by decide, _, rfl, ?_⟩,
-    ?_⟩
+  refine ⟨⟨by simp [split], rfl, by decide, _, rfl, ?_⟩,
+    ⟨by simp [split], rfl, by decide, _, rfl, ?_⟩, ?_⟩
   · rw [check_iff, sum_eq]
     rfl
   · rw [check_iff, sum_eq]

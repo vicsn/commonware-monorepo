@@ -25,7 +25,8 @@ def toByteArray (s : Slice Std.U8) : ByteArray :=
 /-- The bytes of a literal as a Rust byte slice, if they fit one. -/
 def toSlice (b : ByteArray) : Option (Slice Std.U8) :=
   if h : b.data.toList.length ≤ Usize.max then
-    some (Slice.from (b.data.toList.map fun x => (⟨x.toBitVec⟩ : Std.U8)) (by simpa using h))
+    some (Slice.from (b.data.toList.map fun x => (⟨x.toBitVec⟩ : Std.U8))
+      (by simpa using h))
   else none
 
 theorem toByteArray_inj {a b : Slice Std.U8} (h : toByteArray a = toByteArray b) : a = b := by
@@ -52,7 +53,7 @@ theorem toSlice_toByteArray (s : Slice Std.U8) : toSlice (toByteArray s) = some 
     intro b _
     apply UScalar.eq_of_val_eq
     change (BitVec.ofNat 8 b.val).toNat = b.val
-    have : b.val < 2^8 := by scalar_tac
+    have : b.val < 2 ^ 8 := by scalar_tac
     simp
   have short : (toByteArray s).data.toList.length ≤ Usize.max := by simp [toByteArray]
   unfold toSlice
@@ -99,13 +100,14 @@ def chain : List (terms.Part Bytes) → Bytes
   | [p] => part p
   | p :: rest => Concat.concat (part p) (chain rest)
 
-/-- The extracted `Terms` on DyLean terms: a digest is DyLean's hash constructor over the
-concatenated parts of the hash input, copying a digest returns it, and digests are compared as
-terms. -/
+/-- The extracted `Terms` on DyLean terms: a digest is DyLean's hash constructor
+over the concatenated parts of the hash input, copying a digest returns it, and
+digests are compared as terms. -/
 def dyTerms : terms.Terms Unit Bytes where
   coremarkerCopyInst := ⟨⟨RustM.ok, fun _ x => RustM.ok x⟩⟩
   corecmpPartialEqInst :=
-    { eq := fun a b => RustM.ok (decide (a = b)), ne := fun a b => RustM.ok (!decide (a = b)) }
+    { eq := fun a b => RustM.ok (decide (a = b)),
+      ne := fun a b => RustM.ok (!decide (a = b)) }
   hash _ parts := RustM.ok (Hash.hash (chain parts.val))
 
 omit [BytesFunctor.Has Literal.SubF] [BytesFunctor.Has Hash.SubF] in

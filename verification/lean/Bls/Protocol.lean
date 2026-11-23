@@ -23,16 +23,23 @@ open DY Aeneas Aeneas.Std Commonware.Symbolic Commonware.Symbolic.Linear commonw
 the hash that signatures cover. The keys are any keys, so members may register rogue ones; the
 hash is any function, so it may collide. -/
 class Setup where
+  /-- The points that inputs hash to. -/
   Hashed : Type
+  /-- The hash that signatures cover. -/
   hash : Input (Slice Std.U8) → Hashed
+  /-- The key that every member registered, by index. -/
   keys : List Key
-  bounded : keys.length < 2^64
+  /-- The number of members fits a `u64`. -/
+  bounded : keys.length < 2 ^ 64
 
 /-- What the trace records: a member signs a subject, a member is compromised, and the client
 accepts a certificate for a subject with the signer flags it was given. -/
 inductive Event where
+  /-- A member signs a message in a namespace. -/
   | sign (member : Nat) (ns message : Slice Std.U8)
+  /-- A member is compromised. -/
   | compromise (member : Nat)
+  /-- The client accepts a certificate for a subject, with the signer flags it was given. -/
   | certify (ns message : Slice Std.U8) (signers : List Bool) (certified : bls.Certified)
 
 #combine +toplevel into BytesFunctor, BytesLength, attackerKnowledge from
@@ -55,6 +62,7 @@ noncomputable section
 def signer (member : Nat) (ns message : Slice Std.U8) : Traceful Unit :=
   ProtocolEvent.logEvent (Event.sign member ns message)
 
+/-- Signing as a step of reachable traces, for any member and subject. -/
 def signer.reachability : ReachabilityConfig :=
   .make fun (member, ns, message) => signer member ns message
 
@@ -62,14 +70,19 @@ def signer.reachability : ReachabilityConfig :=
 def corruption (member : Nat) : Traceful Unit :=
   ProtocolEvent.logEvent (Event.compromise member)
 
+/-- Compromise as a step of reachable traces, for any member. -/
 def corruption.reachability : ReachabilityConfig :=
   .make fun member => corruption member
 
 /-- What the attacker submits to the client: a subject, signer flags and a signature. -/
 structure Submission [Setup] where
+  /-- The namespace of the subject. -/
   ns : Slice Std.U8
+  /-- The message of the subject. -/
   message : Slice Std.U8
+  /-- The signer flags of the certificate. -/
   signers : Flags
+  /-- The signature of the certificate. -/
   signature : Sig Setup.Hashed
 
 /-- The committee that the client trusts. Its own quorum is not asked for: the client applies

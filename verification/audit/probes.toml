@@ -116,8 +116,8 @@ expect = ["Qmdb.Symbolic"]
 [[probe]]
 name = "L1 digest equality always true"
 file = "verification/lean/Commonware/Symbolic/Terms.lean"
-original = "{ eq := fun a b => RustM.ok (decide (a = b)), ne := fun a b => RustM.ok (!decide (a = b)) }"
-mutated = "{ eq := fun _ _ => RustM.ok true, ne := fun _ _ => RustM.ok false }"
+original = "    { eq := fun a b => RustM.ok (decide (a = b)),\n      ne := fun a b => RustM.ok (!decide (a = b)) }"
+mutated = "    { eq := fun _ _ => RustM.ok true,\n      ne := fun _ _ => RustM.ok false }"
 expect = ["Qmdb.Verifier"]
 
 [[probe]]
@@ -144,15 +144,15 @@ expect = ["Commonware.Symbolic.Terms"]
 [[probe]]
 name = "L5 client checks against the received message instead of the trusted root"
 file = "verification/lean/Qmdb/Protocol.lean"
-original = "    Snapshot.root Snapshot.height message loc ws) handle"
-mutated = "    message Snapshot.height message loc ws) handle"
+original = "      Snapshot.root Snapshot.height message loc ws) handle"
+mutated = "      message Snapshot.height message loc ws) handle"
 expect = ["Qmdb.Protocol"]
 
 [[probe]]
 name = "L6 snapshot honest only at location 0"
 file = "verification/lean/Qmdb/Assumptions.lean"
-original = "  honest : ∀ loc : Std.U64, loc.val < 2^height.val →"
-mutated = "  honest : ∀ loc : Std.U64, loc.val < 2^height.val → loc.val = 0 →"
+original = "      loc.val < 2 ^ height.val →\n"
+mutated = "      loc.val < 2 ^ height.val →\n      loc.val = 0 →\n"
 expect = ["Qmdb.Symbolic"]
 
 [[probe]]
@@ -166,7 +166,7 @@ expect = ["Qmdb.SanityChecks"]
 [[probe]]
 name = "L8 client never logs"
 edits = [
-  { file = "verification/lean/Qmdb/Protocol.lean", original = "  receive (fun message => commonware_symbolic.qmdb.client_step dyTerms messages ()\n    Snapshot.root Snapshot.height message loc ws) handle", mutated = "  receive (fun message => do\n    let _ ← commonware_symbolic.qmdb.client_step dyTerms messages ()\n      Snapshot.root Snapshot.height message loc ws\n    RustM.ok (none : Option Acceptance)) handle" },
+  { file = "verification/lean/Qmdb/Protocol.lean", original = "  receive (fun message =>\n    commonware_symbolic.qmdb.client_step dyTerms messages ()\n      Snapshot.root Snapshot.height message loc ws) handle", mutated = "  receive (fun message => do\n    let _ ← commonware_symbolic.qmdb.client_step dyTerms messages ()\n      Snapshot.root Snapshot.height message loc ws\n    RustM.ok (none : Option Acceptance)) handle" },
   { file = "verification/lean/Qmdb/Protocol.lean", original = "  receive_preserves _ handle fun message event accepted _ =>\n    Symbolic.client_step_sound message loc ws event accepted", mutated = "  receive_preserves _ handle fun message event accepted _ => by\n    obtain ⟨_, _, wrapped⟩ := bind_eq_ok accepted\n    simpa using ok_inj wrapped" },
 ]
 expect = "survives"

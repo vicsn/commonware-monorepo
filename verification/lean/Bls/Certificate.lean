@@ -90,8 +90,9 @@ theorem selected_eq : ∀ (bits : List Bool) (keys : List K) (first : Nat),
   | [], keys, _ => by simp [selected_nil_left, namedFrom]
   | bit :: bits, [], _ => by simp [selected_nil_right]
   | bit :: bits, key :: keys, first => by
-    have shifted : (namedFrom (first + 1) bits).filterMap (fun index => (key :: keys)[index - first]?) =
-        (namedFrom (first + 1) bits).filterMap fun index => keys[index - (first + 1)]? := by
+    have shifted :
+        (namedFrom (first + 1) bits).filterMap (fun index => (key :: keys)[index - first]?) =
+          (namedFrom (first + 1) bits).filterMap fun index => keys[index - (first + 1)]? := by
       apply List.filterMap_congr
       intro index mem
       have above := le_of_mem_namedFrom bits _ mem

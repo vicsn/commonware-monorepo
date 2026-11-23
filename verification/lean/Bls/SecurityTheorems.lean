@@ -46,7 +46,8 @@ theorem signer_index_interpretation (S : Signing K P) (roster : Roster K) (flags
         (named flags.bits).filterMap (fun index => roster.keys[index]?) ∧
       (named flags.bits).Pairwise (· < ·) ∧
       ∀ index, index ∈ named flags.bits ↔ flags.bits[index]? = some true := by
-  obtain ⟨holds, members, -⟩ := client_accepts S roster flags signature ns message certified accepted
+  obtain ⟨holds, members, -⟩ :=
+    client_accepts S roster flags signature ns message certified accepted
   obtain ⟨spans, selects, ascending, exactly⟩ := Certificate.signer_index_interpretation holds
   exact ⟨spans, members, selects, ascending, exactly⟩
 

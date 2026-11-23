@@ -14,6 +14,7 @@ def alice : Slice Std.U8 := Slice.from [65#u8, 108#u8, 105#u8, 99#u8, 101#u8] (b
 /-- ASCII `Bob`. -/
 def bob : Slice Std.U8 := Slice.from [66#u8, 111#u8, 98#u8] (by scalar_tac)
 
+/-- `Alice` at location 0 and `Bob` everywhere else. -/
 def items (loc : Std.U64) : Slice Std.U8 := if loc.val = 0 then alice else bob
 
 theorem alice_ne_bob : alice ≠ bob := by
@@ -31,7 +32,10 @@ instance snapshot : Snapshot where
 
 noncomputable section
 
+/-- The honest siblings of `Alice` at location 0. -/
 def honestAlice : Slice Bytes := honestSiblings items 1 0#u64 one_le_maxHeight
+
+/-- The honest siblings of `Bob` at location 1. -/
 def honestBob : Slice Bytes := honestSiblings items 1 1#u64 one_le_maxHeight
 
 /-- The client step of the protocol on a message carrying `item`. -/
@@ -58,7 +62,7 @@ theorem rejects_misplaced (ws : Slice Bytes) : verdict alice 1#u64 ws = RustM.ok
 
 /-- Alice's honest opening followed by one unused sibling. -/
 def longAlice (extra : Bytes) : Slice Bytes :=
-  Slice.from (path items 1 (2*(2^1-1)) 0 0 ++ [extra])
+  Slice.from (path items 1 (2 * (2 ^ 1 - 1)) 0 0 ++ [extra])
     (by simp [path_length]; scalar_tac)
 
 theorem rejects_long (extra : Bytes) : verdict alice 0#u64 (longAlice extra) = RustM.ok none := by
@@ -66,7 +70,7 @@ theorem rejects_long (extra : Bytes) : verdict alice 0#u64 (longAlice extra) = R
     (longAlice extra) extra (by simp [longAlice, Slice.from_val])
   have stored : items 0#u64 = alice := by simp [items]
   rw [stored] at rejected
-  show qmdb.client_step dyTerms messages () (honestRoot items (1#u32 : Std.U32).val) 1#u32
+  change qmdb.client_step dyTerms messages () (honestRoot items (1#u32 : Std.U32).val) 1#u32
     (carrying alice) 0#u64 (longAlice extra) = _
   rw [client_step_carrying, rejected]
   simp

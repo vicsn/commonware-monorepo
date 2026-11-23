@@ -4,6 +4,23 @@ defaultTargets = ["Commonware", "Qmdb", "Bls"]
 # The extraction's Lean, which DyLean is patched for; keeps `lake update` from adopting DyLean's.
 fixedToolchain = true
 
+# Style linters for the handwritten Lean. Mathlib defines them and every module loads them through
+# Aeneas; `weak` keeps a module without them building. check.sh fails on any warning.
+[leanOptions]
+weak.linter.style.longLine = true
+weak.linter.style.whitespace = true
+weak.linter.style.cdot = true
+weak.linter.style.lambdaSyntax = true
+weak.linter.style.dollarSyntax = true
+weak.linter.style.multiGoal = true
+weak.linter.style.missingEnd = true
+weak.linter.style.emptyLine = true
+weak.linter.style.show = true
+weak.linter.style.setOption = true
+weak.linter.style.refine = true
+weak.linter.style.docString = true
+weak.linter.missingDocs = true
+
 # Glue between the extracted Rust and DyLean that every target shares.
 [[lean_lib]]
 name = "Commonware"

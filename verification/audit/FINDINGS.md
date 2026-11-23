@@ -25,7 +25,8 @@ the height bound on 2026-11-23, the audited namespaces hold 98 theorems, down fr
 | F4 | Stands. |
 | F5 | No longer applies: no statement reads production's byte hashing. In its place the hash is assumed ideal, assumption A4 of the guide. That assumes more than F5 described. Nothing now reduces a broken opening to a collision, and facts about bytes are outside the model. `probe_root_is_a_leaf_input` shows one: for all seven trees it builds, the root equals the leaf digest at position 0 of a 34-byte item. |
 | F6 | The README sentence is corrected. The second encoding stands. |
-| F7, F8, F9 | Stand. |
+| F7, F9 | Stand. |
+| F8 | Fixed on 2026-11-23: `check.sh` fails on any warning of the Lean build, and `sorry` is one. Probe `A6` still survives, because `probes.py` looks only at modules that stop building. |
 | F10 | Fixed: the header is rewritten. |
 
 The probes in [probes.toml](probes.toml) follow the current tree: `L1` to `L3` mutate `dyTerms`,

@@ -51,8 +51,11 @@ end
 variable [BytesFunctor] [ExecTraceTypes] [ExecTraceTypes.Has Network.ExecEntryT]
 variable {Event : Type} [ExecTraceTypes.Has (ProtocolEvent.ExecEntryT Event)]
 
-/-- Receive the message at `handle` and log the event that `step` accepts for it, or fail. -/
-def receive (step : Bytes → RustM (Option Event)) (handle : Nat) : Traceful Unit := do
+/-- Receive the message at `handle` and log the event that `step` accepts for
+it, or fail. -/
+def receive
+    (step : Bytes → RustM (Option Event)) (handle : Nat) :
+    Traceful Unit := do
   let message ← Network.receiveMessage handle
   accept (step message)
 

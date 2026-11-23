@@ -20,6 +20,8 @@ meta def standardAxioms : List Name := [``propext, ``Classical.choice, ``Quot.so
 /-- Audit every theorem in the given namespaces for non-standard axioms. -/
 syntax (name := auditAxioms) "#audit_axioms" (ppSpace ident)+ : command
 
+/-- Elaborate `#audit_axioms`: fail on every theorem or axiom of the given namespaces that
+depends on a non-standard axiom. -/
 @[command_elab auditAxioms] meta def elabAuditAxioms : CommandElab
   | `(#audit_axioms $namespaces*) => do
     let prefixes := namespaces.map (·.getId)
@@ -35,7 +37,8 @@ syntax (name := auditAxioms) "#audit_axioms" (ppSpace ident)+ : command
       unless extra.isEmpty do
         failures := failures.push m!"{name}: {extra}"
     unless failures.isEmpty do
-      throwError "theorems with non-standard axioms:{indentD (MessageData.joinSep failures.toList Format.line)}"
+      let listed := MessageData.joinSep failures.toList Format.line
+      throwError "theorems with non-standard axioms:{indentD listed}"
     logInfo m!"{audited.size} theorems in {prefixes} depend only on standard axioms."
   | _ => throwUnsupportedSyntax
 

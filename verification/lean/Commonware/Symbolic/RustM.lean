@@ -37,7 +37,7 @@ theorem mul_ok {ty} (x y : UScalar ty) (bound : x.val * y.val ≤ UScalar.max ty
   ok_of_spec (UScalar.mul_spec bound)
 
 theorem pow_ok (h : Std.U32) (bound : h.val ≤ 63) :
-    ∃ z : Std.U64, 1#u64 <<< h = RustM.ok z ∧ z.val = 2^h.val := by
+    ∃ z : Std.U64, 1#u64 <<< h = RustM.ok z ∧ z.val = 2 ^ h.val := by
   obtain ⟨z, hz, hv, -, -⟩ := ok_of_partialSpec (UScalar.ShiftLeft_spec (1#u64) h _ rfl)
     (by intro e; cases e <;> simp; omega) (by simp)
   refine ⟨z, hz, ?_⟩

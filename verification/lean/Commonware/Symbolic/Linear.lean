@@ -35,7 +35,9 @@ def basis (member : Nat) : Key :=
 /-- What a signature covers: a message in a namespace, or the possession of a key. The two are
 different inputs, as production separates them by domain tag. -/
 inductive Input (B : Type) where
+  /-- A message in a namespace. -/
   | message (ns payload : B)
+  /-- The possession of a key. -/
   | possession (key : Key)
 
 variable {B P : Type}
@@ -52,15 +54,21 @@ signatures that members issued, every member's proof of possession of its own ke
 under a compromised member's key, and sums and integer multiples of those. -/
 inductive Derives (hash : Input B → P) (signed : Nat → B → B → Prop) (leaked : Nat → Prop) :
     Sig P → Prop where
+  /-- The signature of nothing. -/
   | zero : Derives hash signed leaked (fun _ _ => 0)
+  /-- A signature that a member issued. -/
   | sign {member : Nat} {ns payload : B} (event : signed member ns payload) :
       Derives hash signed leaked (term (basis member) (hash (.message ns payload)))
+  /-- A member's proof of possession of its own key. -/
   | pop (member : Nat) :
       Derives hash signed leaked (term (basis member) (hash (.possession (basis member))))
+  /-- Any point under the key of a compromised member. -/
   | corrupt {member : Nat} (event : leaked member) (point : P) :
       Derives hash signed leaked (term (basis member) point)
+  /-- The sum of two derivable signatures. -/
   | add {a b : Sig P} : Derives hash signed leaked a → Derives hash signed leaked b →
       Derives hash signed leaked (fun point member => a point member + b point member)
+  /-- An integer multiple of a derivable signature. -/
   | scale (factor : Int) {a : Sig P} : Derives hash signed leaked a →
       Derives hash signed leaked (fun point member => factor * a point member)
 
@@ -111,18 +119,20 @@ theorem support {hash : Input B → P} {signed : Nat → B → B → Prop} {leak
     by_cases none : a point member = 0
     · exact second (by
         intro zero
-        exact involved (by show a point member + b point member = 0; omega))
+        exact involved (by change a point member + b point member = 0; omega))
     · exact first none
   | @scale factor a _ inner =>
     exact inner (by
       intro zero
-      exact involved (by show factor * a point member = 0; simp [zero]))
+      exact involved (by change factor * a point member = 0; simp [zero]))
 
 /-! ## The scheme -/
 
 /-- A hashed message or a signature. -/
 inductive Point (P : Type) where
+  /-- A hashed message. -/
   | hashed (point : P)
+  /-- A signature. -/
   | signature (sig : Sig P)
 
 /-- The sum of `keys` as integer combinations. -/

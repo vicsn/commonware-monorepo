@@ -100,6 +100,42 @@ the first target that needs them.
    [lakefile.toml](lean/lakefile.toml).
 4. Add `<target>/mutations.toml` and run it from `check.sh`.
 
+## Lean style
+
+The handwritten Lean follows Mathlib's style where a linter checks it, and a few rules of its
+own.
+
+- Linters. [lean/lakefile.toml](lean/lakefile.toml) turns on Mathlib's style linters for every
+  module: lines of at most 100 columns, spaces around operators (`2 ^ n`, not `2^n`), `·` for
+  goals, `fun x => …`, one goal per tactic block, `change` where a `show` changes the goal, and
+  a doc string on every public definition, field and constructor. `check.sh` fails on any
+  warning of the Lean build, so it also fails on `sorry`.
+- What auditors read. The statements that the report cites, and the definitions those
+  statements depend on, are the trusted declarations of the audit guide's graph. Each stays
+  within 80 columns, comment included, so that the guide shows it unwrapped. A signature that
+  does not fit one line puts the name alone on the first line, every hypothesis and every
+  assumed instance such as `[Snapshot]` on a line of its own, and the conclusion on lines of
+  its own, one conjunct per line. Binders keep their order: moving one changes every caller.
+  `audit/build.py` checks the width and the layout.
+
+  ```lean
+  theorem unique
+      (h : Std.U32) (loc : Std.U64) (root : Bytes)
+      (a b : Slice Std.U8) (wa wb : Slice Bytes)
+      (ha : qmdb.verify dyTerms () h loc root a wa = RustM.ok true)
+      (hb : qmdb.verify dyTerms () h loc root b wb = RustM.ok true) :
+      a = b ∧
+      wa = wb := by
+  ```
+
+- Names. Theorems are `snake_case`, definitions `camelCase` and types `UpperCamel`. A
+  hypothesis is named for what it says (`bound`, `inside`), not numbered.
+- Comments. A doc string says what holds, not how the proof goes. The comment at the top of a
+  module says what in it is trusted and what is checked.
+- Proofs. No `sorry`, no `native_decide` and no new axiom: the axiom audit fails the build.
+
+Lean has no formatter, so the linters and the check are what keeps this in place.
+
 ## Running
 
 ```bash
@@ -118,8 +154,9 @@ open.
 target. Its links open files of the checkout that holds it.
 `python3 verification/qmdb/dylean-pictures.py` regenerates its pictures from the statements that
 Lean prints. `python3 verification/qmdb/report-artifact.py --out <file>` writes a copy for
-publishing, whose links open GitHub at a pushed revision. The report links to the audit guide, so
-pass `--page hax-dylean-audit.html=<URL>` with the place where the guide is published.
+publishing, whose links open GitHub at a pushed revision. The report links to the audit guide:
+pass `--page hax-dylean-audit.html=<URL>` if the guide is published somewhere, or the link opens
+the guide's file on GitHub.
 
 ## Audit
 
@@ -143,7 +180,8 @@ their handwritten Lean readings, sentences of the report and theorem statements.
   [audit/probes/](audit/probes) holds differential tests that vary what the committed tests do
   not.
 - Publish the guide like the report: `python3 verification/qmdb/report-artifact.py --report
-  verification/hax-dylean-audit.html --page hax-dylean.html=<URL> --out <file>`.
+  verification/hax-dylean-audit.html --out <file>`, with `--page hax-dylean.html=<URL>` if the
+  report is published too.
 
 ## Shared review boundary
 

@@ -244,6 +244,70 @@ def lean_statement_end(masked, start, end, what):
     raise Mismatch(f'{what}: no `:=` ends the statement')
 
 
+AUDIT_WIDTH = 80
+RELATIONS = '=≤<>≥≠∈∧∨¬↔∀∃'
+
+
+def signature_groups(masked, start, end):
+    """The bracketed binders of the signature on lines `start` to `end`, each as (first line, last
+    line, text), and the line of the colon that ends them."""
+    groups, depth, opened, colon = [], 0, None, None
+    for number in range(start, end + 1):
+        line = masked[number]
+        for column, char in enumerate(line):
+            if char in '([{⟨':
+                if depth == 0:
+                    opened = (number, column)
+                depth += 1
+            elif char in ')]}⟩':
+                depth -= 1
+                if depth == 0:
+                    text = '\n'.join(masked[opened[0]:number + 1])
+                    groups.append((opened[0], number, masked[opened[0]][opened[1]:] if
+                                   opened[0] == number else text))
+            elif char == ':' and depth == 0 and line[column:column + 2] != ':=':
+                return groups, number
+    return groups, colon
+
+
+def check_layout(path, name, first, last):
+    """The layout of a declaration that auditors read: at most `AUDIT_WIDTH` columns, and when its
+    signature takes several lines, the name alone on the first, every hypothesis and assumed
+    instance alone on its lines, and the conclusion on lines of its own."""
+    lines = lines_of(path)
+    masked = mask_lean('\n'.join(lines)).split('\n')
+    what = f'{path.name}: {name}'
+    header = next(number for number in range(first, last + 1)
+                  if re.match(rf'(?:@\[[^\]]*\]\s*)?(?:{LEAN_KEYWORDS})\b', masked[number]))
+    try:
+        stop = lean_statement_end(masked, header, last, what)
+    except Mismatch:
+        stop = None
+    # A proof is not read, so the limit stops where the statement of a theorem does.
+    read = stop if stop is not None and masked[header].startswith('theorem') else last
+    for number in range(first, read + 1):
+        require(len(lines[number]) <= AUDIT_WIDTH,
+                f'{what}: line {number + 1} is over {AUDIT_WIDTH} columns')
+    if stop is None:
+        return
+    if stop == header or re.search(r'\bwhere\s*$', masked[header]):
+        return
+    require(re.fullmatch(rf'(?:{LEAN_KEYWORDS})\s+\S+', masked[header].strip()),
+            f'{what}: a signature of several lines starts with the name alone')
+    groups, colon = signature_groups(masked, header + 1, stop)
+    require(colon is not None, f'{what}: no colon ends the binders')
+    require(masked[colon].rstrip().endswith(':'),
+            f'{what}: the conclusion starts on a line of its own')
+    for begin, finish, text in groups:
+        hypothesis = text.startswith('[') or any(mark in text.split(':', 1)[-1]
+                                                 for mark in RELATIONS)
+        if not hypothesis:
+            continue
+        shared = [other for other in groups if other[:2] != (begin, finish)
+                  and other[0] <= finish and other[1] >= begin]
+        require(not shared, f'{what}: the hypothesis on line {begin + 1} shares its line')
+
+
 def lean_context(path, start):
     """The `variable` lines in scope before line `start`, which a declaration silently uses."""
     lines = lines_of(path)
@@ -488,6 +552,24 @@ def render_dag(claims):
     require(backed == stated, 'the statements that Dag.lean cites and those that back the claims '
             f'differ: {sorted(backed ^ stated)}')
     count = {trust: sum(node['trust'] == trust for node in nodes.values()) for trust in trusts}
+    for key in order:
+        node = nodes[key]
+        if node['trust'] in ('statement', 'trusted') and node['kind'] != '#combine':
+            path = ROOT / node['path']
+            name = node['name'].rsplit('.', 1)[-1]
+            first = node['line'] - 1
+            masked = mask_lean(path.read_text()).split('\n')
+            last = first
+            started = False
+            for number in range(first, len(masked)):
+                line = masked[number]
+                if started and line[:1].strip() and not line.startswith(LEAN_TRAILERS):
+                    break
+                if re.match(rf'(?:@\[[^\]]*\]\s*)?(?:{LEAN_KEYWORDS})\b', line):
+                    started = True
+                if line.strip() or not started:
+                    last = number
+            check_layout(path, name, first, last)
 
     def link(key):
         node = nodes[key]

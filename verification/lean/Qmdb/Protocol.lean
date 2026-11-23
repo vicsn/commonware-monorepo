@@ -12,6 +12,8 @@ namespace Qmdb.Protocol
 open DY Aeneas Aeneas.Std Commonware.Symbolic
 @[expose] public section
 
+/-- What the client logs: the acceptance that the extracted client step returns.
+-/
 abbrev Acceptance := commonware_symbolic.qmdb.Acceptance
 
 #combine +toplevel into ExecEntryT, baseAttackerKnowledge from
@@ -20,11 +22,18 @@ abbrev Acceptance := commonware_symbolic.qmdb.Acceptance
 
 noncomputable section
 
-/-- Receive a claimed item and log the acceptance that the extracted Rust decision returns. -/
-def client [Snapshot] (handle : Nat) (loc : Std.U64) (ws : Slice Bytes) : Traceful Unit :=
-  receive (fun message => commonware_symbolic.qmdb.client_step dyTerms messages ()
-    Snapshot.root Snapshot.height message loc ws) handle
+/-- Receive a claimed item and log the acceptance that the extracted Rust
+decision returns. -/
+def client
+    [Snapshot]
+    (handle : Nat) (loc : Std.U64) (ws : Slice Bytes) :
+    Traceful Unit :=
+  receive (fun message =>
+    commonware_symbolic.qmdb.client_step dyTerms messages ()
+      Snapshot.root Snapshot.height message loc ws) handle
 
+/-- The client as a step of reachable traces, for any handle, location and
+siblings. -/
 def client.reachability [Snapshot] : ReachabilityConfig :=
   .make fun (handle, loc, ws) => client handle loc ws
 
@@ -46,7 +55,7 @@ end
 
 instance [Snapshot] : ProtocolEvent.EventInv Acceptance where
   invariant _ event := event.height = Snapshot.height ∧
-    event.location.val < 2^event.height.val ∧ event.item = Snapshot.items event.location
+    event.location.val < 2 ^ event.height.val ∧ event.item = Snapshot.items event.location
 
 section
 variable [Snapshot]

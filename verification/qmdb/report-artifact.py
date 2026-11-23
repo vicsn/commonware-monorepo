@@ -4,8 +4,9 @@
 The report links to files of its own checkout and to a local diff handler. A published copy has
 no checkout, so this script rewrites every source link to the file on GitHub at `--rev` and every
 diff link to GitHub's comparison of the production baseline with that revision. A link to another
-page of this directory becomes the published copy of that page, given with `--page`. The copy has
-no document wrapper: the page that hosts it supplies one.
+page of this directory becomes the published copy of that page when `--page` gives one, and that
+page's file on GitHub otherwise. The copy has no document wrapper: the page that hosts it
+supplies one.
 
 `--report` converts another page of this directory, such as the audit guide, the same way.
 """
@@ -69,10 +70,13 @@ def difference(tag, github, baseline, revision):
             'title="Compare with the baseline on GitHub">')
 
 
-def sibling(match, published):
-    """A link to another page of this directory, as the published copy of that page."""
-    require(match[1] in published, f'give --page {match[1]}=URL for the link to that page')
-    return f'href="{published[match[1]]}"'
+def sibling(match, published, github, revision):
+    """A link to another page of this directory, as the published copy of that page or, when it
+    is not published, as its file on GitHub."""
+    if match[1] in published:
+        return f'href="{published[match[1]]}"'
+    require((ROOT / 'verification' / match[1]).is_file(), f'link to a missing page: {match[1]}')
+    return f'href="{github}/blob/{revision}/verification/{match[1]}"'
 
 
 def replace_element(page, tag, name, body):
@@ -90,7 +94,8 @@ def convert(page, repository, revision, published):
     page = re.sub(r'<a class="src"[^>]*>', lambda match: source(match[0], github, revision), page)
     page = re.sub(r'<a class="code-diff"[^>]*>',
                   lambda match: difference(match[0], github, baseline, revision), page)
-    page = re.sub(r'href="([\w-]+\.html)(?:#[^"]*)?"', lambda match: sibling(match, published), page)
+    page = re.sub(r'href="([\w-]+\.html)(?:#[^"]*)?"',
+                  lambda match: sibling(match, published, github, revision), page)
     page = replace_element(
         page, 'span', 'checkout',
         f' of <a href="{github}/tree/{revision}">{repository}</a>; this page links to revision '
@@ -127,7 +132,8 @@ def main():
     parser.add_argument('--report', type=Path, default=REPORT,
                         help='the page to convert (default: the report)')
     parser.add_argument('--page', action='append', default=[], metavar='FILE=URL',
-                        help='where a page that this one links to is published; repeatable')
+                        help='where a page that this one links to is published (default: its '
+                             'file on GitHub); repeatable')
     args = parser.parse_args()
     revision = args.rev or subprocess.check_output(
         ['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip()

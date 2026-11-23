@@ -16,9 +16,13 @@ open Aeneas Aeneas.Std CoreModels commonware_symbolic
 hashed messages or signatures. `hash` reads a namespace and a message; `hash` and `check` are any
 functions. -/
 structure Signing (K P : Type) where
+  /-- The sum of no keys. -/
   zero : K
+  /-- The sum of two keys. -/
   add : K → K → K
+  /-- The point that a message hashes to in a namespace. -/
   hash : Slice Std.U8 → Slice Std.U8 → P
+  /-- Whether a signature verifies under a key for a hashed message. -/
   check : K → P → P → Bool
 
 variable {K P : Type}
@@ -40,9 +44,12 @@ def Signing.sum (S : Signing K P) (keys : List K) : K :=
 
 /-- An ordered committee: the keys of its members by index, and the quorum it asks for. -/
 structure Roster (K : Type) where
+  /-- The key of every member, by index. -/
   keys : List K
+  /-- The quorum that the committee asks for. -/
   quorum : Std.U64
-  bounded : keys.length < 2^64
+  /-- The number of members fits a `u64`. -/
+  bounded : keys.length < 2 ^ 64
 
 /-- Number of members. -/
 def Roster.members (r : Roster K) : Std.U64 :=
@@ -56,8 +63,10 @@ def Roster.committee : rules.Committee (Roster K) K where
 
 /-- The signer flags of a certificate, one per index. -/
 structure Flags where
+  /-- Whether each index is named as a signer. -/
   bits : List Bool
-  bounded : bits.length < 2^64
+  /-- The number of flags fits a `u64`. -/
+  bounded : bits.length < 2 ^ 64
 
 /-- Number of indices that the flags can name. -/
 def Flags.bound (f : Flags) : Std.U64 :=
@@ -80,8 +89,11 @@ def decoded : rules.Decoded (Option P) P where
 and the key of every index. -/
 structure Reads {C : Type} (inst : rules.Committee C K) (committee : C) (keys : List K)
     (quorum : Std.U64) : Prop where
+  /-- The committee reports as many members as there are keys. -/
   members : ∃ members, inst.members committee = RustM.ok members ∧ members.val = keys.length
+  /-- The committee reports this quorum. -/
   quorum : inst.quorum committee = RustM.ok quorum
+  /-- The committee reports the key at every index, and none beyond the last. -/
   key : ∀ index : Std.U64, inst.key committee index = RustM.ok keys[index.val]?
 
 theorem Roster.members_val (r : Roster K) : r.members.val = r.keys.length := by

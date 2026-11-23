@@ -39,6 +39,11 @@ fi
 (cd lean && lake build) > "$logs/lean-build.log" 2>&1 || { tail -40 "$logs/lean-build.log"; exit 1; }
 grep 'depend only on standard axioms' "$logs/lean-build.log"
 
+# A warning in the handwritten Lean fails the check: the style linters that lakefile.toml turns
+# on, a missing doc string and a proof that uses `sorry` all report as warnings.
+if grep -A6 '^warning: ' "$logs/lean-build.log"; then exit 1; fi
+echo 'The Lean build has no warnings.'
+
 # The declaration graph of the audit guide is the one that Lean prints for these proofs.
 python3 audit/build.py --dag --check
 
