@@ -85,6 +85,8 @@ pub use error::Error;
 
 mod exchange;
 
+mod rules;
+
 mod protocol;
 pub use protocol::{
     Ack, Context, DialState, ListenState, Syn, SynAck, Version, dial_end, dial_start, listen_end,

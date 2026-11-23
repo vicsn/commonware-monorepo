@@ -1,6 +1,7 @@
 use super::{
     Error,
     exchange::{EphemeralPublicKey, SecretKey},
+    rules,
 };
 use crate::{
     PublicKey, Signature, Signer, Verifier,
@@ -9,9 +10,6 @@ use crate::{
 use commonware_codec::{Buf, Encode, FixedSize, Mode, Read, ReadExt, Write, mode, modes};
 use core::ops::Range;
 use rand_core::CryptoRng;
-
-const LABEL_CONFIRMATION_L2D: &[u8] = b"confirmation_l2d";
-const LABEL_CONFIRMATION_D2L: &[u8] = b"confirmation_d2l";
 
 /// Transcript schema used by a SAKE handshake.
 ///
@@ -250,6 +248,104 @@ impl<S, P> Context<S, P> {
     }
 }
 
+/// SAKE over BLAKE3 transcripts and X25519.
+struct Scheme;
+
+impl rules::Terms for Scheme {
+    type Transcript = Transcript;
+    type Confirmation = Summary;
+    type Ephemeral = EphemeralPublicKey;
+    type Secret = SecretKey;
+
+    fn time(&self, transcript: &mut Transcript, time_ms: u64) {
+        transcript.commit(time_ms.encode());
+    }
+
+    fn ephemeral(&self, transcript: &mut Transcript, key: &EphemeralPublicKey) {
+        transcript.commit(key.encode());
+    }
+
+    fn public(&self, secret: &SecretKey) -> EphemeralPublicKey {
+        secret.public()
+    }
+
+    fn exchange(
+        &self,
+        transcript: &mut Transcript,
+        secret: SecretKey,
+        peer: &EphemeralPublicKey,
+    ) -> bool {
+        let Some(shared) = secret.exchange(peer) else {
+            return false;
+        };
+        shared
+            .secret
+            .expose(|secret| transcript.commit(secret.as_ref()));
+        true
+    }
+
+    fn confirmation(&self, transcript: &Transcript, label: &'static [u8]) -> Summary {
+        transcript.fork(label).summarize()
+    }
+
+    fn same(&self, a: &Summary, b: &Summary) -> bool {
+        a == b
+    }
+}
+
+impl<S: Signer> rules::Identity<Transcript> for S {
+    type Signature = <S as Signer>::Signature;
+
+    fn commit(&self, transcript: &mut Transcript) {
+        transcript.commit(self.public_key().encode());
+    }
+
+    fn sign(&self, transcript: &Transcript) -> <S as Signer>::Signature {
+        transcript.sign(self)
+    }
+}
+
+impl<P: PublicKey> rules::Peer<Transcript> for P {
+    type Signature = <P as Verifier>::Signature;
+
+    fn commit(&self, transcript: &mut Transcript) {
+        transcript.commit(self.encode());
+    }
+
+    fn verify(&self, transcript: &Transcript, signature: &<P as Verifier>::Signature) -> bool {
+        transcript.verify(self, signature)
+    }
+}
+
+impl<R: CryptoRng> rules::Fresh<SecretKey> for R {
+    fn draw(self) -> SecretKey {
+        SecretKey::new(self)
+    }
+}
+
+impl rules::Window {
+    /// The window that accepts the timestamps in `ok_timestamps`.
+    const fn new(ok_timestamps: &Range<u64>) -> Self {
+        Self {
+            start: ok_timestamps.start,
+            end: ok_timestamps.end,
+        }
+    }
+}
+
+impl rules::Rejection {
+    /// The error for rejecting a message with timestamp `time_ms` when `ok_timestamps` were
+    /// accepted.
+    const fn error(self, time_ms: u64, ok_timestamps: Range<u64>) -> Error {
+        match self {
+            Self::Timestamp => Error::InvalidTimestamp(time_ms, ok_timestamps),
+            Self::Signature => Error::InvalidSignature,
+            Self::Ephemeral => Error::InvalidEphemeralKey,
+            Self::Confirmation => Error::InvalidConfirmation,
+        }
+    }
+}
+
 /// Initiates a handshake as the dialer.
 /// Returns the dialer state and the first message to send.
 pub fn dial_start<S: Signer, P: PublicKey>(
@@ -262,26 +358,21 @@ pub fn dial_start<S: Signer, P: PublicKey>(
         ok_timestamps,
         my_identity,
         peer_identity,
-        mut transcript,
+        transcript,
     } = ctx;
 
-    // Generate an ephemeral key and commit the timestamp and listener identity.
-    let esk = SecretKey::new(rng);
-    let epk = esk.public();
-    let dialer_identity = my_identity.public_key().encode();
-    transcript
-        .commit(current_time.encode())
-        .commit(peer_identity.encode());
-
-    // V1 commits the dialer identity before signing so the [Syn] signature covers it. V0 commits it
-    // after.
-    if version.binds_identity_before_syn() {
-        transcript.commit(&dialer_identity[..]);
-    }
-    let sig = transcript.commit(epk.encode()).sign(&my_identity);
-    if !version.binds_identity_before_syn() {
-        transcript.commit(dialer_identity);
-    }
+    let (esk, transcript, syn) = rules::dial_start(
+        &Scheme,
+        rules::Context {
+            early: version.binds_identity_before_syn(),
+            transcript,
+            now: current_time,
+            window: rules::Window::new(&ok_timestamps),
+            signer: &my_identity,
+            peer: &peer_identity,
+        },
+        rng,
+    );
     (
         DialState {
             esk,
@@ -290,9 +381,9 @@ pub fn dial_start<S: Signer, P: PublicKey>(
             ok_timestamps,
         },
         Syn {
-            time_ms: current_time,
-            epk,
-            sig,
+            time_ms: syn.time_ms,
+            epk: syn.epk,
+            sig: syn.sig,
         },
     )
 }
@@ -307,43 +398,26 @@ pub fn dial_end<P: PublicKey>(
     let DialState {
         esk,
         peer_identity,
-        mut transcript,
+        transcript,
         ok_timestamps,
     } = state;
 
-    // Check the listener's timestamp and verify its signature over the transcript.
-    if !ok_timestamps.contains(&msg.time_ms) {
-        return Err(Error::InvalidTimestamp(msg.time_ms, ok_timestamps));
-    }
-    if !transcript
-        .commit(msg.time_ms.encode())
-        .commit(msg.epk.encode())
-        .verify(&peer_identity, &msg.sig)
-    {
-        return Err(Error::InvalidSignature);
-    }
-
-    // Commit the shared secret, then derive the confirmations from the transcript.
-    let Some(shared) = esk.exchange(&msg.epk) else {
-        return Err(Error::InvalidEphemeralKey);
-    };
-    shared
-        .secret
-        .expose(|secret| transcript.commit(secret.as_ref()));
-    let confirmation_l2d = transcript.fork(LABEL_CONFIRMATION_L2D).summarize();
-    let confirmation_d2l = transcript.fork(LABEL_CONFIRMATION_D2L).summarize();
-
-    // Accept the listener only if it derived the same transcript.
-    if msg.confirmation != confirmation_l2d {
-        return Err(Error::InvalidConfirmation);
-    }
-
-    Ok((
-        Ack {
-            confirmation: confirmation_d2l,
-        },
+    let time_ms = msg.time_ms;
+    let (confirmation, transcript) = rules::dial_end(
+        &Scheme,
+        esk,
         transcript,
-    ))
+        &peer_identity,
+        &rules::Window::new(&ok_timestamps),
+        &rules::SynAck {
+            time_ms,
+            epk: msg.epk,
+            sig: msg.sig,
+            confirmation: msg.confirmation,
+        },
+    )
+    .map_err(|rejection| rejection.error(time_ms, ok_timestamps))?;
+    Ok((Ack { confirmation }, transcript))
 }
 
 /// Processes the first handshake message as the listener.
@@ -359,57 +433,35 @@ pub fn listen_start<S: Signer, P: PublicKey>(
         my_identity,
         peer_identity,
         ok_timestamps,
-        mut transcript,
+        transcript,
     } = ctx;
 
-    // Check the dialer's timestamp and commit it with the listener identity.
-    if !ok_timestamps.contains(&msg.time_ms) {
-        return Err(Error::InvalidTimestamp(msg.time_ms, ok_timestamps));
-    }
-    let dialer_identity = peer_identity.encode();
-    transcript
-        .commit(msg.time_ms.encode())
-        .commit(my_identity.public_key().encode());
-
-    // Commit the dialer identity where the dialer did: before verifying the [Syn] signature under
-    // V1 and after under V0.
-    if version.binds_identity_before_syn() {
-        transcript.commit(&dialer_identity[..]);
-    }
-    if !transcript
-        .commit(msg.epk.encode())
-        .verify(&peer_identity, &msg.sig)
-    {
-        return Err(Error::InvalidSignature);
-    }
-    if !version.binds_identity_before_syn() {
-        transcript.commit(dialer_identity);
-    }
-
-    // Sign the listener's timestamp and ephemeral key.
-    let esk = SecretKey::new(rng);
-    let epk = esk.public();
-    let sig = transcript
-        .commit(current_time.encode())
-        .commit(epk.encode())
-        .sign(&my_identity);
-
-    // Commit the shared secret and derive the confirmation the dialer must match.
-    let Some(shared) = esk.exchange(&msg.epk) else {
-        return Err(Error::InvalidEphemeralKey);
-    };
-    shared
-        .secret
-        .expose(|secret| transcript.commit(secret.as_ref()));
-    let confirmation_l2d = transcript.fork(LABEL_CONFIRMATION_L2D).summarize();
-
+    let time_ms = msg.time_ms;
+    let (transcript, syn_ack) = rules::listen_start(
+        &Scheme,
+        rules::Context {
+            early: version.binds_identity_before_syn(),
+            transcript,
+            now: current_time,
+            window: rules::Window::new(&ok_timestamps),
+            signer: &my_identity,
+            peer: &peer_identity,
+        },
+        rng,
+        &rules::Syn {
+            time_ms,
+            epk: msg.epk,
+            sig: msg.sig,
+        },
+    )
+    .map_err(|rejection| rejection.error(time_ms, ok_timestamps))?;
     Ok((
         ListenState { transcript },
         SynAck {
-            time_ms: current_time,
-            epk,
-            sig,
-            confirmation: confirmation_l2d,
+            time_ms: syn_ack.time_ms,
+            epk: syn_ack.epk,
+            sig: syn_ack.sig,
+            confirmation: syn_ack.confirmation,
         },
     ))
 }
@@ -417,12 +469,8 @@ pub fn listen_start<S: Signer, P: PublicKey>(
 /// Completes the handshake as the listener.
 /// Verifies the dialer's confirmation and returns the confirmed secret transcript.
 pub fn listen_end(state: ListenState, msg: Ack) -> Result<Transcript, Error> {
-    let confirmation_d2l = state.transcript.fork(LABEL_CONFIRMATION_D2L).summarize();
-    if msg.confirmation != confirmation_d2l {
-        return Err(Error::InvalidConfirmation);
-    }
-
-    Ok(state.transcript)
+    rules::listen_end(&Scheme, state.transcript, &msg.confirmation)
+        .ok_or(Error::InvalidConfirmation)
 }
 
 #[cfg(test)]
