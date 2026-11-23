@@ -7,7 +7,6 @@ terms and clients.
 
 | Target | Rust | Lean | Report |
 | --- | --- | --- | --- |
-| Leaf commitment, the smallest target | [symbolic/src/leaf.rs](symbolic/src/leaf.rs) over production `terms.rs` | [lean/Leaf](lean/Leaf) | [leaf/README.md](leaf/README.md) |
 | QMDB single-item inclusion | [symbolic/src/qmdb.rs](symbolic/src/qmdb.rs) over production `terms.rs` and `traversal.rs` | [lean/Qmdb](lean/Qmdb) | [qmdb/README.md](qmdb/README.md) |
 | BLS certificates | [symbolic/src/bls.rs](symbolic/src/bls.rs) over production `rules.rs` | [lean/Bls](lean/Bls) | [bls/README.md](bls/README.md) |
 
@@ -18,8 +17,8 @@ terms and clients.
   [lean435.patch](lean435.patch), and optional reuse of dependency builds.
 - [check.sh](check.sh): checks every target. Logs go to `.lake/logs`.
 - [mutate.py](mutate.py): re-extracts mutated Rust and requires the named proof modules to fail.
-  Each target lists its mutations in a table: [leaf/mutations.toml](leaf/mutations.toml),
-  [qmdb/mutations.toml](qmdb/mutations.toml) and [bls/mutations.toml](bls/mutations.toml).
+  Each target lists its mutations in a table: [qmdb/mutations.toml](qmdb/mutations.toml) and
+  [bls/mutations.toml](bls/mutations.toml).
 - [symbolic/](symbolic): the crate that hax extracts, outside the Commonware workspace.
   - `lib.rs` includes production modules unchanged through `#[path]`:
     `storage/src/merkle/hasher/terms.rs`, `storage/src/merkle/proof/traversal.rs` and
@@ -38,15 +37,12 @@ terms and clients.
 Production owns the seam. `terms::Terms` hashes a list of `Part`s, each raw bytes or a digest,
 and `hasher/terms.rs` lists the parts of every default Merkle hash input (`leaf_digest`,
 `node_digest`, `fold`, `root`). Production instantiates it with `ByteTerms`, which concatenates
-the bytes and hashes them. Lean reads the extracted trait in two ways:
-
-- [Hashing](lean/Commonware/Symbolic/Hashing.lean): a `Scheme` is any hash with an encoding of
-  parts into one message. `ByteHash.scheme` is production's reading over byte strings, for
-  statements that hold up to an explicit collision.
-- [Terms](lean/Commonware/Symbolic/Terms.lean): `hashing` reads byte parts as DyLean literals,
-  concatenates parts to the right and applies any hash on terms, which may collide. `symbolic` is
-  that reading with DyLean's hash constructor. The checked lemmas show that the reading keeps
-  parts apart and that DyLean's hash has no collisions.
+the bytes and hashes them. Lean reads the extracted trait once, in
+[Terms](lean/Commonware/Symbolic/Terms.lean): `dyTerms` reads byte parts as DyLean literals,
+concatenates parts to the right, applies DyLean's hash constructor and compares digests as terms.
+The hash is ideal, as ProVerif and Tamarin treat a hash by default: two digests are equal only
+when their inputs are the same term. The checked lemmas show that the reading keeps byte parts
+and concatenations apart.
 
 `Terms` is generic over DyLean's term algebra: it applies to any target whose `#combine`
 includes literals, concatenation and hashing. A target that needs more constructors, such as
@@ -70,7 +66,7 @@ hashing and the pairing check. Lean reads the extracted traits in two ways:
   collide. `Derives` is what an attacker obtains from signing and compromise by adding and
   scaling, which covers recombination, rogue keys and keys that sum to zero. The checked
   `attribution` reduces a signature that verifies to a signing event of a protected member or
-  to a collision, the alternative that `Hashing` defines for every target.
+  to a collision of the hash, which `Linear` defines.
 
 The linear model lives outside DyLean's term algebra: a target that uses it needs only literals
 in its `#combine` and states what the attacker may submit as the precondition of its client's
@@ -99,9 +95,8 @@ the first target that needs them.
 2. Run `check.sh` once and commit the regenerated extraction.
 3. Add `lean/<Target>/`: an `Assumptions` module with the `#combine` of its term algebra and the
    inputs that the application supplies, the proofs, a `Protocol` module with `receive` or
-   `accept`, the
-   event invariant and the theorem statements, and an `Audit` module that runs
-   `#audit_axioms` over the target's namespace. Add a `lean_lib` to
+   `accept` and the event invariant, a `SecurityTheorems` module with the statements, and an
+   `Audit` module that runs `#audit_axioms` over the target's namespace. Add a `lean_lib` to
    [lakefile.toml](lean/lakefile.toml).
 4. Add `<target>/mutations.toml` and run it from `check.sh`.
 
@@ -136,17 +131,24 @@ their handwritten Lean readings, sentences of the report and theorem statements.
 - [audit/guide.html](audit/guide.html) and [audit/pairs.toml](audit/pairs.toml): the prose and
   the table of panels, whose items are addressed by name. `python3 verification/audit/build.py`
   writes the page, and `check.sh` fails when it is stale.
-- [audit/FINDINGS.md](audit/FINDINGS.md): a first pass through the guide.
-- [audit/probes.py](audit/probes.py) with [audit/probes.toml](audit/probes.toml): the mutations
-  of that pass with their recorded verdicts. Some survive. [audit/probes/](audit/probes) holds
-  its differential tests and the script that lists what the statements depend on.
+- [audit/Dag.lean](audit/Dag.lean) prints every Lean declaration of the target with what it
+  mentions, and [audit/dag.py](audit/dag.py) draws that as the guide's graph, coloured by trust
+  type: a declaration is trusted when a statement that the report cites depends on what it says.
+  After changing Lean, run `python3 verification/audit/build.py --dag` and then
+  `python3 verification/audit/build.py`; `check.sh` fails when [audit/dag.json](audit/dag.json)
+  is stale.
+- [audit/FINDINGS.md](audit/FINDINGS.md): a first pass through the guide, and what changed since.
+- [audit/probes.py](audit/probes.py) with [audit/probes.toml](audit/probes.toml): mutations of
+  the Rust, of the trusted Lean and of the proofs, with their recorded verdicts. Some survive.
+  [audit/probes/](audit/probes) holds differential tests that vary what the committed tests do
+  not.
 - Publish the guide like the report: `python3 verification/qmdb/report-artifact.py --report
   verification/hax-dylean-audit.html --page hax-dylean.html=<URL> --out <file>`.
 
 ## Shared review boundary
 
 Review once for all targets: the production modules that the crate includes, `client.rs`,
-`Hashing.lean`, the definitions in `Terms.lean` (`part`, `chain`, `symbolic`, `messages`), in
+the definitions in `Terms.lean` (`part`, `chain`, `dyTerms`, `messages`), in
 `Signing.lean` and in `Linear.lean`, `accept` and `receive` in `Client.lean`, `Audit.lean`, the
 compatibility patch and the tool pins. Lean checks the rest, including the lemmas in
 `Terms.lean` and `Linear.lean`, `accept_preserves`, `receive_preserves` and `RustM.lean`. The

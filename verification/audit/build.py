@@ -8,16 +8,26 @@ and writes `verification/hax-dylean-audit.html`. A missing or ambiguous item, a 
 sentence that the report no longer contains, or a stated fact that the sources no longer contain
 stops the build. With `--check` it writes nothing and fails when the committed page is stale,
 naming the panels that changed.
+
+The declaration graph of the guide is drawn from `dag.json`, which is what Lean prints for
+`Dag.lean`. With `--dag` this script runs Lean and stores that output; with `--dag --check` it
+fails when the stored output is stale. Both need the Lean build of `verification/lean`.
 """
 
 import argparse
 import hashlib
 import html
+import json
 import os
 import re
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import dag as graph  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 VERIFICATION = ROOT / 'verification'
@@ -30,6 +40,9 @@ CRATE = VERIFICATION / 'symbolic'
 EXTRACTION = CRATE / 'proofs/lean/CommonwareSymbolic'
 GENERATED = [EXTRACTION / 'Extraction/Funs.lean', EXTRACTION / 'Extraction/Types.lean']
 EXTERNAL = EXTRACTION / 'Assumptions/FunsExternal.lean'
+DAG = HERE / 'dag.json'
+DAG_LEAN = HERE / 'Dag.lean'
+LEAN = VERIFICATION / 'lean'
 
 KINDS = {
     'rust-rust': 'Rust ↔ Rust',
@@ -454,6 +467,112 @@ def render_index(prefixes):
             f'<tbody>{inner}</tbody></table></div>', len(rows))
 
 
+# The declaration graph.
+
+
+def chip(trust):
+    return f'<span class="chip {trust}">{graph.TRUST[trust]}</span>'
+
+
+def render_dag(claims):
+    """Every Lean declaration of the target with its trust type: two drawings, the trusted
+    declarations against the statements that depend on them, and a table of all of them."""
+    nodes = graph.load(DAG.read_text(), lambda path, line: lines_of(ROOT / path)[line - 1])
+    trusts = list(graph.TRUST)
+    order = sorted(nodes, key=lambda key: (trusts.index(nodes[key]['trust']),
+                                           nodes[key]['file'] or '', nodes[key]['line'] or 0))
+    index = {key: number for number, key in enumerate(order)}
+    cited = [key for key in order if nodes[key]['trust'] == 'statement']
+    backed = {backing['lean'] for claim in claims for backing in claim['backed_by']}
+    stated = {nodes[key]['name'].rsplit('.', 1)[-1] for key in cited}
+    require(backed == stated, 'the statements that Dag.lean cites and those that back the claims '
+            f'differ: {sorted(backed ^ stated)}')
+    count = {trust: sum(node['trust'] == trust for node in nodes.values()) for trust in trusts}
+
+    def link(key):
+        node = nodes[key]
+        if key in graph.LIBRARIES:
+            return f'{html.escape(key)} <span class="muted">({graph.LIBRARIES[key]})</span>'
+        line = node['line'] - 1
+        return source_link(ROOT / node['path'], (line, line), node['name'])
+
+    drawings = [(graph.draw(nodes, index, True), f'every declaration ({len(nodes)})'),
+                (graph.draw(nodes, index, False), 'definitions and cited statements')]
+    options = ''.join(f'<option value="{number}">{html.escape(title)}</option>'
+                      for number, (_, title) in enumerate(drawings))
+    frames = ''.join(f'<div class="dag-frame"{" hidden" if number else ""}>{drawing}</div>'
+                     for number, (drawing, _) in enumerate(drawings))
+    legend = ''.join(f'<span>{chip(trust)} {count[trust]}</span>' for trust in trusts)
+    data = [{'n': nodes[key]['name'], 't': graph.TRUST[nodes[key]['trust']],
+             's': sorted(index[other] for other in nodes[key]['says']),
+             'u': sorted(index[other] for other in nodes[key]['uses'])} for key in order]
+
+    trusted = [key for key in order if nodes[key]['trust'] == 'trusted']
+    short = [nodes[key]['name'].rsplit('.', 1)[-1] for key in cited]
+    head = ''.join(f'<th scope="col"><code>{html.escape(name).replace("_", "_<wbr>")}</code></th>'
+                   for name in short)
+    matrix = ''.join(
+        f'<tr><th scope="row">{link(key)}</th><td>{html.escape(nodes[key]["kind"])}</td>'
+        + ''.join('<td class="dot">●</td>' if statement in nodes[key]['said_by'] else '<td></td>'
+                  for statement in cited) + '</tr>' for key in trusted)
+
+    def reach(key):
+        node = nodes[key]
+        if node['trust'] == 'statement':
+            return 'It is one.'
+        if not node['said_by']:
+            return 'None.'
+        if len(node['said_by']) == len(cited):
+            return 'All.'
+        return ', '.join(f'<code>{html.escape(nodes[other]["name"].rsplit(".", 1)[-1])}</code>'
+                         for other in cited if other in node['said_by'])
+
+    rows = ''.join(f'<tr data-i="{index[key]}"><td>{link(key)}</td>'
+                   f'<td>{html.escape(nodes[key]["kind"])}</td><td>{chip(nodes[key]["trust"])}</td>'
+                   f'<td>{reach(key)}</td></tr>' for key in order)
+    inner = (
+        f'<p>The target has {len(nodes)} declarations. {count["statement"]} are statements that '
+        f'the report cites. What those statements say depends on {count["trusted"]} handwritten '
+        f'declarations, on {count["generated"]} generated ones and on {count["assumed"]} '
+        f'libraries. The other {count["checked"]} are lemmas and definitions that only proofs '
+        'use: Lean checks them, and no cited statement depends on what they say.</p>'
+        '<figure class="dag" id="dag-figure"><div class="dag-bar">'
+        f'<label>Show <select id="dag-view">{options}</select></label>'
+        '<label><input type="checkbox" id="dag-fit"> Fit to width</label>'
+        f'<span class="dag-legend">{legend}</span></div>'
+        f'<div class="dag-scroll">{frames}</div>'
+        '<div class="dag-info" id="dag-info" aria-live="polite">Select a declaration to see what '
+        'it depends on and what depends on it.</div>'
+        '<figcaption>Read from left to right: a declaration depends on those to its left. A '
+        'solid line means that a statement or the body of a definition mentions the other '
+        'declaration, a dashed line that only a proof does. A line is left out when a longer '
+        'path already implies it, and lines from the three libraries appear only for the '
+        'selected declaration.</figcaption></figure>'
+        f'<script type="application/json" id="dag-data">{json.dumps(data, separators=(",", ":"))}'
+        '</script>'
+        '<h3 id="dag-trusted">The trusted declarations and the statements that depend on them</h3>'
+        '<p>A dot means that the statement of the column cannot be read without the declaration '
+        'of the row. Every statement also depends on the generated definitions it mentions and '
+        'on the libraries.</p>'
+        f'<div class="table matrix"><table><thead><tr><th scope="col">Trusted declaration</th>'
+        f'<th scope="col">Kind</th>{head}</tr></thead><tbody>{matrix}</tbody></table></div>'
+        f'<details id="dag-all"><summary>All {len(nodes)} declarations</summary>'
+        '<div class="table"><table><thead><tr><th scope="col">Declaration</th>'
+        '<th scope="col">Kind</th><th scope="col">Trust type</th>'
+        '<th scope="col">Cited statements that depend on what it says</th></tr></thead>'
+        f'<tbody id="dag-rows">{rows}</tbody></table></div></details>')
+    return f'<div id="dag" data-digest="{digest(inner)}">{inner}</div>'
+
+
+def lean_dag():
+    """What Lean prints for `Dag.lean` against the current build of the proofs."""
+    result = subprocess.run(['lake', 'env', 'lean', str(DAG_LEAN)], cwd=LEAN, capture_output=True,
+                            text=True)
+    require(result.returncode == 0, 'Dag.lean failed; run verification/check.sh first:\n'
+            + (result.stdout + result.stderr)[-2000:])
+    return result.stdout
+
+
 # Checks that no panel shows.
 
 
@@ -491,6 +610,8 @@ def build():
     require(page.count('<!-- index -->') == 1, 'the guide needs one index placeholder')
     index, count = render_index(table['index']['prefixes'])
     page = page.replace('<!-- index -->', index).replace('<!-- index-count -->', str(count))
+    require(page.count('<!-- dag -->') == 1, 'the guide needs one graph placeholder')
+    page = page.replace('<!-- dag -->', render_dag(table['claim']))
     require('<!-- ' not in page.replace('<!-- generated', ''), 'an unknown placeholder is left')
     note = ('<!-- generated by verification/audit/build.py from audit/guide.html and '
             'audit/pairs.toml; edit those, not this file -->\n')
@@ -501,12 +622,32 @@ def digests(page):
     return dict(re.findall(r'(?:id="([\w-]+)"|class="table index") data-digest="(\w+)"', page))
 
 
+def refresh_dag(check):
+    """Store what Lean prints for the declaration graph, or fail if the stored copy is stale."""
+    printed = lean_dag()
+    if not check:
+        changed = not DAG.is_file() or DAG.read_text() != printed
+        DAG.write_text(printed)
+        print(f'{"Wrote" if changed else "Unchanged:"} {DAG.relative_to(ROOT)}.')
+    elif not DAG.is_file() or DAG.read_text() != printed:
+        sys.exit(f'audit guide: {DAG.name} is out of date; run {sys.argv[0]} --dag, then '
+                 f'{sys.argv[0]}')
+    else:
+        print(f'{DAG.name} matches the Lean build.')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--check', action='store_true',
                         help='exit 1 if the committed page differs instead of writing it')
+    parser.add_argument('--dag', action='store_true',
+                        help='refresh dag.json from Lean, or check it with --check, and stop')
     args = parser.parse_args()
     try:
+        if args.dag:
+            refresh_dag(args.check)
+            if args.check:
+                return
         page = build()
     except Mismatch as error:
         sys.exit(f'audit guide: {error}')

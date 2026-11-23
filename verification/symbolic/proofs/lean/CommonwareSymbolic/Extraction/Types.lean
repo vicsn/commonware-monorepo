@@ -125,11 +125,6 @@ structure bls.Certified where
 structure client.Messages (Self : Type _) (Self_Message : Type _) where
   parse : Self → Self_Message → RustM (core.option.Option (Slice Std.U8))
 
-/-- [commonware_symbolic::leaf::Acceptance]
-    Source: 'src/leaf.rs', lines 16:0-19:1 -/
-structure leaf.Acceptance where
-  item : Slice Std.U8
-
 /-- [commonware_symbolic::qmdb::Mmr]
     Source: 'src/qmdb.rs', lines 25:0-25:36 -/
 @[reducible]

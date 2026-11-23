@@ -8,6 +8,31 @@ No finding is a flaw in a proof. Every theorem is checked by Lean and says what 
 says. The findings are about what the statements cover, how the report words them, and the
 evidence behind the links that no proof covers.
 
+## Since the first pass
+
+On 2026-11-22 the collision argument and the leaf target were removed. In every statement the hash
+is now DyLean's hash constructor, as ProVerif and Tamarin treat a hash by default, so uniqueness
+of accepted openings follows from equality of terms. `Hashing.lean`, the collision finder, the
+byte-level theorems and the hashes that collided on purpose are gone. `SecurityTheorems.lean`
+holds two statements, and no theorem is stated twice. After that change and the naming of
+the height bound on 2026-11-23, the audited namespaces hold 98 theorems, down from 131.
+
+| # | What the change does to the finding |
+| --- | --- |
+| F1 | Stands. |
+| F2 | Reworded. The Lean comments, the report and the READMEs say "the extracted verifier" and name the trusted height, and the theorems lost the `production_` prefix. That this verifier is not production's stands. |
+| F3 | Stands. Probes `L8` and `L9` still survive. |
+| F4 | Stands. |
+| F5 | No longer applies: no statement reads production's byte hashing. In its place the hash is assumed ideal, assumption A4 of the guide. That assumes more than F5 described. Nothing now reduces a broken opening to a collision, and facts about bytes are outside the model. `probe_root_is_a_leaf_input` shows one: for all seven trees it builds, the root equals the leaf digest at position 0 of a 34-byte item. |
+| F6 | The README sentence is corrected. The second encoding stands. |
+| F7, F8, F9 | Stand. |
+| F10 | Fixed: the header is rewritten. |
+
+The probes in [probes.toml](probes.toml) follow the current tree: `L1` to `L3` mutate `dyTerms`,
+and `L8` adapts to the simpler client. `Closure.lean` gave way to [Dag.lean](Dag.lean), which
+the guide draws as its declaration graph. The record below is otherwise as written on 2026-11-21
+and describes revision `2d9ac6d2d`.
+
 ## Summary
 
 | # | Finding | Kind | Link | Status |
@@ -33,7 +58,7 @@ is checked thinly), **process**, **note**.
 ```bash
 bash verification/check.sh                       # passes; 6 minutes on a warm machine
 python3 verification/audit/probes.py             # 30 mutations, 5 minutes; all "as recorded"
-(cd verification/lean && lake env lean ../audit/probes/Closure.lean)
+python3 verification/audit/build.py --dag --check # the declaration graph is what Lean prints
 cat verification/audit/probes/differential.rs >> verification/symbolic/src/qmdb/tests.rs
 (cd verification/symbolic && cargo test --offline -- --nocapture probe)
 git checkout verification/symbolic/src/qmdb/tests.rs

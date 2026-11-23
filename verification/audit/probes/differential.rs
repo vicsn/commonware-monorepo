@@ -1,6 +1,7 @@
-// Differential probes of the first audit pass. They vary what `qmdb/tests.rs` never varies: the
-// bagging policy, tree sizes that are not a power of two, the proof's own fields and the height
-// that the client trusts. They print counts and assert nothing. Run them from the repository root:
+// Differential probes of the audit. They vary what `qmdb/tests.rs` never varies: the bagging
+// policy, tree sizes that are not a power of two, the proof's own fields and the height that the
+// client trusts. The last one shows a fact about bytes that the ideal hash cannot express. They
+// print counts and assert nothing. Run them from the repository root:
 //
 //     cat verification/audit/probes/differential.rs >> verification/symbolic/src/qmdb/tests.rs
 //     (cd verification/symbolic && cargo test --offline -- --nocapture probe)
@@ -149,4 +150,32 @@ fn probe_wrong_height() {
         }
     }
     println!("PROBE wrong height: {tried} honest openings at another height, client accepts {accepted}");
+}
+
+/// What the ideal hash cannot express: in bytes, the root input of a small forward-fold tree is
+/// also the leaf input at position 0 of a 34-byte item.
+#[test]
+fn probe_root_is_a_leaf_input() {
+    use commonware_storage::merkle::{hasher::Hasher as _, mmr::Position};
+    let hasher = Production::new(Bagging::ForwardFold);
+    let mut rng = test_rng();
+    let (mut trees, mut same) = (0, 0);
+    for height in 0..=6u32 {
+        let leaves = 1u64 << height;
+        let items = random_items(&mut rng, leaves);
+        let mmr = build(&hasher, &items);
+        let root = mmr.root(&hasher, 0).unwrap();
+        // The peak of a tree with one peak is its last node.
+        let peak = mmr.get_node(Position::new(2 * leaves - 2)).unwrap();
+        let mut item = leaves.to_be_bytes()[6..].to_vec();
+        item.extend_from_slice(peak.as_ref());
+        trees += 1;
+        if hasher.leaf_digest(Position::new(0), &item) == root {
+            same += 1;
+        }
+    }
+    println!(
+        "PROBE root as leaf input: {same} of {trees} roots equal the leaf digest at position 0 \
+         of a 34-byte item"
+    );
 }

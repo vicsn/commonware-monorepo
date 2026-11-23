@@ -1,5 +1,5 @@
 module
-public import Commonware.Symbolic.Hashing
+public import CommonwareSymbolic.Extraction
 public import DY.EquationalTheory.Hash
 public import DY.EquationalTheory.Concat
 public import DY.EquationalTheory.Literal
@@ -8,11 +8,11 @@ public import DY.EquationalTheory.Literal
 concatenation and hashing. Each target fixes its algebra with `#combine`; this reading applies to
 every algebra that has these three constructors.
 
-Trusted: `hashing` reads production hash inputs as terms (byte parts as literals, parts
-concatenated to the right) under any hash on terms, `symbolic` is that reading with DyLean's hash
-constructor, and `messages` reads the item of a received message as the bytes of a literal.
-Checked: the lemmas, which show that the reading keeps byte parts and concatenations apart and
-that DyLean's hash has no collisions. -/
+Trusted: `dyTerms` reads production hashing as DyLean's hash constructor over the parts of a hash
+input (byte parts as literals, parts concatenated to the right) and compares digests as terms,
+and `messages` reads the item of a received message as the bytes of a literal. The hash is a
+constructor, so two digests are equal only if their inputs are equal terms. Checked: the lemmas,
+which show that the reading keeps byte parts and concatenations apart. -/
 
 namespace Commonware.Symbolic
 open DY Aeneas Aeneas.Std CoreModels commonware_symbolic
@@ -99,27 +99,20 @@ def chain : List (terms.Part Bytes) → Bytes
   | [p] => part p
   | p :: rest => Concat.concat (part p) (chain rest)
 
-/-- Hashing with `hash` over the concatenated parts. `hash` is any function on terms, so it may
-collide. -/
-def hashing (hash : Bytes → Bytes) : Scheme Bytes Bytes where
-  hash := hash
-  encode := chain
-
-/-- Symbolic hashing: DyLean's hash constructor over the concatenated parts. -/
-def symbolic : Scheme Bytes Bytes := hashing Hash.hash
-
-/-- The production hash inputs as DyLean terms. -/
-abbrev dyTerms : terms.Terms Unit Bytes := symbolic.terms
+/-- The extracted `Terms` on DyLean terms: a digest is DyLean's hash constructor over the
+concatenated parts of the hash input, copying a digest returns it, and digests are compared as
+terms. -/
+def dyTerms : terms.Terms Unit Bytes where
+  coremarkerCopyInst := ⟨⟨RustM.ok, fun _ x => RustM.ok x⟩⟩
+  corecmpPartialEqInst :=
+    { eq := fun a b => RustM.ok (decide (a = b)), ne := fun a b => RustM.ok (!decide (a = b)) }
+  hash _ parts := RustM.ok (Hash.hash (chain parts.val))
 
 omit [BytesFunctor.Has Literal.SubF] [BytesFunctor.Has Hash.SubF] in
 theorem concat_inj {a b c d : Bytes} (h : Concat.concat a b = Concat.concat c d) :
     a = c ∧ b = d := by
   simp only [Concat.concat] at h
   grind
-
-/-- DyLean's hash constructor has no collisions. -/
-theorem no_collision (x y : Bytes) : ¬ symbolic.Collision x y :=
-  fun clash => clash.1 (Hash.hash_inj _ _ clash.2)
 
 end
 end Commonware.Symbolic

@@ -1,6 +1,6 @@
-# Probes of the first audit pass, run by probes.py. Each edits a mirror of the repository, extracts
-# the crate again and builds the proofs. `expect` records what happened on the first pass:
-# "survives", or the proof modules that stopped building. FINDINGS.md says what each result means.
+# Probes of the audit, run by probes.py. Each edits a mirror of the repository, extracts the crate
+# again and builds the proofs. `expect` records what happened: "survives", or the proof modules
+# that stopped building. FINDINGS.md says what each result means.
 #
 # An edit is { file, original, mutated } or { file, before, append }; `edits` lists several.
 
@@ -115,23 +115,23 @@ expect = ["Qmdb.Symbolic"]
 
 [[probe]]
 name = "L1 digest equality always true"
-file = "verification/lean/Commonware/Symbolic/Hashing.lean"
+file = "verification/lean/Commonware/Symbolic/Terms.lean"
 original = "{ eq := fun a b => RustM.ok (decide (a = b)), ne := fun a b => RustM.ok (!decide (a = b)) }"
 mutated = "{ eq := fun _ _ => RustM.ok true, ne := fun _ _ => RustM.ok false }"
-expect = ["Leaf.Step", "Qmdb.Verifier"]
+expect = ["Qmdb.Verifier"]
 
 [[probe]]
 name = "L2 symbolic concatenation keeps only the last part"
 file = "verification/lean/Commonware/Symbolic/Terms.lean"
 original = "  | p :: rest => Concat.concat (part p) (chain rest)"
 mutated = "  | _ :: rest => chain rest"
-expect = ["Leaf.Step", "Qmdb.Symbolic"]
+expect = ["Qmdb.Verifier"]
 
 [[probe]]
-name = "L3 byte reading drops digests"
-file = "verification/lean/Commonware/Symbolic/Hashing.lean"
-original = "    | .Digest d => B.bytes d"
-mutated = "    | .Digest _ => []"
+name = "L3 hash ignores its input"
+file = "verification/lean/Commonware/Symbolic/Terms.lean"
+original = "  hash _ parts := RustM.ok (Hash.hash (chain parts.val))"
+mutated = "  hash _ _ := RustM.ok (Hash.hash (chain []))"
 expect = ["Qmdb.Verifier"]
 
 [[probe]]
@@ -144,8 +144,8 @@ expect = ["Commonware.Symbolic.Terms"]
 [[probe]]
 name = "L5 client checks against the received message instead of the trusted root"
 file = "verification/lean/Qmdb/Protocol.lean"
-original = "      Snapshot.root Snapshot.height message loc ws"
-mutated = "      message Snapshot.height message loc ws"
+original = "    Snapshot.root Snapshot.height message loc ws) handle"
+mutated = "    message Snapshot.height message loc ws) handle"
 expect = ["Qmdb.Protocol"]
 
 [[probe]]
@@ -166,8 +166,8 @@ expect = ["Qmdb.SanityChecks"]
 [[probe]]
 name = "L8 client never logs"
 edits = [
-  { file = "verification/lean/Qmdb/Protocol.lean", original = "      | some acceptance => some (Opened.mk acceptance ws)\n      | none => none)) handle", mutated = "      | some _ => (none : Option Opened)\n      | none => none)) handle" },
-  { file = "verification/lean/Qmdb/Protocol.lean", original = "    | some acceptance =>\n      have same := ok_inj wrapped\n      simp at same\n      subst same\n      exact Symbolic.client_step_sound message loc ws acceptance step", mutated = "    | some acceptance => simpa using ok_inj wrapped" },
+  { file = "verification/lean/Qmdb/Protocol.lean", original = "  receive (fun message => commonware_symbolic.qmdb.client_step dyTerms messages ()\n    Snapshot.root Snapshot.height message loc ws) handle", mutated = "  receive (fun message => do\n    let _ ← commonware_symbolic.qmdb.client_step dyTerms messages ()\n      Snapshot.root Snapshot.height message loc ws\n    RustM.ok (none : Option Acceptance)) handle" },
+  { file = "verification/lean/Qmdb/Protocol.lean", original = "  receive_preserves _ handle fun message event accepted _ =>\n    Symbolic.client_step_sound message loc ws event accepted", mutated = "  receive_preserves _ handle fun message event accepted _ => by\n    obtain ⟨_, _, wrapped⟩ := bind_eq_ok accepted\n    simpa using ok_inj wrapped" },
 ]
 expect = "survives"
 
@@ -193,10 +193,10 @@ message = "Qmdb.planted_sorry: [sorryAx]"
 [[probe]]
 name = "A2 sorry deep in a lemma that the theorems use"
 file = "verification/lean/Qmdb/Verifier.lean"
-original = "    terms.leaf_digest S.terms u p item = RustM.ok (S.hash (leafInput S p item)) := by\n  simp [terms.leaf_digest, to_be_bytes_ok, core.array.Array.as_slice,\n    rust_primitives.slice.array_as_slice, Scheme.terms, leafInput, be]"
-mutated = "    terms.leaf_digest S.terms u p item = RustM.ok (S.hash (leafInput S p item)) := by\n  sorry"
+original = "    terms.leaf_digest dyTerms u p item = RustM.ok (leafTerm p item) := by\n  simp [terms.leaf_digest, to_be_bytes_ok, core.array.Array.as_slice,\n    rust_primitives.slice.array_as_slice, dyTerms, leafTerm, be]"
+mutated = "    terms.leaf_digest dyTerms u p item = RustM.ok (leafTerm p item) := by\n  sorry"
 expect = ["Qmdb.Audit"]
-message = "Qmdb.production_unique_or_collision: [sorryAx]"
+message = "Qmdb.client_authentication: [sorryAx]"
 
 [[probe]]
 name = "A3 axiom declared in the audited namespace"

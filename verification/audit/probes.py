@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the probes of the first audit pass: mutations whose effect on the proofs is recorded.
+"""Run the probes of the audit: mutations whose effect on the proofs is recorded.
 
 Usage: python3 probes.py [TABLE.toml] [NAME-PREFIX ...]
 
@@ -8,7 +8,7 @@ each probe builds in its own mirror of the repository under verification/.lake/p
 checkout is never edited. Unlike mutate.py, a probe may be expected to survive: `expect` is
 "survives" or the list of proof modules that must stop building, and `message` is text that the
 build output must then contain. A probe that edits Lean only is extracted again all the same, so
-every probe runs the whole route. The build covers the Commonware, Leaf and Qmdb libraries.
+every probe runs the whole route. The build covers the Commonware and Qmdb libraries.
 """
 
 import re
@@ -23,7 +23,7 @@ sys.path.insert(0, str(HERE.parent))
 sys.dont_write_bytecode = True
 import mutate  # noqa: E402
 
-TARGETS = ['Commonware', 'Leaf', 'Qmdb']
+TARGETS = ['Commonware', 'Qmdb']
 BASE = mutate.here / '.lake' / 'probes'
 
 

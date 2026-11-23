@@ -6,13 +6,13 @@
 <meta name="description" content="A step plan for auditing the Hax → DyLean proof of Merkle inclusion, with the code that must agree shown side by side.">
 <title>Merkle Proof Audit Guide</title>
 <style>
-:root{color-scheme:light;--ink:#172a2a;--muted:#526560;--green:#175f4c;--line:#d5ded5;--paper:#f5f4ed;--surface:#fffefa;--tint:#e6eee4;--warn:#a47727;--wire:#778783;--cursor:#98501e;--edge:#82958c;--hit:#d8eee1;--hit-edge:#32755a;--given:#fbedd7;--given-edge:#ad8045;--neutral:#eef0ea;--trusted:#e4ebf3;--trusted-edge:#5b7895;--arrow:#46675b}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--ink:#e2ebe7;--muted:#9bada7;--green:#74d1b0;--line:#2c3b38;--paper:#0f1615;--surface:#172120;--tint:#1d2d29;--warn:#d4a24a;--wire:#82948f;--cursor:#e29c66;--edge:#70847c;--hit:#1c4334;--hit-edge:#5cb391;--given:#4a3719;--given-edge:#c99c5a;--neutral:#1f2927;--trusted:#1b2a3a;--trusted-edge:#7fa1c4;--arrow:#8fb5a6}}
-:root[data-theme="dark"]{color-scheme:dark;--ink:#e2ebe7;--muted:#9bada7;--green:#74d1b0;--line:#2c3b38;--paper:#0f1615;--surface:#172120;--tint:#1d2d29;--warn:#d4a24a;--wire:#82948f;--cursor:#e29c66;--edge:#70847c;--hit:#1c4334;--hit-edge:#5cb391;--given:#4a3719;--given-edge:#c99c5a;--neutral:#1f2927;--trusted:#1b2a3a;--trusted-edge:#7fa1c4;--arrow:#8fb5a6}
+:root{color-scheme:light;--ink:#172a2a;--muted:#526560;--green:#175f4c;--line:#d5ded5;--paper:#f5f4ed;--surface:#fffefa;--tint:#e6eee4;--warn:#a47727;--wire:#778783;--cursor:#98501e;--edge:#82958c;--hit:#d8eee1;--hit-edge:#32755a;--given:#fbedd7;--given-edge:#ad8045;--neutral:#eef0ea;--trusted:#e4ebf3;--trusted-edge:#5b7895;--arrow:#46675b;--stmt:#f1dcec;--stmt-edge:#8a3f7c}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--ink:#e2ebe7;--muted:#9bada7;--green:#74d1b0;--line:#2c3b38;--paper:#0f1615;--surface:#172120;--tint:#1d2d29;--warn:#d4a24a;--wire:#82948f;--cursor:#e29c66;--edge:#70847c;--hit:#1c4334;--hit-edge:#5cb391;--given:#4a3719;--given-edge:#c99c5a;--neutral:#1f2927;--trusted:#1b2a3a;--trusted-edge:#7fa1c4;--arrow:#8fb5a6;--stmt:#3b2337;--stmt-edge:#d39bc8}}
+:root[data-theme="dark"]{color-scheme:dark;--ink:#e2ebe7;--muted:#9bada7;--green:#74d1b0;--line:#2c3b38;--paper:#0f1615;--surface:#172120;--tint:#1d2d29;--warn:#d4a24a;--wire:#82948f;--cursor:#e29c66;--edge:#70847c;--hit:#1c4334;--hit-edge:#5cb391;--given:#4a3719;--given-edge:#c99c5a;--neutral:#1f2927;--trusted:#1b2a3a;--trusted-edge:#7fa1c4;--arrow:#8fb5a6;--stmt:#3b2337;--stmt-edge:#d39bc8}
 *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.6 system-ui,sans-serif}main{max-width:1320px;margin:auto;padding-block:40px 70px;padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(24px,env(safe-area-inset-right,0px))}nav{font-size:16px}nav{margin-top:22px}nav ul{padding-left:22px;margin:8px 0 0;columns:2;column-gap:40px;max-width:900px}nav li{margin:0;padding:3px 0;break-inside:avoid}a{color:var(--green);text-underline-offset:3px}h1{font-size:clamp(32px,5vw,50px);line-height:1.1;letter-spacing:-.04em;margin-bottom:14px}h2{margin-top:52px;font-size:25px;letter-spacing:-.02em}h3{font-size:18px;margin-top:28px}p{margin:12px 0}.lede{font-size:20px}main>p,section>p,section>ul,section>ol,main>ul,.callout{max-width:900px}.muted,small{color:var(--muted)}code{font-size:.85em;overflow-wrap:anywhere}section{scroll-margin-top:20px}.table{overflow:auto;margin:14px 0}table{border-collapse:collapse;width:100%;background:var(--surface);font-size:14px}th,td{border:1px solid var(--line);padding:11px 13px;text-align:left;vertical-align:top}thead{background:var(--tint)}td p:first-child{margin-top:0}td p:last-child{margin-bottom:0}.callout{border-left:3px solid var(--green);padding:10px 20px;background:var(--tint)}.callout.out{border-left-color:var(--warn)}summary{cursor:pointer;color:var(--green)}details{margin:12px 0}li{margin:6px 0}footer{margin-top:40px;border-top:1px solid var(--line);padding-top:16px;font-size:13px}body [hidden]{display:none!important}
 .narrow{max-width:900px}.narrow td:first-child{width:30%}
 .chip{display:inline-block;font-size:12px;font-weight:600;line-height:1.5;padding:0 9px;border-radius:999px;border:1px solid;white-space:nowrap}
-.chip.proved{background:var(--hit);border-color:var(--hit-edge)}.chip.tested{background:var(--given);border-color:var(--given-edge)}.chip.trusted{background:var(--trusted);border-color:var(--trusted-edge)}.chip.assumed{background:var(--neutral);border-color:var(--edge);border-style:dashed}.chip.none{background:var(--surface);border-color:var(--cursor);color:var(--cursor)}.chip.shared{background:var(--surface);border-color:var(--edge)}
+.chip.proved{background:var(--hit);border-color:var(--hit-edge)}.chip.tested{background:var(--given);border-color:var(--given-edge)}.chip.trusted{background:var(--trusted);border-color:var(--trusted-edge)}.chip.assumed{background:var(--neutral);border-color:var(--edge);border-style:dashed}.chip.none{background:var(--surface);border-color:var(--cursor);color:var(--cursor)}.chip.shared{background:var(--surface);border-color:var(--edge)}.chip.statement{background:var(--stmt);border-color:var(--stmt-edge)}.chip.generated{background:var(--surface);border-color:var(--edge);border-style:dashed}.chip.checked{background:var(--hit);border-color:var(--hit-edge)}
 .chain{margin:20px 0 6px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px}.chain-scroll{overflow-x:auto}.chain svg{display:block;width:100%;min-width:1000px;height:auto;color:var(--arrow)}.chain figcaption{font-size:14px;color:var(--muted);margin-top:8px}
 .chain text{font:13px system-ui,sans-serif;fill:var(--ink)}.chain .name{font-weight:650}.chain .sub{font-size:12px;fill:var(--muted)}.chain .id{font-weight:700}.chain .how{font-size:11.5px;fill:var(--muted)}
 .chain .rust{fill:var(--given);stroke:var(--given-edge)}.chain .generated{fill:var(--surface);stroke:var(--edge);stroke-dasharray:5 3}.chain .trusted{fill:var(--trusted);stroke:var(--trusted-edge)}.chain .checked{fill:var(--hit);stroke:var(--hit-edge)}.chain .plain{fill:var(--neutral);stroke:var(--edge)}
@@ -26,6 +26,14 @@
 .reading{margin:0;padding-left:20px;font-size:14.5px}.pair-link{font-size:14.5px;margin:12px 0 0;max-width:1000px}.pair-notes{font-size:14px;margin:6px 0 0;padding-left:20px;max-width:1000px}
 .claims table{table-layout:fixed;min-width:1040px}.claims th:nth-child(1){width:22%}.claims th:nth-child(2){width:45%}.claims th:nth-child(3){width:22%}.claims th:nth-child(4){width:11%}.claims td.claim{font-size:14.5px}.claims .snip+.snip{margin-top:8px}
 select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--ink);max-width:100%}input[type="text"]{width:100%}
+.dag{margin:18px 0;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;min-width:0}.dag-bar{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;font-size:14px;margin-bottom:10px}.dag-bar label{display:flex;gap:6px;align-items:center}.dag-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-left:auto}
+.dag-scroll{overflow:auto;max-height:80vh;border:1px solid var(--line);border-radius:6px;background:var(--paper)}.dag-frame svg{display:block;max-width:none}.dag.fit .dag-frame svg{width:100%;height:auto}
+.dag text{font:10.5px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;fill:var(--ink);pointer-events:none}.dag .n{cursor:pointer}.dag .n rect{stroke-width:1}
+.dag .n.statement rect{fill:var(--stmt);stroke:var(--stmt-edge);stroke-width:2}.dag .n.trusted rect{fill:var(--trusted);stroke:var(--trusted-edge)}.dag .n.generated rect{fill:var(--surface);stroke:var(--edge);stroke-dasharray:4 2}.dag .n.checked rect{fill:var(--hit);stroke:var(--hit-edge)}.dag .n.assumed rect{fill:var(--neutral);stroke:var(--edge)}
+.dag .e{fill:none;stroke:var(--wire);stroke-width:1;opacity:.55}.dag .e.uses{stroke-dasharray:3 3;opacity:.32}.dag .e.lib{display:none}
+.dag svg.sel .n:not(.on){opacity:.15}.dag svg.sel .e:not(.on){opacity:.04}.dag svg.sel .e.on{display:inline;opacity:.95;stroke-width:1.5}.dag svg.sel .e.on.says{stroke:var(--ink)}.dag .n.cur rect{stroke:var(--ink);stroke-width:3;stroke-dasharray:none}
+.dag-info{font-size:14px;margin-top:10px;padding:10px 12px;background:var(--tint);border-radius:6px;min-height:44px;overflow-wrap:anywhere}.dag-info p{margin:4px 0}.dag-info button{font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;margin:2px 4px 2px 0;padding:1px 7px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--ink);cursor:pointer}.dag figcaption{font-size:14px;color:var(--muted);margin-top:8px}
+.matrix table{min-width:900px}.matrix td{text-align:center}.matrix td:nth-child(2){text-align:left}.matrix td.dot{color:var(--trusted-edge)}.matrix th[scope="row"]{font-weight:400}.matrix th[scope="col"]{font-weight:600}.matrix th code{overflow-wrap:normal}#dag-rows tr{cursor:pointer}
 .kit td:first-child{width:40%}.kit td:nth-child(2){width:34%}.kit code{white-space:pre-wrap}
 @media(max-width:900px){.pair-grid{grid-template-columns:1fr}nav ul{columns:1}}
 @media(max-width:650px){main{padding-block:24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}th,td{padding:9px}.table table{min-width:660px}.step{grid-template-columns:1fr;gap:2px}.step dd{margin-bottom:8px}}
@@ -41,7 +49,8 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <nav aria-label="Table of contents"><b>Contents</b><ul>
 <li><a href="#scope">Scope and assumptions</a></li>
 <li><a href="#chain">The trust chain</a></li>
-<li><a href="#step-0">Step 0 · Primer and warm-up</a></li>
+<li><a href="#graph">Every Lean declaration, by trust type</a></li>
+<li><a href="#step-0">Step 0 · Primer</a></li>
 <li><a href="#step-1">Step 1 · What is claimed</a></li>
 <li><a href="#step-2">Step 2 · Production code and the refactor</a></li>
 <li><a href="#step-3">Step 3 · The verification-only client</a></li>
@@ -56,7 +65,7 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 
 <section id="scope">
 <h2>Scope and assumptions</h2>
-<p>In scope: the Merkle target of the Hax → DyLean experiment. That is the production files it shares with the proof, the verification-only client, the handwritten Lean that states what the Rust means, the application assumption, the protocol model, the theorem statements and the checks that a machine runs. The leaf target is used as a warm-up. The BLS target is out of scope; it shares steps 4 to 7.</p>
+<p>In scope: the Merkle target of the Hax → DyLean experiment. That is the production files it shares with the proof, the verification-only client, the handwritten Lean that states what the Rust means, the application assumption, the protocol model, the theorem statements and the checks that a machine runs. The BLS target is out of scope; it shares steps 4 to 7.</p>
 <p>Four things are assumed and not audited. For each, the audit still checks how the proof depends on it.</p>
 <div class="table"><table>
 <thead><tr><th scope="col">#</th><th scope="col">Assumed, not audited</th><th scope="col">What the audit still checks</th><th scope="col">Step</th></tr></thead>
@@ -64,7 +73,7 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <tr><th scope="row">A1</th><td>hax, Charon and Aeneas translate the Rust faithfully. Their models of the Rust core library match Rust: integer overflow, a shift that is too large and an index out of bounds are failures.</td><td>The tool pins and where the binaries come from. Regenerating the Lean is byte-identical. <code>Assumptions/FunsExternal.lean</code> declares nothing.</td><td>4, 7</td></tr>
 <tr><th scope="row">A2</th><td>Lean’s kernel and its three standard axioms (<code>propext</code>, <code>Classical.choice</code>, <code>Quot.sound</code>).</td><td>The axiom audit covers every theorem, and it fails when an escape hatch is planted.</td><td>7</td></tr>
 <tr><th scope="row">A3</th><td>DyLean’s core: traces, what the attacker knows, reachability and its tactics.</td><td>Its pin, the patch applied to it, the three <code>#combine</code> blocks that define what statements mean, and the two actions <code>accept</code> and <code>receive</code>.</td><td>6</td></tr>
-<tr><th scope="row">A4</th><td>The hash function itself.</td><td>Nothing. The byte-level theorems hold for any hash and return an explicit collision, so no property of the hash is used.</td><td>1</td></tr>
+<tr><th scope="row">A4</th><td>The hash is ideal. A digest is DyLean’s hash constructor applied to its input, as ProVerif and Tamarin treat a hash by default: two digests are equal only when their inputs are the same term, and concatenation keeps the boundary between parts.</td><td>What the reading of the hash says, against what production hashes. What the ideal hash cannot express is written down.</td><td>5</td></tr>
 </tbody></table></div>
 </section>
 
@@ -108,15 +117,28 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <p><b>Order.</b> Start step 7 first and let it run: it builds the toolchain and takes the longest. Then work through steps 0 to 6 in order. Steps 3, 5 and 6 are where a person’s judgement matters most. The times are rough and add up to about a day.</p>
 </section>
 
+<section id="graph">
+<h2>Every Lean declaration, by trust type</h2>
+<p>The trust chain says which links hold. This graph says which Lean a person has to read. It holds every Lean declaration of the Merkle target: the handwritten definitions and theorems, the generated definitions they reach, and the three libraries under both. Lean prints the graph, and the trust type of each declaration follows from it.</p>
+<ul>
+<li><span class="chip statement">cited statement</span> A theorem that the report cites. Its statement is a reading that step 1 checks. Lean checks its proof.</li>
+<li><span class="chip trusted">trusted</span> Handwritten, and a cited statement depends on what it says. Steps 5 and 6 read these.</li>
+<li><span class="chip generated">generated</span> Produced from Rust by hax. Assumed faithful (A1); step 4 looks at four of them.</li>
+<li><span class="chip assumed">assumed library</span> DyLean (A3), the Aeneas library and hax’s core models (A1).</li>
+<li><span class="chip checked">checked</span> A lemma, or a definition that only proofs use. Lean checks it, and it is not to be read.</li>
+</ul>
+<p>The rule behind the colours: start from a cited statement and follow what its statement mentions, then what the bodies of those definitions mention, and so on. Never enter a proof. Whatever is reached is what the statement says. A mistake in a checked declaration can make the build fail. It cannot change what a cited statement says.</p>
+<!-- dag -->
+</section>
+
 <section id="step-0">
-<h2>Step 0 · Primer and warm-up</h2>
+<h2>Step 0 · Primer</h2>
 <dl class="step">
-<dt>Read</dt><dd>The primer panel below. Then the leaf target from end to end: <a class="src" href="symbolic/src/leaf.rs" title="Open in VS Code">leaf.rs</a> (41 lines), its extraction and the statement of its trace theorem.</dd>
-<dt>Pass when</dt><dd>You can restate the leaf theorem in one sentence and name the parts of its route that nothing checks.</dd>
-<dt>Links</dt><dd>None. This calibrates your reading of steps 1 to 6.</dd>
-<dt>Time</dt><dd>30 minutes.</dd>
+<dt>Read</dt><dd>The panel and the table below.</dd>
+<dt>Pass when</dt><dd>You can say in one sentence what the statement in the panel assumes and what it concludes.</dd>
+<dt>Links</dt><dd>None. This prepares steps 1 to 6.</dd>
+<dt>Time</dt><dd>15 minutes.</dd>
 </dl>
-<p>The leaf target proves a deliberately small property through the same route as Merkle: a client holds a trusted digest of one item and accepts only that item. Reading it first shows every kind of artefact once.</p>
 <!-- panel: primer -->
 <div class="table narrow"><table>
 <thead><tr><th scope="col">Lean</th><th scope="col">Meaning</th></tr></thead>
@@ -129,35 +151,21 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <tr><td><code>Bytes</code></td><td>A DyLean term: a literal, a concatenation or a hash. It is not a byte string.</td></tr>
 <tr><td><code>theorem</code>, <code>def</code>, <code>class</code>, <code>structure</code></td><td>A checked fact; a definition; a bundle of assumed inputs; a record.</td></tr>
 </tbody></table></div>
-<!-- panel: leaf-step -->
-<!-- panel: leaf-claim -->
-<p>The trusted parts of the leaf route are the Rust step, the <code>Commitment</code> class, the two readings in step 5 (what a hash is and what a message is), the DyLean client and the theorem statement. Lean checks the rest. The Merkle route has the same parts, each larger.</p>
 </section>
 
 <section id="step-1">
 <h2>Step 1 · What is claimed</h2>
 <dl class="step">
-<dt>Read</dt><dd>The table below. Then the seven statements of <a class="src" href="lean/Qmdb/SecurityTheorems.lean" title="Open in VS Code">SecurityTheorems.lean</a> (83 lines) and the finder panel. Statements only.</dd>
-<dt>Pass when</dt><dd><ul><li>Each sentence of the report says no more than the statement beside it.</li><li>Every hypothesis of a statement appears in the sentence, or its absence is written down.</li><li>The finder is an explicit function of the two openings and the hash, and it is short.</li></ul></dd>
+<dt>Read</dt><dd>The table below, then the statements it shows: five in <a class="src" href="lean/Qmdb/Verifier.lean" title="Open in VS Code">Verifier.lean</a> and two in <a class="src" href="lean/Qmdb/SecurityTheorems.lean" title="Open in VS Code">SecurityTheorems.lean</a> (33 lines). Statements only.</dd>
+<dt>Pass when</dt><dd><ul><li>Each sentence of the report says no more than the statement beside it.</li><li>Every hypothesis of a statement appears in the sentence, or its absence is written down.</li><li>You can say what the hash is in each statement and what that leaves out.</li></ul></dd>
 <dt>Links</dt><dd>L7.</dd>
 <dt>Time</dt><dd>1 hour.</dd>
 </dl>
-<p>Three questions to ask of every statement. Which hash does it quantify over: any hash on byte strings, any function on DyLean terms, or DyLean’s injective hash constructor? Which inputs are trusted: the root, and in every statement also the height? What does the client have to be given before the statement applies?</p>
+<p>Three questions to ask of every statement. What is the hash: in every statement it is DyLean’s ideal hash, never a real one. Which inputs are trusted: the root, and in every statement also the height. What does the client have to be given before the statement applies?</p>
 <p>Generated: each sentence is checked to occur in the report, and each statement is read from the Lean source.</p>
 <!-- claims -->
-<!-- panel: finder -->
-<h3>What a statement can depend on</h3>
-<p>A statement means what the definitions it mentions mean. The probe <a class="src" href="audit/probes/Closure.lean" title="Open in VS Code">Closure.lean</a> follows every definition that the cited statements mention, through definitions and never through proofs. The handwritten Lean it reaches is the Lean that a person must read. Every row is shown in a panel of this guide.</p>
-<div class="table"><table>
-<thead><tr><th scope="col">Statements</th><th scope="col">Handwritten definitions they depend on</th><th scope="col">Step</th></tr></thead>
-<tbody>
-<tr><th scope="row">Byte-level binding and uniqueness</th><td><code>Scheme</code>, <code>Scheme.terms</code>, <code>ByteHash</code>, <code>ByteHash.scheme</code>; <code>be</code>, <code>pos</code>, <code>domain</code>, <code>leafInput</code>, <code>nodeInput</code>, <code>rootInput</code>, <code>inputs</code>, <code>openingInputs</code>, <code>finder</code>. Nothing of DyLean.</td><td>1, 4, 5</td></tr>
-<tr><th scope="row">Symbolic binding, uniqueness and honest snapshots</th><td>Also <code>part</code>, <code>chain</code>, <code>hashing</code>, <code>symbolic</code>, <code>toByteArray</code> and the <code>#combine</code> of terms; <code>maxHeight</code> for honest snapshots.</td><td>5, 6</td></tr>
-<tr><th scope="row">Authentication on traces</th><td>Also <code>messages</code>, <code>toSlice</code>; <code>Snapshot</code>; <code>Opened</code>, <code>client</code>, <code>accept</code>, <code>receive</code> and the <code>#combine</code> of trace entries and of reachable steps.</td><td>5, 6</td></tr>
-<tr><th scope="row">Totality and honest openings</th><td>Also <code>maxHeight</code>, <code>tree</code>, <code>path</code>, <code>honestRoot</code>, <code>honestSiblings</code>.</td><td>6</td></tr>
-</tbody></table></div>
-<p>In no statement: the event invariant, the proof-side <code>#combine</code> blocks, <code>Unambiguous</code> and every lemma. A mistake there can make the build fail. It cannot change what a theorem says.</p>
-<p>Four statements that the report cites are not restated in <code>SecurityTheorems.lean</code>: <code>verify_total</code>, <code>honest_opening</code> and <code>extra_sibling_rejected</code> in <a class="src" href="lean/Qmdb/Verifier.lean" title="Open in VS Code">Verifier.lean</a>, and <code>client_step_sound</code> in <a class="src" href="lean/Qmdb/Symbolic.lean" title="Open in VS Code">Symbolic.lean</a>. The table shows the first three; read the fourth as the per-step form of the trace theorem.</p>
+<p>No theorem is stated twice. The properties of the verifier are stated in <code>Verifier.lean</code>, and the two results about the protocol and its assumption in <code>SecurityTheorems.lean</code>. The <a href="#dag-trusted">table of trusted declarations</a> says which definitions each of the seven statements depends on.</p>
+<!-- panel: term-equality -->
 </section>
 
 <section id="step-2">
@@ -221,7 +229,7 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <!-- panel: gen-leaf -->
 <!-- panel: gen-reconstruct -->
 <!-- panel: gen-verify -->
-<p>Lean does not reason about the generated code directly. The proofs first show that each generated encoding function returns the hash of one named input. From there on, statements talk about those inputs.</p>
+<p>Lean does not reason about the generated code directly. The proofs first show that each generated encoding function returns one named term. From there on, statements talk about those terms.</p>
 <!-- panel: spec-inputs -->
 <p>The <a href="#index">index</a> at the end lists every generated Merkle definition with its Rust source.</p>
 </section>
@@ -229,23 +237,22 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <section id="step-5">
 <h2>Step 5 · Trusted readings</h2>
 <dl class="step">
-<dt>Read</dt><dd><a class="src" href="lean/Commonware/Symbolic/Hashing.lean" title="Open in VS Code">Hashing.lean</a> in full (55 lines). In <a class="src" href="lean/Commonware/Symbolic/Terms.lean" title="Open in VS Code">Terms.lean</a> the definitions <code>part</code>, <code>chain</code>, <code>hashing</code>, <code>symbolic</code> and <code>messages</code>.</dd>
-<dt>Pass when</dt><dd>For each panel, the Lean on the right is a fair account of the Rust on the left, or you have written down where it is not and whether a statement depends on it.</dd>
-<dt>Links</dt><dd>L4.</dd>
+<dt>Read</dt><dd>In <a class="src" href="lean/Commonware/Symbolic/Terms.lean" title="Open in VS Code">Terms.lean</a> the definitions <code>part</code>, <code>chain</code>, <code>dyTerms</code>, <code>toByteArray</code>, <code>toSlice</code> and <code>messages</code>.</dd>
+<dt>Pass when</dt><dd><ul><li>For each panel, the Lean on the right is a fair account of the Rust on the left, or you have written down where it is not and whether a statement depends on it.</li><li>You accept the ideal hash for the question you are asking, or you have written down why not.</li></ul></dd>
+<dt>Links</dt><dd>L4, A4.</dd>
 <dt>Time</dt><dd>1 hour.</dd>
 </dl>
-<p>The generated code is generic in the hash. A theorem needs a concrete thing to put in that place, and a person wrote it. The statements of step 1 use two of them: <code>B.scheme.terms</code> for the byte-level theorems and <code>dyTerms</code> or <code>(hashing hash).terms</code> for the trace theorems. If one of these does not describe what production’s hasher does, the theorem is about a hash that production does not have.</p>
+<p>The generated code is generic in the hash. A theorem needs a concrete thing to put in that place, and a person wrote it: <code>dyTerms</code>. Every statement of step 1 uses it. It makes the hash a constructor of terms, the usual choice of symbolic tools. That is the largest assumption of this proof, because it is what turns “the same root” into “the same tree”.</p>
 <!-- panel: read-terms -->
-<!-- panel: read-bytes -->
-<!-- panel: read-symbolic -->
+<!-- panel: read-ideal -->
 <!-- panel: read-messages -->
 </section>
 
 <section id="step-6">
 <h2>Step 6 · Assumption and protocol</h2>
 <dl class="step">
-<dt>Read</dt><dd><a class="src" href="lean/Qmdb/Assumptions.lean" title="Open in VS Code">Assumptions.lean</a> (35 lines). In <a class="src" href="lean/Qmdb/Protocol.lean" title="Open in VS Code">Protocol.lean</a> the definitions <code>Opened</code> and <code>client</code> and the statement of <code>client_authentication</code>. In <a class="src" href="lean/Commonware/Symbolic/Client.lean" title="Open in VS Code">Client.lean</a> the definitions <code>accept</code> and <code>receive</code>. The patch.</dd>
-<dt>Pass when</dt><dd><ul><li>The snapshot is something an application has, and you can say what it does not tie down.</li><li>The attacker chooses the message, the location and the siblings without restriction.</li><li>Nothing in the model lets the client refuse to act where the Rust would act.</li><li>The patch adds no axiom and changes no definition that a statement mentions.</li></ul></dd>
+<dt>Read</dt><dd><a class="src" href="lean/Qmdb/Assumptions.lean" title="Open in VS Code">Assumptions.lean</a> (31 lines). In <a class="src" href="lean/Qmdb/Protocol.lean" title="Open in VS Code">Protocol.lean</a> the definition of <code>client</code>. In <a class="src" href="lean/Commonware/Symbolic/Client.lean" title="Open in VS Code">Client.lean</a> the definitions <code>accept</code> and <code>receive</code>. The patch.</dd>
+<dt>Pass when</dt><dd><ul><li>The snapshot is something an application has, and you can say what it does not tie down.</li><li>The attacker chooses the message, the location and the siblings without restriction.</li><li>Nothing in the model lets the client refuse to act where the Rust would act.</li><li>The patch adds no axiom, and you have read the one definition it adds.</li></ul></dd>
 <dt>Links</dt><dd>L5, L6.</dd>
 <dt>Time</dt><dd>1.5 hours.</dd>
 </dl>
@@ -256,7 +263,7 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <div class="table"><table>
 <thead><tr><th scope="col">Argument of <code>client_step</code></th><th scope="col">In the model</th><th scope="col">Chosen by</th></tr></thead>
 <tbody>
-<tr><th scope="row"><code>terms</code></th><td><code>Snapshot.scheme.terms</code>: any function on DyLean terms as the hash, over the symbolic reading of step 5.</td><td>The statement: it holds for every such hash.</td></tr>
+<tr><th scope="row"><code>terms</code></th><td><code>dyTerms</code>: DyLean’s hash constructor over the symbolic reading of step 5.</td><td>The model. The hash is ideal (A4).</td></tr>
 <tr><th scope="row"><code>root</code>, <code>height</code></th><td><code>Snapshot.root</code>, <code>Snapshot.height</code>.</td><td>Trusted. How the client obtains them is outside the model.</td></tr>
 <tr><th scope="row"><code>message</code></th><td>The message at a network handle. It carries an item when it is a literal.</td><td>The attacker, among the terms it can derive.</td></tr>
 <tr><th scope="row"><code>location</code></th><td>Any <code>u64</code>, a parameter of the client action.</td><td>Unconstrained: every value is a reachable step.</td></tr>
@@ -279,12 +286,12 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <div class="table kit"><table>
 <thead><tr><th scope="col">Probe</th><th scope="col">Recorded outcome</th><th scope="col">Shows</th></tr></thead>
 <tbody>
-<tr><td><code>bash verification/check.sh</code></td><td>Exit 0 after 6 minutes on a warm machine. It prints <code>Extraction matches the committed files.</code>, <code>131 theorems in [Qmdb, Commonware.Symbolic] depend only on standard axioms.</code> and one <code>Proofs reject</code> line for each mutation.</td><td>The Rust tests pass, the generated Lean is reproducible, every proof and executed check builds, and the listed mutations are noticed.</td></tr>
+<tr><td><code>bash verification/check.sh</code></td><td>Exit 0 after 6 minutes on a warm machine. It prints <code>Extraction matches the committed files.</code>, <code>98 theorems in [Qmdb, Commonware.Symbolic] depend only on standard axioms.</code> and one <code>Proofs reject</code> line for each mutation.</td><td>The Rust tests pass, the generated Lean is reproducible, every proof and executed check builds, and the listed mutations are noticed.</td></tr>
 <tr><td><code>python3 verification/audit/probes.py</code></td><td>30 lines, each <code>as recorded</code>, after 5 minutes. 25 probes break a proof module and 5 survive.</td><td>Which changes to the Rust, to the trusted Lean and to the proofs the build notices. Each probe is an entry of <a class="src" href="audit/probes.toml" title="Open in VS Code">probes.toml</a>.</td></tr>
-<tr><td><code>(cd verification/lean &amp;&amp; lake env lean ../audit/probes/Closure.lean)</code></td><td>Four groups of statements, each with the handwritten definitions of the table in step 1.</td><td>The Lean that a person must read is complete, and the byte-level statements do not depend on DyLean.</td></tr>
+<tr><td><code>python3 verification/audit/build.py --dag --check</code></td><td><code>dag.json matches the Lean build.</code></td><td>The declaration graph of this guide, and with it the list of trusted declarations, is what Lean prints for the current proofs.</td></tr>
 <tr><td><code>cat verification/audit/probes/differential.rs &gt;&gt; verification/symbolic/src/qmdb/tests.rs
 (cd verification/symbolic &amp;&amp; cargo test --offline -- --nocapture probe)
-git checkout verification/symbolic/src/qmdb/tests.rs</code></td><td>Four <code>PROBE</code> lines. QMDB’s hasher: 127 honest openings, production accepts 127, the client 0. Other sizes: 1,953 openings, production accepts all, the client none. 45,085 proofs with another size or inactive count: production accepts none. 1,270 openings at another trusted height: the client accepts none.</td><td>What the differential tests never vary, and which trees the client models.</td></tr>
+git checkout verification/symbolic/src/qmdb/tests.rs</code></td><td>Five <code>PROBE</code> lines. QMDB’s hasher: 127 honest openings, production accepts 127, the client 0. Other sizes: 1,953 openings, production accepts all, the client none. 45,085 proofs with another size or inactive count: production accepts none. 1,270 openings at another trusted height: the client accepts none. All 7 roots of small trees equal a leaf digest at position 0.</td><td>What the differential tests never vary, which trees the client models, and one fact about bytes that the ideal hash cannot express.</td></tr>
 <tr><td><code>python3 verification/audit/build.py --check</code></td><td><code>hax-dylean-audit.html matches the sources.</code></td><td>The panels of this guide show the current code.</td></tr>
 <tr><td><code>git -C ../dylean rev-parse HEAD</code>, then read <code>toolchain.sh</code> and <code>symbolic/proofs/lean/lake-manifest.json</code></td><td>The DyLean pin of <code>toolchain.sh</code>. The manifest pins the Aeneas and hax Lean libraries by commit. The hax binary is whatever sits at <code>$HAX</code>: nothing records its source or a hash.</td><td>What the pins cover and what they do not.</td></tr>
 </tbody></table></div>
@@ -297,7 +304,7 @@ git checkout verification/symbolic/src/qmdb/tests.rs</code></td><td>Four <code>P
 <tr><th scope="row">L8, L9</th><td>The DyLean client, or the shared <code>accept</code>, never logs an event.</td><td>No theorem or check shows that an event is ever logged. DyLean’s Hoare triples hold of an action that fails.</td></tr>
 <tr><th scope="row">A6</th><td>A theorem outside the audited namespaces is proved by <code>sorry</code>.</td><td>The axiom audit goes by namespace. The build only warns.</td></tr>
 </tbody></table></div>
-<p>The first pass of this audit is written up in <a class="src" href="audit/FINDINGS.md" title="Open in VS Code">audit/FINDINGS.md</a>, with ten findings and the checks that passed. Read it after forming your own view.</p>
+<p>The first pass of this audit is written up in <a class="src" href="audit/FINDINGS.md" title="Open in VS Code">audit/FINDINGS.md</a>, with ten findings, the checks that passed and what has changed since. Read it after forming your own view.</p>
 </section>
 
 <section id="risks">
@@ -310,11 +317,10 @@ git checkout verification/symbolic/src/qmdb/tests.rs</code></td><td>Four <code>P
 <tr><th scope="row">R2</th><td>The proved verifier is not the deployed one. It is a second verifier for one item of a tree with one peak and a trusted size. Tests on trees of up to 64 leaves tie it to production’s verifier.</td><td>L2</td><td>Extract production’s own <code>reconstruct_root_inner</code>, or prove the client equal to it.</td></tr>
 <tr><th scope="row">R3</th><td>The modelled root is not QMDB’s. The client hashes the forward-fold domain byte and QMDB folds backwards, so the client accepts no opening under a root built with QMDB’s hasher.</td><td>L2</td><td>Give the client QMDB’s domain byte and build the test trees with <code>qmdb::hasher()</code>. The proofs do not depend on the byte.</td></tr>
 <tr><th scope="row">R4</th><td>The tree size is trusted. Production reads <code>leaves</code> and <code>inactive_peaks</code> from the proof, which the attacker writes, and relies on the root committing to them. No statement covers that, and the tests never vary them.</td><td>L2</td><td>A statement in which the size comes from the proof and the root alone is trusted.</td></tr>
-<tr><th scope="row">R5</th><td>The byte-level reading of production’s hasher is a person’s reading of <code>ByteTerms</code> and of two doc comments. No test or extraction touches it.</td><td>L4</td><td>Extract <code>ByteTerms::hash</code> over an abstract byte hasher.</td></tr>
+<tr><th scope="row">R5</th><td>The hash is ideal. No statement reduces a broken opening to a collision of a real hash, and facts about bytes are outside the model: in bytes the root of a small tree is also a leaf digest, and only positions keep a long item apart from a node.</td><td>L4, A4</td><td>An argument over production’s bytes beside the symbolic one. This branch had a reduction to an explicit collision and dropped it for a smaller trusted base.</td></tr>
 <tr><th scope="row">R6</th><td>Honest roots are built by code that the proof does not see. The tree builder hashes nodes through a second encoding, and the journal chooses what is stored at each location.</td><td>L5</td><td>Route the builder through the part lists of <code>terms.rs</code>; state the snapshot in terms of the journal.</td></tr>
-<tr><th scope="row">R7</th><td>The trace theorems could hold for the empty reason. Nothing shows that the client logs an event on any reachable trace.</td><td>L6</td><td>A theorem that some reachable trace logs an honest opening.</td></tr>
-<tr><th scope="row">R8</th><td>The trace theorems are about a symbolic model: terms keep the boundaries between hashed parts, an item is always a literal, and the hash is a function on terms. The byte-level theorems say nothing about traces.</td><td>L6</td><td>Inherent to the symbolic approach. Read the two families of statements together.</td></tr>
-<tr><th scope="row">R9</th><td>The toolchain is pinned by name, not by content: the hax binary and the dependency builds are whatever is on the machine, and no CI runs the check.</td><td>L8</td><td>Record how the binary is built, hash it, and run <code>check.sh</code> in CI.</td></tr>
+<tr><th scope="row">R7</th><td>The trace theorem could hold for the empty reason. Nothing shows that the client logs an event on any reachable trace.</td><td>L6</td><td>A theorem that some reachable trace logs an honest opening.</td></tr>
+<tr><th scope="row">R8</th><td>The toolchain is pinned by name, not by content: the hax binary and the dependency builds are whatever is on the machine, and no CI runs the check.</td><td>L8</td><td>Record how the binary is built, hash it, and run <code>check.sh</code> in CI.</td></tr>
 </tbody></table></div>
 </section>
 
@@ -324,12 +330,12 @@ git checkout verification/symbolic/src/qmdb/tests.rs</code></td><td>Four <code>P
 <div class="table"><table>
 <thead><tr><th scope="col">Step</th><th scope="col">Links</th><th scope="col">Pass when</th><th scope="col">Verdict</th><th scope="col">Notes</th></tr></thead>
 <tbody id="sheet">
-<tr><th scope="row">0 · Primer and warm-up</th><td>none</td><td>The leaf theorem restated; its trusted parts named.</td><td class="verdict"></td><td class="note"></td></tr>
-<tr><th scope="row">1 · What is claimed</th><td>L7</td><td>No sentence of the report says more than its statement; the finder is explicit.</td><td class="verdict"></td><td class="note"></td></tr>
+<tr><th scope="row">0 · Primer</th><td>none</td><td>One statement restated: what it assumes and what it concludes.</td><td class="verdict"></td><td class="note"></td></tr>
+<tr><th scope="row">1 · What is claimed</th><td>L7</td><td>No sentence of the report says more than its statement; the hash of each statement is named.</td><td class="verdict"></td><td class="note"></td></tr>
 <tr><th scope="row">2 · Production code and the refactor</th><td>L0, L1</td><td>The refactor preserves behaviour; the shared files stand alone.</td><td class="verdict"></td><td class="note"></td></tr>
 <tr><th scope="row">3 · The verification-only client</th><td>L2</td><td>Every client line has a production counterpart or a written divergence.</td><td class="verdict"></td><td class="note"></td></tr>
 <tr><th scope="row">4 · Extraction</th><td>L3</td><td>The generated code is plausible; the translation stays assumed.</td><td class="verdict"></td><td class="note"></td></tr>
-<tr><th scope="row">5 · Trusted readings</th><td>L4</td><td>Each reading matches its Rust, or the gap is written down.</td><td class="verdict"></td><td class="note"></td></tr>
+<tr><th scope="row">5 · Trusted readings</th><td>L4</td><td>Each reading matches its Rust, or the gap is written down; the ideal hash is accepted or not.</td><td class="verdict"></td><td class="note"></td></tr>
 <tr><th scope="row">6 · Assumption and protocol</th><td>L5, L6</td><td>The snapshot is obtainable; the attacker is unrestricted; the patch is inert.</td><td class="verdict"></td><td class="note"></td></tr>
 <tr><th scope="row">7 · Machine evidence</th><td>L8</td><td>A clean run reproduces; planted escape hatches fail; survivors are explained.</td><td class="verdict"></td><td class="note"></td></tr>
 </tbody></table></div>
@@ -357,6 +363,49 @@ if(location.protocol==='file:'){
 // A contents link to a collapsed block opens it.
 function reveal(){const target=document.getElementById(location.hash.slice(1));const block=target&&target.closest('details');if(block){block.open=true;target.scrollIntoView();}}
 addEventListener('hashchange',reveal);reveal();
+
+// The declaration graph: selecting a declaration shows what it depends on and what depends on it.
+(function(){
+  const figure=document.getElementById('dag-figure');
+  if(!figure)return;
+  const data=JSON.parse(document.getElementById('dag-data').textContent);
+  const users=data.map(()=>[]);
+  data.forEach((node,i)=>{for(const other of node.s.concat(node.u))users[other].push(i);});
+  const frames=[...figure.querySelectorAll('.dag-frame')];
+  const info=document.getElementById('dag-info');
+  const rows=document.getElementById('dag-rows');
+  const start=info.textContent;
+  function closure(from,next){const seen=new Set();const todo=[from];while(todo.length){for(const other of next(todo.pop())){if(!seen.has(other)){seen.add(other);todo.push(other);}}}return seen;}
+  function list(title,items){
+    const line=document.createElement('p');line.append(title+' ');
+    if(!items.length)line.append('nothing in this graph.');
+    for(const i of items){const button=document.createElement('button');button.type='button';button.textContent=data[i].n;button.addEventListener('click',()=>select(i,true));line.append(button);}
+    return line;
+  }
+  function clear(){for(const frame of frames){const svg=frame.querySelector('svg');svg.classList.remove('sel');svg.querySelectorAll('.on,.cur').forEach(mark=>mark.classList.remove('on','cur'));}info.textContent=start;}
+  function select(i,reveal){
+    const below=closure(i,k=>data[k].s.concat(data[k].u)),above=closure(i,k=>users[k]);
+    for(const frame of frames){
+      const svg=frame.querySelector('svg');svg.classList.add('sel');
+      svg.querySelectorAll('.n').forEach(node=>{const k=+node.dataset.i;node.classList.toggle('on',k===i||below.has(k)||above.has(k));node.classList.toggle('cur',k===i);});
+      svg.querySelectorAll('.e').forEach(edge=>{const a=+edge.dataset.a,b=+edge.dataset.b;edge.classList.toggle('on',((b===i||below.has(b))&&below.has(a))||((a===i||above.has(a))&&above.has(b)));});
+      const current=svg.querySelector('.n.cur');
+      if(reveal&&current&&!frame.hidden)current.scrollIntoView({block:'nearest',inline:'center'});
+    }
+    const cells=rows.querySelector('tr[data-i="'+i+'"]').children;
+    const head=document.createElement('p');
+    head.innerHTML='<b>'+cells[0].innerHTML+'</b> · '+cells[1].innerHTML+' · '+cells[2].innerHTML;
+    info.replaceChildren(head,list('What it says mentions:',data[i].s),list('Only its proof uses:',data[i].u),list('Mentioned by:',users[i]));
+    const lemma=data[i].t==='checked'&&cells[1].textContent==='theorem';
+    if(lemma)info.children[1].remove();
+    if(lemma)info.children[1].firstChild.textContent='A lemma. It uses: ';
+    const reset=document.createElement('button');reset.type='button';reset.textContent='Clear selection';reset.addEventListener('click',clear);info.append(reset);
+  }
+  for(const frame of frames){frame.addEventListener('click',event=>{const node=event.target.closest('.n');if(node)select(+node.dataset.i,false);else clear();});}
+  rows.addEventListener('click',event=>{if(event.target.closest('a'))return;const row=event.target.closest('tr');if(row){select(+row.dataset.i,true);figure.scrollIntoView({block:'start'});}});
+  document.getElementById('dag-view').addEventListener('change',event=>{frames.forEach((frame,i)=>{frame.hidden=i!==event.target.selectedIndex;});});
+  document.getElementById('dag-fit').addEventListener('change',event=>{figure.classList.toggle('fit',event.target.checked);});
+})();
 
 // Verdicts and notes of the auditor, kept in this browser.
 function recall(key){try{return localStorage.getItem('merkle-audit:'+key)||'';}catch(error){return '';}}

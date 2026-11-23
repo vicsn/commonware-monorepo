@@ -1,6 +1,6 @@
 name = "commonware-symbolic-proofs"
 version = "0.1.0"
-defaultTargets = ["Commonware", "Leaf", "Qmdb", "Bls"]
+defaultTargets = ["Commonware", "Qmdb", "Bls"]
 # The extraction's Lean, which DyLean is patched for; keeps `lake update` from adopting DyLean's.
 fixedToolchain = true
 
@@ -8,11 +8,6 @@ fixedToolchain = true
 [[lean_lib]]
 name = "Commonware"
 globs = ["Commonware.+"]
-
-# The smallest target: one production leaf digest as a commitment.
-[[lean_lib]]
-name = "Leaf"
-globs = ["Leaf.+"]
 
 # QMDB inclusion: the extracted verifier and client, and their DyLean protocol.
 [[lean_lib]]

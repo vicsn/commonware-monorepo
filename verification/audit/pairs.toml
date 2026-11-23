@@ -21,76 +21,47 @@ prefixes = [
   "verification/symbolic/src/client.rs",
 ]
 
-# Step 0: primer and warm-up.
+# Step 0: primer.
 
 [[panel]]
 id = "primer"
 kind = "reading"
 title = "How to read a Lean statement"
 link = "Everything before the last top-level colon is given; what follows it is proved. The proof after `:=` is checked by Lean and is never required reading."
-left = [{ file = "verification/lean/Qmdb/SecurityTheorems.lean", lean = "production_binding_or_collision", statement = true, context = false }]
+left = [{ file = "verification/lean/Qmdb/Verifier.lean", lean = "unique", statement = true, context = false }]
 right = [{ prose = [
   "The text between `/--` and `-/` is a comment. Lean does not check it against the statement.",
-  "`{D : Type} [DecidableEq D]`: for any type of digests whose equality can be decided.",
-  "`(B : ByteHash D)`: for any hash over byte strings. Step 5 shows what a `ByteHash` is.",
-  "`Std.U32`, `Std.U64`, `Slice Std.U8`: Rust's `u32`, `u64` and `&[u8]`. `.val` is the number or the list behind one.",
-  "`(ha : qmdb.verify … = RustM.ok true)`: a hypothesis, named `ha`. The extracted Rust function `verify`, run with that hash, returned `true`. `RustM` is the result of extracted Rust: `ok v`, a failure such as a panic or an overflow, or divergence.",
-  "After the colon: `a = b ∨ ∃ x y, …`. The items are equal, or there are `x` and `y` such that `finder` returns exactly that pair, they differ, and they hash alike.",
-  "Every real hash has collisions, so `a collision exists` alone would say nothing. The statement names a computation on the two openings that outputs one. Read `finder` in step 1 for that reason.",
+  "`(h : Std.U32) (loc : Std.U64)`: for any height and any location. `Std.U32`, `Std.U64` and `Slice Std.U8` are Rust's `u32`, `u64` and `&[u8]`; `.val` is the number or the list behind one.",
+  "`(root : Bytes)` and `(wa wb : Slice Bytes)`: a root and two lists of siblings. `Bytes` is a DyLean term, not a byte string: a literal, a concatenation or a hash.",
+  "`(ha : qmdb.verify dyTerms () h loc root a wa = RustM.ok true)`: a hypothesis, named `ha`. The extracted Rust function `verify` returned `true`. `RustM` is the result of extracted Rust: `ok v`, a failure such as a panic or an overflow, or divergence.",
+  "`dyTerms` says what a hash is in this statement: DyLean's hash constructor. Step 5 shows it. No statement here is about a real hash function.",
+  "After the colon: `a = b ∧ wa = wb`. The two items are equal and so are the two sibling lists.",
   "Trace statements add two notions: `tr.Reachable reachability` is any sequence of attacker sends and client steps, and `tr.EventLoggedAt e t` says that the client logged `e` at time `t`.",
 ] }]
-
-[[panel]]
-id = "leaf-step"
-kind = "rust-generated"
-strength = "assumed"
-title = "Warm-up: the leaf client step and its extraction"
-link = "hax, Charon and Aeneas produce the right side from the left. The audit assumes this translation (A1); `check.sh` only confirms that regenerating it reproduces the committed file."
-left = [{ source_of = "leaf.client_step" }]
-right = [{ generated = "leaf.client_step" }]
-notes = [
-  "A `do` block runs the steps in order and stops at the first failure. `let x ← f` binds the result of `f`.",
-  "The trait bound `T: Terms + Messages` became two explicit arguments, `termsTermsInst` and `clientMessagesInst`. Lean chooses what to pass for them: that choice is the subject of step 5.",
-  "`==` on digests became `corecmpPartialEqInst.eq`, a field of the `Terms` instance.",
-]
-
-[[panel]]
-id = "leaf-claim"
-kind = "lean-lean"
-strength = "proved"
-title = "Warm-up: the leaf assumption and its trace theorem"
-link = "`Leaf/Step.lean` proves that the extracted step accepts only the committed item, and the shared `receive_preserves` lifts that to every reachable trace. Both are checked by Lean."
-left_label = "Assumed"
-left = [{ file = "verification/lean/Leaf/Assumptions.lean", lean = "Commitment" }]
-right_label = "Proved"
-right = [{ file = "verification/lean/Leaf/Protocol.lean", lean = "client_authentication", statement = true, context = false }]
 
 # Step 1: what is claimed.
 
 [[panel]]
-id = "finder"
+id = "term-equality"
 kind = "lean-lean"
 strength = "proved"
-title = "The collision finder and two executed runs"
-link = "`reconstruct_inputs` and `verify_inputs` in `Verifier.lean` prove that an accepting run of the extracted verifier hashes exactly the inputs that `inputs` lists. The runs on the right execute the finder on two hashes that collide."
-left_label = "Definition"
+title = "Why one root admits one opening"
+link = "A digest is a term. `Hash.hash_inj` of DyLean says that two hash terms are equal only if their inputs are, and the two lemmas on the right say the same of concatenations and of literals. So a root fixes its peak, a node its two children and a leaf its item, all the way down."
+left_label = "Digests fix what is below them"
 left = [
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "finder", context = false },
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "openingInputs", context = false },
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "inputs", context = false },
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "pos", context = false },
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "domain", context = false },
+  { file = "verification/lean/Qmdb/Verifier.lean", lean = "leafTerm_inj", context = false },
+  { file = "verification/lean/Qmdb/Verifier.lean", lean = "nodeTerm_inj", context = false },
+  { file = "verification/lean/Qmdb/Verifier.lean", lean = "rootTerm_inj", context = false },
 ]
-right_label = "Executed"
+right_label = "What that rests on"
 right = [
-  { file = "verification/lean/Qmdb/SanityChecks.lean", from = "-- Executed: for `Alice` and `Bob`", through = "66, 111, 98])", label = "one digest for everything" },
-  { file = "verification/lean/Qmdb/SanityChecks.lean", from = "-- Executed: for those two openings", through = "[0, 0, 0, 0, 0, 0, 0, 2, 1, 0])", label = "leaves told apart, nodes not" },
+  { file = "verification/lean/Commonware/Symbolic/Terms.lean", lean = "concat_inj", statement = true, context = false },
+  { file = "verification/lean/Commonware/Symbolic/Terms.lean", lean = "part_bytes_inj", statement = true, context = false },
 ]
 notes = [
-  "`inputs` walks from the root's subtree down to the leaf: one hash input per level, so `height + 1` inputs, plus the root's in `openingInputs`.",
-  "`finder` pairs the two lists position by position and returns the first pair that differs and has one digest. It uses nothing but the two openings and the hash.",
-  "A wrong finder could not make a theorem false: it only appears as `finder … = some (x, y)` with `x ≠ y` and equal digests stated beside it.",
-  "`domain` is built from the constants of the extracted client, whatever their value. The proofs therefore do not fix the domain bytes.",
+  "This is how ProVerif and Tamarin treat a hash by default: a free constructor. There is no collision to find and no reduction to a collision.",
+  "`unique` follows by induction over the extracted traversal: two accepted openings rebuild the same root term, so every digest on the path agrees, the siblings agree and the items agree.",
+  "The proofs are shown here because they are one line each. They are still not required reading.",
 ]
 
 # Step 2: production code and the refactor.
@@ -276,14 +247,14 @@ right = [{ generated = "qmdb.verify" }]
 id = "spec-inputs"
 kind = "spec-generated"
 strength = "proved"
-title = "The hash inputs that statements talk about"
-link = "`leaf_eq`, `node_eq` and `root_eq` prove that each generated function returns the hash of the input on the left. `root_eq` covers the branch with zero inactive peaks, the only one the client reaches."
+title = "The digests that statements talk about"
+link = "`leaf_eq`, `node_eq` and `root_eq` prove that each generated function returns the term on the left. `root_eq` covers the branch with zero inactive peaks, the only one the client reaches."
 left_label = "Definitions and linking lemmas"
 left = [
   { file = "verification/lean/Qmdb/Verifier.lean", lean = "be", context = false },
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "leafInput" },
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "nodeInput", context = false },
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "rootInput", context = false },
+  { file = "verification/lean/Qmdb/Verifier.lean", lean = "leafTerm", context = false },
+  { file = "verification/lean/Qmdb/Verifier.lean", lean = "nodeTerm", context = false },
+  { file = "verification/lean/Qmdb/Verifier.lean", lean = "rootTerm", context = false },
   { file = "verification/lean/Qmdb/Verifier.lean", lean = "leaf_eq", statement = true, context = false },
   { file = "verification/lean/Qmdb/Verifier.lean", lean = "node_eq", statement = true, context = false },
   { file = "verification/lean/Qmdb/Verifier.lean", lean = "root_eq", statement = true, context = false },
@@ -300,66 +271,44 @@ right = [
 id = "read-terms"
 kind = "rust-trusted"
 strength = "trusted"
-title = "What a hash implementation is taken to be"
-link = "Nothing checks this. Lean's instance says that `hash` is a pure, total function of the list of parts, that copying a digest returns it and that `==` on digests is equality."
-left_label = "Rust trait"
+title = "What a hash is taken to be"
+link = "Nothing checks this. Lean's instance says that `hash` is DyLean's hash constructor over the parts of its input, joined by DyLean's concatenation, that copying a digest returns it and that `==` on digests is equality of terms."
+left_label = "Rust trait and one of its uses"
 left = [
   { file = "storage/src/merkle/hasher/terms.rs", rust = "enum Part" },
   { file = "storage/src/merkle/hasher/terms.rs", rust = "trait Terms" },
+  { file = "storage/src/merkle/hasher/terms.rs", rust = "fn node_digest" },
 ]
-right_label = "Lean reading"
+right_label = "Lean reading on DyLean terms"
 right = [
-  { file = "verification/lean/Commonware/Symbolic/Hashing.lean", lean = "Scheme" },
-  { file = "verification/lean/Commonware/Symbolic/Hashing.lean", lean = "Scheme.terms" },
+  { file = "verification/lean/Commonware/Symbolic/Terms.lean", lean = "part", context = false },
+  { file = "verification/lean/Commonware/Symbolic/Terms.lean", lean = "chain", context = false },
+  { file = "verification/lean/Commonware/Symbolic/Terms.lean", lean = "dyTerms", context = false },
 ]
 notes = [
+  "The hash is ideal. Two digests are equal only when their inputs are the same term, and concatenation keeps the boundary between parts.",
   "A Rust implementation that panics, keeps state or compares digests loosely is not what the theorems are about.",
   "The first argument of `hash` is the Rust `&self`. Lean ignores it, so the reading has no state.",
 ]
 
 [[panel]]
-id = "read-bytes"
-kind = "rust-trusted"
-strength = "trusted"
-title = "Production's byte hashing"
-link = "Nothing checks this. `ByteTerms` is not extracted and no test runs the client over it. The reading rests on the call chain on the left and on its two doc comments."
-left_label = "Rust"
+id = "read-ideal"
+kind = "reading"
+strength = "assumed"
+title = "What production hashes, and what the ideal hash leaves out"
+link = "Assumption A4. The left side is what production runs. The statements replace it by `dyTerms` of the panel above, and nothing relates the two."
 left = [
   { file = "storage/src/merkle/hasher.rs", rust = "fn hash", within = "impl Terms for ByteTerms", label = "ByteTerms::hash" },
   { file = "storage/src/merkle/hasher.rs", rust = "fn hash", within = "trait Hasher", label = "merkle::Hasher::hash" },
   { file = "storage/src/merkle/hasher.rs", rust = "fn hash", within = "impl CHasher> Standard<H>", label = "Standard::hash" },
   { file = "cryptography/src/lib.rs", rust = "fn hash", within = "trait Hasher", label = "commonware_cryptography::Hasher::hash" },
 ]
-right_label = "Lean reading"
-right = [
-  { file = "verification/lean/Commonware/Symbolic/Hashing.lean", lean = "ByteHash" },
-  { file = "verification/lean/Commonware/Symbolic/Hashing.lean", lean = "ByteHash.scheme" },
-]
-notes = [
-  "`bytes_length` and `bytes_inj` are assumptions about production's `Digest` types: every digest has the same number of bytes, and different digests have different bytes.",
-  "The Rust side panics when given more than `MAX_PARTS` parts, which is four; the Lean side concatenates any number. Every hash input in `terms.rs` has at most four.",
-  "That the hash is of the concatenation rests on the doc comments of the two `hash` traits, not on their implementations.",
-]
-
-[[panel]]
-id = "read-symbolic"
-kind = "rust-trusted"
-strength = "trusted"
-title = "The symbolic reading used on traces"
-link = "A modelling choice. Byte parts become DyLean literals and parts are joined by DyLean's concatenation constructor, which keeps every boundary."
-left_label = "Rust: three parts of a node input"
-left = [{ file = "storage/src/merkle/hasher/terms.rs", rust = "fn node_digest" }]
-right_label = "Lean reading on DyLean terms"
-right = [
-  { file = "verification/lean/Commonware/Symbolic/Terms.lean", lean = "part", context = false },
-  { file = "verification/lean/Commonware/Symbolic/Terms.lean", lean = "chain", context = false },
-  { file = "verification/lean/Commonware/Symbolic/Terms.lean", lean = "hashing", context = false },
-  { file = "verification/lean/Commonware/Symbolic/Terms.lean", lean = "symbolic", context = false },
-]
-notes = [
-  "Real bytes lose the boundaries between parts; this reading keeps them. It cannot represent a leaf input that is byte-for-byte a node input, which is one reason the tree size must be trusted.",
-  "The byte-level theorems do not use this reading. They use `ByteHash.scheme` and prove separately that concatenated bytes keep inputs of one kind apart.",
-]
+right = [{ prose = [
+  "Production concatenates the bytes of the parts and hashes them. The model applies a constructor to the parts and keeps them apart.",
+  "Collisions. The model has none. A real hash has them and is believed to hide them. No statement here reduces a broken opening to a collision.",
+  "Boundaries between parts. Bytes lose them. A leaf input is a position and an item, a node input a position and two digests, and an item may be as long as two digests. Only the position tells the two apart, and it does so because one position is never both a leaf and a node in a tree of one trusted size. The model cannot state this.",
+  "Kinds of input. In bytes, the root input of a forward-fold tree with fewer than 65,536 leaves is also the leaf input at position 0 of a 34-byte item. The probe `probe_root_is_a_leaf_input` finds the two digests equal for all seven trees it builds. In the model a root is never a leaf digest.",
+] }]
 
 [[panel]]
 id = "read-messages"
@@ -396,14 +345,14 @@ right_label = "Assumed in Lean"
 right = [{ file = "verification/lean/Qmdb/Assumptions.lean", lean = "Snapshot" }]
 notes = [
   "`items` is whatever opens under the root. Nothing ties it to the journal, so a consistent off-by-one between journal index and leaf location would not be seen.",
-  "`honest_snapshots_exist` proves that the assumption can be met for every hash at every height up to `maxHeight`, by building the tree in Lean.",
+  "`honest_snapshots_exist` proves that the assumption can be met at every height up to `maxHeight`, by building the tree in Lean.",
 ]
 
 [[panel]]
 id = "honest-tree"
 kind = "reading"
 title = "What honest means in the statements about honest openings"
-link = "`honest_opening`, `extra_sibling_rejected` and `honest_snapshots_exist` are about the tree that these four definitions build. It is a Lean tree over the same hash inputs as the verifier."
+link = "`honest_opening`, `extra_sibling_rejected` and `honest_snapshots_exist` are about the tree that the last four definitions build, up to the height that the first one names. It is a Lean tree over the same hash inputs as the verifier."
 left = [
   { file = "verification/lean/Qmdb/Verifier.lean", lean = "maxHeight", context = false },
   { file = "verification/lean/Qmdb/Verifier.lean", lean = "tree", context = false },
@@ -424,12 +373,14 @@ id = "protocol-client"
 kind = "rust-trusted"
 strength = "trusted"
 title = "The client step and the client in DyLean"
-link = "The Lean client runs the extracted `client_step` on a received message and logs what it returns, together with the siblings."
+link = "The Lean client runs the extracted `client_step` on a received message and logs the acceptance that it returns."
 left_label = "Rust"
-left = [{ file = "verification/symbolic/src/qmdb.rs", rust = "fn client_step" }]
+left = [
+  { file = "verification/symbolic/src/qmdb.rs", rust = "struct Acceptance" },
+  { file = "verification/symbolic/src/qmdb.rs", rust = "fn client_step" },
+]
 right_label = "DyLean protocol"
 right = [
-  { file = "verification/lean/Qmdb/Protocol.lean", lean = "Opened" },
   { file = "verification/lean/Qmdb/Protocol.lean", lean = "client" },
   { file = "verification/lean/Qmdb/Protocol.lean", lean = "client.reachability" },
 ]
@@ -459,12 +410,12 @@ title = "The three `#combine` blocks that define statements"
 link = "`#combine` assembles DyLean's types from the listed parts. These three fix what a term is, what a trace holds and which actions build a reachable trace."
 left = [
   { file = "verification/lean/Qmdb/Assumptions.lean", from = "#combine +toplevel into BytesFunctor", through = "Hash,", label = "terms" },
-  { file = "verification/lean/Qmdb/Protocol.lean", from = "#combine +toplevel into ExecEntryT", through = "ProtocolEvent Opened,", label = "trace entries" },
+  { file = "verification/lean/Qmdb/Protocol.lean", from = "#combine +toplevel into ExecEntryT", through = "ProtocolEvent Acceptance,", label = "trace entries" },
   { file = "verification/lean/Qmdb/Protocol.lean", from = "#combine into ReachabilityConfig", through = "client,", label = "reachable traces" },
 ]
 right = [{ prose = [
   "Terms: literals, concatenations and hashes, and nothing else. The attacker can build any term from these and from what it has seen.",
-  "Trace entries: messages on the network and `Opened` events.",
+  "Trace entries: messages on the network and `Acceptance` events.",
   "Reachable traces: the attacker sends a message it can derive (`Network`), or the client runs with any handle, any location and any siblings (`client`). There is no other party and no key.",
   "The other `#combine` blocks in `Protocol.lean` and the event invariant set up the proof. A mistake in them makes the build fail; it cannot change what the theorems say.",
 ] }]
@@ -482,12 +433,13 @@ right = [{ prose = [
   "Hunk 3 registers a trace class only if Aeneas has not already registered one of the same name.",
 ] }]
 
-# Step 1: the claim table. Every sentence must occur verbatim in the report.
+# Step 1: the claim table. Every sentence must occur verbatim in the report, and the statements
+# that back the claims must be the ones that `Dag.lean` lists as cited.
 
 [[claim]]
-sentence = "For any hash, two openings that the extracted production verifier accepts at one location under one root carry the same item and the same siblings, or a checked finder returns two different hash inputs with the same digest."
-backed_by = [{ file = "verification/lean/Qmdb/SecurityTheorems.lean", lean = "production_unique_or_collision" }]
-reading = "Both openings are checked against the same trusted height `h`. `Any hash` means any hash of byte strings with fixed-length digests; `Verifier.unique_or_collision` is the fully general form."
+sentence = "Two openings that the extracted verifier accepts at one location under one root, for one trusted height, carry the same item and the same siblings."
+backed_by = [{ file = "verification/lean/Qmdb/Verifier.lean", lean = "unique" }]
+reading = "The hash is `dyTerms`, DyLean's constructor. The extracted verifier is `qmdb::verify` of the verification-only client, not production's `Proof::verify_element_inclusion`. Position binding is the first half of the conclusion."
 
 [[claim]]
 sentence = "The verifier is total and accepts honest openings."
@@ -498,30 +450,22 @@ backed_by = [
 reading = "`verify_total`: a verdict on every input, so no panic and no divergence. `honest_opening`: honest means built by `honestRoot` and `honestSiblings`, which are Lean definitions, not production's tree builder."
 
 [[claim]]
-sentence = "For any hash on DyLean terms, every opening that the extracted client logs on a reachable trace identifies the trusted snapshot height and an in-range location, and its item is the stored one or the finder returns a collision between the logged opening and the snapshot’s."
-backed_by = [{ file = "verification/lean/Qmdb/SecurityTheorems.lean", lean = "extracted_client_authentication" }]
+sentence = "Every acceptance that the extracted client logs on a reachable trace identifies the trusted snapshot height, an in-range location and the item stored there."
+backed_by = [{ file = "verification/lean/Qmdb/SecurityTheorems.lean", lean = "client_authentication" }]
 reading = "`Stored` means `Snapshot.items`. The property holds for every message, location and sibling list, so the trace adds no hypothesis beyond `Symbolic.client_step_sound`."
 
 [[claim]]
-sentence = "With DyLean’s collision-free hash the logged item is the stored one, and an accepted opening is the only one at its location under its root."
-backed_by = [
-  { file = "verification/lean/Qmdb/SecurityTheorems.lean", lean = "collision_free_client_authentication" },
-  { file = "verification/lean/Qmdb/SecurityTheorems.lean", lean = "production_unique" },
-]
-reading = "The hypothesis `free` says the hash is injective. That holds for DyLean's constructor and for no real hash."
-
-[[claim]]
-sentence = "The snapshot supplies a root and an accepted opening for each stored item; such snapshots exist for every hash at every height up to MAX_HEIGHT."
+sentence = "The snapshot supplies a root and an accepted opening for each stored item; such snapshots exist at every height up to MAX_HEIGHT."
 backed_by = [{ file = "verification/lean/Qmdb/SecurityTheorems.lean", lean = "honest_snapshots_exist" }]
 reading = "The assumption is not contradictory. It does not show that production's tree builder produces such a snapshot; the tests in step 6 sample that."
 
 [[claim]]
 sentence = "It rejects heights above MAX_HEIGHT and out-of-range locations, accepts honest openings and rejects them when an unused sibling follows."
 backed_by = [
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "verify_true" },
+  { file = "verification/lean/Qmdb/Verifier.lean", lean = "verify_bounds" },
   { file = "verification/lean/Qmdb/Verifier.lean", lean = "extra_sibling_rejected" },
 ]
-reading = "`verify_true`: acceptance implies `h ≤ maxHeight` and an in-range location. `extra_sibling_rejected`: one unused sibling after the honest ones. Neither is restated in `SecurityTheorems.lean`."
+reading = "`verify_bounds`: acceptance implies `h ≤ maxHeight` and an in-range location. `extra_sibling_rejected`: one unused sibling after the honest ones."
 
 # Facts that the prose of the guide states and no panel shows.
 
@@ -578,5 +522,5 @@ file = "verification/check.sh"
 text = "diff -r .lake/extraction"
 
 [[fact]]
-file = "verification/qmdb/mutations.toml"
-text = 'fails = ["Leaf.Step", "Qmdb.Verifier"]'
+file = "verification/audit/probes/differential.rs"
+text = "fn probe_root_is_a_leaf_input()"

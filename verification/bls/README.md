@@ -22,10 +22,11 @@
 - Assumptions: the application supplies the committee's registered keys in member order, and a
   proof of possession is derivable for every flagged key of a submitted certificate. Production
   does not check proofs of possession; registration must.
-- Last validation: `bash verification/check.sh` on 2026-11-20 at `0d3bf4a23`, passed. 3 Rust
-  tests (198 certificate claims, 24 attestation claims and the quorum of every committee size up
-  to 100,000), reproducible extraction, an axiom audit of all 144 theorems in `Bls` and
+- Last validation: `bash verification/check.sh` on 2026-11-22, passed. 3 Rust tests (198
+  certificate claims, 24 attestation claims and the quorum of every committee size up to
+  100,000), reproducible extraction, an axiom audit of all 136 theorems in `Bls` and
   `Commonware.Symbolic` (standard Lean axioms), 3 executed checks and 10 rejected mutations. The
+  count was 144 while the shared hash interface, which QMDB no longer uses, was imported. The
   production files are unchanged since `08229c65d`, where `just test -p commonware-cryptography`
   (834 passed), clippy, the no-std tests and build, the WASM build, the conformance tests and the
   consensus scheme tests passed. Logs: `verification/.lake/logs/`.

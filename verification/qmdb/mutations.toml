@@ -7,7 +7,7 @@ name = "leaf hash drops the element"
 file = "storage/src/merkle/hasher/terms.rs"
 original = "terms.hash(&[Part::Bytes(&position.to_be_bytes()), Part::Bytes(element)])"
 mutated = "terms.hash(&[Part::Bytes(&position.to_be_bytes())])"
-fails = ["Leaf.Step", "Qmdb.Verifier"]
+fails = "Qmdb.Verifier"
 
 [[mutation]]
 name = "node hash drops the left child"

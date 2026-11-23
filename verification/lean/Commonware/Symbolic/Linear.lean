@@ -1,5 +1,4 @@
 module
-public import Commonware.Symbolic.Hashing
 public import Commonware.Symbolic.Signing
 
 /-! A linear model of signatures with key aggregation, and its attacker. A key is a formal integer
@@ -11,6 +10,16 @@ Hashing to points is any function, so it may collide.
 Trusted: the definitions, which say what the attacker can derive and what the scheme accepts.
 Checked: `attribution`, which reduces an accepted signature to a signing event of a protected
 member or to an explicit collision of the hash. -/
+
+namespace Commonware.Symbolic
+@[expose] public section
+
+/-- Two different inputs that a function maps to the same value. -/
+def Collision {α β : Type} (hash : α → β) (x y : α) : Prop :=
+  x ≠ y ∧ hash x = hash y
+
+end
+end Commonware.Symbolic
 
 namespace Commonware.Symbolic.Linear
 open Aeneas Aeneas.Std

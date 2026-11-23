@@ -39,7 +39,9 @@ fi
 (cd lean && lake build) > "$logs/lean-build.log" 2>&1 || { tail -40 "$logs/lean-build.log"; exit 1; }
 grep 'depend only on standard axioms' "$logs/lean-build.log"
 
+# The declaration graph of the audit guide is the one that Lean prints for these proofs.
+python3 audit/build.py --dag --check
+
 # Each mutation of the extracted Rust must break the named proof modules.
-python3 mutate.py leaf/mutations.toml | tee "$logs/mutations.log"
-python3 mutate.py qmdb/mutations.toml | tee -a "$logs/mutations.log"
+python3 mutate.py qmdb/mutations.toml | tee "$logs/mutations.log"
 python3 mutate.py bls/mutations.toml | tee -a "$logs/mutations.log"
