@@ -1,13 +1,15 @@
 module
 public import Sake.Proof
+import Sake.Completeness
 import DY.Meta
 
-/-! What the SAKE target proves. Trusted: the nine statements.
+/-! What the SAKE target proves. Trusted: the ten statements.
 
 `handshake_completes` and `foreign_signature_rejected` speak about the extracted steps alone.
-The other seven hold on every trace that the attacker can reach with the actions of
-`Sake.Protocol`: it controls the network and the schedule, and it can compromise any identity
-key and what any peer keeps between its steps.
+`handshake_reachable` says that the attacker can reach a trace on which both peers finish, so
+the statements about every reachable trace are not empty. The other seven hold on every trace
+that the attacker can reach with the actions of `Sake.Protocol`: it controls the network and the
+schedule, and it can compromise any identity key and what any peer keeps between its steps.
 
 - `dialer_authentication`: for the dialer, the listener answered this exchange with this
   transcript.
@@ -65,6 +67,27 @@ theorem handshake_completes
       and_self, ↓reduceIte]
     rfl
   · simp [Exchange.signed]
+
+/-- Honest runs complete on a trace. When each peer's timestamp is inside
+the other's window, the attacker can schedule the actions so that both peers
+finish: some reachable trace holds the finish of the dialer and the finish
+of the listener, for one exchange with these timestamps in this namespace
+and one secret transcript. -/
+theorem handshake_reachable
+    (dialer listener : Participant) (ns : ByteArray)
+    (dialed answered : Std.U64)
+    (dialerWindow listenerWindow : sake.Window)
+    (early : listenerWindow.start ≤ dialed ∧ dialed < listenerWindow.end)
+    (late : dialerWindow.start ≤ answered ∧ answered < dialerWindow.end) :
+    ∃ (tr : ExecTrace) (exchange : Exchange) (secret : Bytes),
+      tr.Reachable reachability ∧
+      exchange.ns = ns ∧
+      exchange.dialed = dialed ∧
+      exchange.answered = answered ∧
+      tr.EventLogged (Event.dialFinish dialer listener exchange secret) ∧
+      tr.EventLogged (Event.listenFinish listener dialer exchange secret) :=
+  Completeness.both_finish dialer listener ns dialed answered dialerWindow
+    listenerWindow early late
 
 /-- A dialer rejects a `SynAck` that carries the listener's signature of
 another transcript than the one the dialer holds, for example of an exchange

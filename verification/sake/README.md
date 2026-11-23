@@ -3,7 +3,8 @@
 - Approach / branch: DyLean, `verify/qmdb-hax-dylean`.
 - Status: authentication in both directions, key confirmation, injective agreement and secrecy
   of the transcript are proved on DyLean traces over the extracted production steps, for SAKE
-  V1. Time, V0 and the record protocol are [not covered](#what-is-not-proved).
+  V1, and a reachable trace on which both peers finish is exhibited. Time, V0 and the record
+  protocol are [not covered](#what-is-not-proved).
 - Updated: 2026-11-23. Source: `7b9c5b7f7`. The production files
   `cryptography/src/handshake/sake/{rules.rs,protocol.rs,mod.rs}` are as in `75e42e942`.
 - Proved scope: on every trace that an attacker can reach who controls the network and the
@@ -21,10 +22,12 @@
   Each holds unless the identity key of the peer was compromised before the handshake finished.
   The listener's statement and secrecy also fail when what either peer keeps for the exchange
   is compromised: the dialer's ephemeral secret or the listener's secret transcript. Secrecy
-  survives a compromise of the identity keys after the handshake finished. On the extracted
-  steps alone, honest runs complete with the same secret transcript on both sides, and a dialer
-  rejects a `SynAck` that carries the listener's signature of another transcript. The steps
-  are the extracted Rust that production runs. No reference model is involved.
+  survives a compromise of the identity keys after the handshake finished. These statements
+  are not empty: when each peer's timestamp is inside the other's window, the attacker can
+  reach a trace on which both peers finish one exchange with one secret transcript. On the
+  extracted steps alone, honest runs complete with the same secret transcript on both sides,
+  and a dialer rejects a `SynAck` that carries the listener's signature of another transcript.
+  The steps are the extracted Rust that production runs. No reference model is involved.
 - Assumptions: signatures, hashing, Diffie-Hellman and message authentication codes are
   symbolic constructors. A signature verifies only for the message it signs, a hash fixes its
   input, nothing but the two ephemeral secrets gives the shared secret, and only someone who
@@ -41,7 +44,7 @@
 - Remaining boundary: the production instance in `protocol.rs` (BLAKE3 transcripts and their
   framing, X25519, the identity signature scheme, zeroization), `Context::new`, the wire codec,
   the stream wrapper with its cleartext prelude, bouncer and clock, and the record protocol.
-- Next step: a reachable trace on which both peers finish.
+- Next step: the record protocol, which needs a theory of authenticated encryption for DyLean.
 
 SAKE is one target of the shared symbolic verification in [verification/](../README.md): one
 extracted crate, one Lean package and one check for every target. This README covers what SAKE
@@ -183,12 +186,26 @@ it.
 - Finishing once. A finish is logged only if it is not on the trace yet, so the same finish is
   never logged at two times (`dial_finish_once`, `listen_finish_once`).
 
+[Completeness](../lean/Sake/Completeness.lean) shows that the actions can finish. DyLean's
+Hoare triples are partial: the invariant would also hold if an action always failed.
+
+- `Runs` says that an action succeeds on a trace with a result and a trace after it. Each
+  action has a lemma that says what it must find on the trace, where it leaves what the next
+  action reads and which event it logs.
+- A finish is logged only if it is not on the trace yet, so the lemmas track the logged events
+  entry by entry. An entry of another kind than an event adds no event, because DyLean's
+  combined trace tags each entry with its kind.
+- `both_finish` runs one handshake from the empty trace: both peers register an identity key,
+  the dialer starts, the listener answers, the dialer finishes and the listener finishes. Each
+  action is a step of reachable traces, so the trace they leave is reachable.
+
 [The statements](../lean/Sake/SecurityTheorems.lean), with the sentence of the `Handshake`
 contract in `stream/src/lib.rs` that each backs:
 
 | Statement | Says | Contract |
 | --- | --- | --- |
 | `handshake_completes` | when each timestamp is inside the other peer's window, the four extracted steps accept each other's messages and both peers end with the same secret transcript | "returns the same transcript `T` to both peers" |
+| `handshake_reachable` | when each timestamp is inside the other peer's window, some reachable trace holds `dialFinish dialer listener exchange secret` and `listenFinish listener dialer exchange secret`, for one exchange in this namespace with these timestamps | the statements about every reachable trace are not empty |
 | `foreign_signature_rejected` | `dial_end` rejects a `SynAck` that carries the listener's signature of another transcript | a sanity check |
 | `dialer_authentication` | a logged `dialFinish dialer listener exchange secret` has `listenStart listener exchange secret` logged earlier, or the listener's identity key compromised earlier | "A dial to `peer` succeeds only if `L` is `peer`"; properties 1 and 3 for the dialer |
 | `listener_authentication` | a logged `listenFinish listener dialer exchange secret` has `dialStart dialer exchange.toOpening` logged earlier, or the dialer's identity key compromised earlier | "returns `D`"; property 1. Rests on the signature alone, so a replayed `Syn` satisfies it |
@@ -212,9 +229,10 @@ check, accepting the timestamp at the end of the window, or deriving both confir
 listener's label. Each breaks `Sake.Steps`, where the lemma that states what the step computes
 no longer holds; Lake does not go on to the modules after it.
 
-Five further probes were run by hand on 2026-11-23 and are not part of `check.sh`. The first
+Eight further probes were run by hand on 2026-11-23 and are not part of `check.sh`. The first
 four mutate the Rust and restate the step lemma for the mutated step, so that `Sake.Steps`
-builds and the question is whether the proofs after it still do.
+builds and the question is whether the proofs after it still do. The last three change the
+Lean alone.
 
 | Probe | Result |
 | --- | --- |
@@ -223,15 +241,17 @@ builds and the question is whether the proofs after it still do.
 | The listener accepts any confirmation | `Sake.Proof` fails in `finishListen.proof`, where the checked confirmation is used |
 | Both confirmations use the listener's label, in `dial_end` and in `listen_end` | `Sake.Proof` fails in `finishListen.proof` at `label_ne`: the attacker could send the listener's confirmation back as the dialer's |
 | The dialer ignores whether the exchange is contributory | Survives: every proof builds, because the model's exchange never rejects. `test_non_contributory_exchange_fails` covers the check in production |
+| `finishListen` without `firstTime`, with its proof adapted | `Sake.Proof` fails in `finishListen.proof`: the event invariant asks that the finish is not on the trace yet, and nothing else says so |
+| The lemma that the dialer's last step accepts, without its window condition | `Sake.Completeness` fails in `dial_end_accepts`: the step rejects a timestamp outside the window |
+| An axiom behind a private lemma of `Sake.Completeness` | `Sake.Audit` fails: the audit reaches the private lemmas through the public theorems |
 
 ## What is not proved
 
 | Gap | Why | What it needs |
 | --- | --- | --- |
-| That a reachable trace has both peers finish. `handshake_completes` covers the steps, not the actions around them, so the trace statements would also hold if an action could never finish. | A trace-level run needs the handles of six actions. | A statement like `Qmdb.Completeness`. |
 | V0, and the key substitution it admits. | DyLean's signature is ideal: a signature verifies under one key. | DyLean's ACME example has a signature without exclusive ownership; with it the substitution should appear as a trace. |
 | Non-contributory exchanges. | Symbolic Diffie-Hellman has no low-order points, so `Rejection::Ephemeral` is never returned in the model. | Outside the symbolic model; the production test covers the rejection. |
-| Time. Timestamps are attacker-chosen numbers and no statement speaks about the window. | The clock is outside the steps. | A model of clocks and synchrony. |
+| Time. Timestamps are attacker-chosen numbers. The window appears only as the condition under which honest runs complete; no security statement speaks about it. | The clock is outside the steps. | A model of clocks and synchrony. |
 | The record protocol and its keys. | DyLean has no theory of authenticated encryption. | An AEAD theory; the secret transcript is the key material it would start from. |
 
 ## Review boundary
@@ -242,6 +262,9 @@ the definitions in `Terms.lean` (`stamp`, `start`, `sakeTerms`, `Signer`, `signe
 `mac`, `mac.attackerKnowledge`), the events, kept states and their secret parts, messages,
 actions, the check `firstTime`, compromise predicates and `#combine` configuration in
 `Protocol.lean`, and the statements in `SecurityTheorems.lean`. Lean checks the proofs, the
-invariant in `Proof.lean` and the invariants of `Mac.lean` included. `Owner.lean` is checked
-too; it opens DyLean's definitions with `import all` to compute the label of a key. The production instance in `protocol.rs` is outside
+invariant in `Proof.lean` and the invariants of `Mac.lean` included. `Owner.lean` and
+`Completeness.lean` are checked too. Both open DyLean's definitions with `import all`, to
+compute the label of a key and to evaluate the actions. The lemmas of `Completeness.lean` are
+private to the module, because they name a value that DyLean does not export; the axiom audit
+reaches them through `handshake_reachable`. The production instance in `protocol.rs` is outside
 the extraction and covered by production's own tests and conformance fixtures.
