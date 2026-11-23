@@ -7,6 +7,11 @@ publish = false
 # Outside the Commonware workspace: hax extracts this crate on its own.
 [workspace]
 
+# QMDB current-root construction is gated with storage's std support.
+[features]
+default = ["std"]
+std = []
+
 [lib]
 path = "src/lib.rs"
 

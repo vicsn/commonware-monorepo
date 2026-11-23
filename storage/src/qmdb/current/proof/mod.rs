@@ -62,6 +62,7 @@ use commonware_utils::{
 use core::{num::NonZeroU64, ops::Range};
 use tracing::debug;
 
+mod activity;
 pub mod operation;
 
 /// Validate the chunk width before deriving bitmap indices or Merkle heights.

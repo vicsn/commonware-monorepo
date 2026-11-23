@@ -8,6 +8,7 @@ terms and clients.
 | Target | Rust | Lean | Report |
 | --- | --- | --- | --- |
 | QMDB single-item inclusion | [symbolic/src/qmdb.rs](symbolic/src/qmdb.rs) over production `terms.rs` and `traversal.rs` | [lean/Qmdb](lean/Qmdb) | [qmdb/README.md](qmdb/README.md) |
+| Ordered QMDB checkpoint reads | shared ordered claim, activity, current-root and pinned MMB verifier logic | [CheckpointAudit](lean/Qmdb/CheckpointAudit.lean) | [MMB and ordered reads](qmdb/mmb/README.md) |
 | BLS certificates | [symbolic/src/bls.rs](symbolic/src/bls.rs) over production `rules.rs` | [lean/Bls](lean/Bls) | [bls/README.md](bls/README.md) |
 | SAKE handshake | production `handshake/sake/rules.rs`, with no module of its own | [lean/Sake](lean/Sake) | [sake/README.md](sake/README.md) |
 

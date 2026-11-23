@@ -10,6 +10,8 @@ use core::ops::{
 };
 use core::{fmt, ops::Range};
 
+commonware_macros::stability_mod!(ALPHA, mod cyclic);
+
 /// Whether `key` is in the cyclic span described by the current bounds of `span`.
 ///
 /// When both endpoints are bounded, a start greater than the end wraps around the key
@@ -42,12 +44,11 @@ pub fn contains_cyclic<K: Ord + ?Sized>(span: impl RangeBounds<K>, key: &K) -> b
         Excluded(end) => key < end,
         Unbounded => true,
     };
-    match (start, end) {
-        (Included(start) | Excluded(start), Included(end) | Excluded(end)) if start >= end => {
-            after_start || before_end
-        }
-        _ => after_start && before_end,
-    }
+    let wraps = matches!(
+        (start, end),
+        (Included(start) | Excluded(start), Included(end) | Excluded(end)) if start >= end
+    );
+    cyclic::contains(wraps, after_start, before_end)
 }
 
 /// Error returned when attempting to create a non-empty range from an empty range.

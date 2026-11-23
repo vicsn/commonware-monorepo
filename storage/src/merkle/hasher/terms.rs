@@ -23,7 +23,7 @@ pub(crate) trait Terms {
 }
 
 /// Largest number of parts in any hash input built here.
-pub(crate) const MAX_PARTS: usize = 4;
+pub(crate) const MAX_PARTS: usize = 5;
 
 /// Leaf digest: `Hash(position || element)`, with the position as a big-endian `u64`.
 pub(crate) fn leaf_digest<T: Terms>(terms: &T, position: u64, element: &[u8]) -> T::Digest {
@@ -77,4 +77,33 @@ pub(crate) fn root<T: Terms>(
 /// Root of a structure without peaks: `Hash(domain || leaves)`.
 pub(crate) fn empty_root<T: Terms>(terms: &T, domain: [u8; 2], leaves: u64) -> T::Digest {
     terms.hash(&[Part::Bytes(&domain), Part::Bytes(&leaves.to_be_bytes())])
+}
+
+/// Canonical current root, including optional pending and partial bitmap chunk digests.
+#[cfg(feature = "std")]
+pub(crate) fn current_root<T: Terms>(
+    terms: &T,
+    ops: &T::Digest,
+    grafted: &T::Digest,
+    pending: Option<&T::Digest>,
+    partial: Option<(u64, &T::Digest)>,
+) -> T::Digest {
+    let (ops, grafted) = (Part::Digest(ops), Part::Digest(grafted));
+    match (pending, partial) {
+        (None, None) => terms.hash(&[ops, grafted]),
+        (Some(p), None) => terms.hash(&[ops, grafted, Part::Digest(p)]),
+        (None, Some((next, d))) => terms.hash(&[
+            ops,
+            grafted,
+            Part::Bytes(&next.to_be_bytes()),
+            Part::Digest(d),
+        ]),
+        (Some(p), Some((next, d))) => terms.hash(&[
+            ops,
+            grafted,
+            Part::Digest(p),
+            Part::Bytes(&next.to_be_bytes()),
+            Part::Digest(d),
+        ]),
+    }
 }

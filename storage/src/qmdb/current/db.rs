@@ -921,30 +921,13 @@ pub(super) fn combine_roots<H: Hasher>(
     pending: Option<&H::Digest>,
     partial: Option<(u64, &H::Digest)>,
 ) -> H::Digest {
-    let hasher = qmdb::hasher::<H>();
-    match (pending, partial) {
-        (None, None) => hasher.hash(&[ops_root.as_ref(), grafted_root.as_ref()]),
-        (Some(pe), None) => hasher.hash(&[ops_root.as_ref(), grafted_root.as_ref(), pe.as_ref()]),
-        (None, Some((nb, p))) => {
-            let nb_bytes = nb.to_be_bytes();
-            hasher.hash(&[
-                ops_root.as_ref(),
-                grafted_root.as_ref(),
-                nb_bytes.as_slice(),
-                p.as_ref(),
-            ])
-        }
-        (Some(pe), Some((nb, p))) => {
-            let nb_bytes = nb.to_be_bytes();
-            hasher.hash(&[
-                ops_root.as_ref(),
-                grafted_root.as_ref(),
-                pe.as_ref(),
-                nb_bytes.as_slice(),
-                p.as_ref(),
-            ])
-        }
-    }
+    merkle::hasher::terms::current_root(
+        &qmdb::hasher::<H>(),
+        ops_root,
+        grafted_root,
+        pending,
+        partial,
+    )
 }
 
 /// Gather the components that bind an ops root to a canonical [Db] root.

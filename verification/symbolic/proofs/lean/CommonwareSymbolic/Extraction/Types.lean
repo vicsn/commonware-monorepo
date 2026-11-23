@@ -183,6 +183,68 @@ structure traversal.Opening (N : Type _) (E : Type _) (C : Type _)
   cursor : Std.Usize
   collected : C
 
+/-- [commonware_symbolic::ordered::Update]
+    Source: 'src/ordered.rs', lines 25:0-29:1 -/
+structure ordered.Update (K : Type _) (V : Type _) (Clause1_Value : Type _)
+  where
+  key : K
+  value : Clause1_Value
+  next_key : K
+
+/-- [commonware_symbolic::ordered::Operation]
+    Source: 'src/ordered.rs', lines 41:0-44:1 -/
+@[discriminant isize]
+inductive ordered.Operation (F : Type _) (K : Type _) (V : Type _)
+  (Clause2_Value : Type _) where
+| Update :
+  ordered.Update K V Clause2_Value →
+  ordered.Operation F K V Clause2_Value
+| Commit :
+  core.option.Option Clause2_Value →
+  F →
+  ordered.Operation F K V Clause2_Value
+
+/-- Trait declaration: [commonware_symbolic::ordered::ValueEncoding]
+    Source: 'src/ordered.rs', lines 13:0-15:1 -/
+structure ordered.ValueEncoding (Self : Type _) (Self_Value : Type _) where
+  corecloneCloneInst : core.clone.Clone Self_Value
+
+/-- Trait declaration: [commonware_symbolic::ordered::Key]
+    Source: 'src/ordered.rs', lines 10:0-12:1 -/
+structure ordered.Key (Self : Type _) where
+  corecloneCloneInst : core.clone.Clone Self
+  corecmpPartialEqInst : core.cmp.PartialEq Self Self
+  less : Self → Self → RustM Bool
+
+/-- Trait declaration: [commonware_symbolic::ordered::Graftable]
+    Source: 'src/ordered.rs', lines 8:0-8:35 -/
+structure ordered.Graftable (Self : Type _) where
+  coremarkerCopyInst : core.marker.Copy Self
+
+/-- [commonware_symbolic::ordered::OperationProof]
+    Source: 'src/ordered.rs', lines 46:0-49:1 -/
+structure ordered.OperationProof (F : Type _) (D : Type _) (C : Type _) where
+  loc : F
+  payload : (D × C)
+
+/-- [commonware_symbolic::ordered::ExclusionProof]
+    Source: 'src/ordered.rs', lines 51:0-54:1 -/
+@[discriminant isize]
+inductive ordered.ExclusionProof (F : Type _) (K : Type _) (V : Type _) (D :
+  Type _) (C : Type _) (Clause2_Value : Type _) where
+| KeyValue :
+  ordered.OperationProof F D C →
+  ordered.Update K V Clause2_Value →
+  ordered.ExclusionProof F K V D C Clause2_Value
+| Commit :
+  ordered.OperationProof F D C →
+  core.option.Option Clause2_Value →
+  ordered.ExclusionProof F K V D C Clause2_Value
+
+/-- Trait declaration: [commonware_symbolic::ordered::Digest]
+    Source: 'src/ordered.rs', lines 9:0-9:26 -/
+structure ordered.Digest (Self : Type _) where
+
 /-- [commonware_symbolic::bls::N3f1]
     Source: 'src/bls.rs', lines 10:0-10:48 -/
 @[reducible]

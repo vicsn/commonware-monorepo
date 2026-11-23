@@ -167,7 +167,7 @@ Weak evidence, L2.
   that `ByteTerms` implements. That the hash is of the concatenated parts rests on the comments
   of `Hasher::hash` in `hasher.rs` and in `commonware_cryptography`.
 - One difference. `ByteTerms::hash` panics when given more than `MAX_PARTS` parts, and the
-  Lean reading is total. Every caller in `terms.rs` passes at most four, which is `MAX_PARTS`.
+  Lean reading is total. The current-root preimage uses up to five parts, which is `MAX_PARTS`.
 - Recommendation. Accept as a ten-line review item, or extract `ByteTerms::hash` over an
   abstract byte hasher so that the reading becomes a checked lemma.
 

@@ -52,6 +52,7 @@ end
   Literal,
   Concat,
   Hash,
+  Commonware.Symbolic.Keccak,
 
 instance [Snapshot] : ProtocolEvent.EventInv Acceptance where
   invariant _ event := event.height = Snapshot.height ∧
@@ -67,6 +68,7 @@ variable [Snapshot]
   Literal,
   Concat,
   Hash,
+  Commonware.Symbolic.Keccak,
 
 theorem client_preserves (handle : Nat) (loc : Std.U64) (ws : Slice Bytes) :
     HoareTriple (client handle loc ws) (fun _ => True) (fun _ _ => True) :=

@@ -14,6 +14,8 @@ use commonware_codec::{Buf, Encode, EncodeSize, Read, ReadExt as _, Write};
 use commonware_cryptography::{Digest, Hasher};
 use commonware_utils::range::contains_cyclic;
 
+mod claim;
+
 /// Wire tag for [ExclusionProof::KeyValue].
 pub const KEY_VALUE_CONTEXT: u8 = 0;
 
@@ -62,12 +64,7 @@ impl<F: Graftable, K: Key, D: Digest, C: AsRef<[u8]>> KeyValueProof<F, K, D, C> 
         V: ValueEncoding,
         Operation<F, K, V>: Encode,
     {
-        let op = Operation::<F, K, V>::Update(Update {
-            key,
-            value,
-            next_key: self.next_key.clone(),
-        });
-
+        let op = claim::membership::<F, K, V>(key, value, &self.next_key);
         self.proof.verify::<H, _>(op, root)
     }
 }
@@ -146,20 +143,9 @@ where
     /// Return true if the proof authenticates that `key` does not exist in the database with
     /// the provided `root`.
     pub fn verify<H: Hasher<Digest = D>>(&self, key: &K, root: &D) -> bool {
-        let (op_proof, op) = match self {
-            Self::KeyValue(op_proof, data) => {
-                if data.key == *key || !contains_cyclic(&data.key..&data.next_key, key) {
-                    return false;
-                }
-
-                (op_proof, Operation::Update(data.clone()))
-            }
-            Self::Commit(op_proof, metadata) => {
-                // An empty database's commit floor equals the commit operation's location
-                (op_proof, Operation::Commit(metadata.clone(), op_proof.loc))
-            }
+        let Some((op_proof, op)) = claim::exclusion(key, self) else {
+            return false;
         };
-
         op_proof.verify::<H, _>(op, root)
     }
 }

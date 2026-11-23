@@ -21,15 +21,20 @@ impl<F: Family, H: Hasher<F>> Terms for ByteTerms<'_, F, H> {
     type Digest = H::Digest;
 
     fn hash(&self, parts: &[Part<'_, H::Digest>]) -> H::Digest {
-        let mut slices: [&[u8]; MAX_PARTS] = [&[]; MAX_PARTS];
-        for (slice, part) in slices.iter_mut().zip(parts) {
-            *slice = match part {
-                Part::Bytes(bytes) => bytes,
-                Part::Digest(digest) => digest.as_ref(),
-            };
-        }
-        self.0.hash(&slices[..parts.len()])
+        hash_parts(parts, |slices| self.0.hash(slices))
     }
+}
+
+/// Translate a statically bounded hash input to the concrete byte slices.
+fn hash_parts<D: Digest>(parts: &[Part<'_, D>], hash: impl FnOnce(&[&[u8]]) -> D) -> D {
+    let mut slices: [&[u8]; MAX_PARTS] = [&[]; MAX_PARTS];
+    for (slice, part) in slices.iter_mut().zip(parts) {
+        *slice = match part {
+            Part::Bytes(bytes) => bytes,
+            Part::Digest(digest) => digest.as_ref(),
+        };
+    }
+    hash(&slices[..parts.len()])
 }
 
 /// A trait for computing the various digests of a Merkle-family structure.
@@ -221,6 +226,14 @@ impl<H: CHasher> Standard<H> {
     /// Compute the digest of a byte slice.
     pub fn digest(&self, data: &[u8]) -> H::Digest {
         self.hash(&[data])
+    }
+}
+
+impl<H: CHasher> Terms for Standard<H> {
+    type Digest = H::Digest;
+
+    fn hash(&self, parts: &[Part<'_, H::Digest>]) -> H::Digest {
+        hash_parts(parts, |slices| self.hash(slices))
     }
 }
 
