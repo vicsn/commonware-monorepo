@@ -69,6 +69,36 @@ theorem root_eq (S : Scheme D M) (u : Unit) (domain : Aeneas.Std.Array Std.U8 2#
   simp [terms.root, to_be_bytes_ok, core.array.Array.as_slice,
     rust_primitives.slice.array_as_slice, Scheme.terms, rootInput, be]
 
+/-! ## The size bound -/
+
+/-- The largest height that the client accepts: the extracted `MAX_HEIGHT`. -/
+def maxHeight : Nat := qmdb.MAX_HEIGHT.val
+
+/-- The most leaves of a tree that the client accepts, which is production's limit on an MMR. -/
+def maxLeaves : Nat := 2^maxHeight
+
+/-- The value of the bound. Every other statement and proof names it. -/
+theorem maxHeight_eq : maxHeight = 62 := by
+  simp [maxHeight, qmdb.MAX_HEIGHT]
+
+/-- The client accepts trees of two leaves, which the sanity checks use. -/
+theorem one_le_maxHeight : 1 ≤ maxHeight := by
+  rw [maxHeight_eq]
+  decide
+
+/-- The client's height check, read on natural numbers. -/
+theorem above_maxHeight (h : Std.U32) : h > qmdb.MAX_HEIGHT ↔ h.val > maxHeight :=
+  Iff.rfl
+
+/-- A tree within the height bound is within the leaf bound. -/
+theorem leaves_le_maxLeaves {h : Nat} (bound : h ≤ maxHeight) : 2^h ≤ maxLeaves :=
+  Nat.pow_le_pow_right (by decide) bound
+
+/-- Twice the leaves of the largest tree fit 64 bits, so every position and range end does. -/
+theorem maxLeaves_fits : 2 * maxLeaves ≤ 2^64 := by
+  rw [maxLeaves, maxHeight_eq]
+  decide
+
 /-! ## The production backend -/
 
 abbrev Opening (D : Type) := traversal.Opening (qmdb.Mmr Unit) qmdb.Single Unit D
@@ -143,12 +173,13 @@ theorem ilog2_ok (w : Std.U64) (n : Nat) (hw : w.val = 2^n) :
   simp [CoreModels.core.num.U64.ilog2, rust_primitives.arithmetic.ilog2_u64, uilog2, hw,
     Nat.log2_two_pow]
 
-theorem children_ok (S : Scheme D M) (p w : Std.U64) (n : Nat) (hw : w.val = 2^n) (hn : n ≤ 62)
-    (hp : w.val ≤ p.val) (one : 1 ≤ p.val) :
+theorem children_ok (S : Scheme D M) (p w : Std.U64) (n : Nat) (hw : w.val = 2^n)
+    (hn : n ≤ maxHeight) (hp : w.val ≤ p.val) (one : 1 ≤ p.val) :
     ∃ lp rp : Std.U64, (∀ o : Opening D,
       traversal.Opening.Insts.Commonware_symbolicTraversalBackend.children (mmr S) single element
         (noCollect D) o p w = RustM.ok (lp, rp)) ∧ lp.val = p.val - w.val ∧
       rp.val = p.val - 1 := by
+  have top := maxHeight_eq
   have height : (⟨BitVec.ofNat 32 n⟩ : Std.U32).val = n := by
     change (BitVec.ofNat 32 n).toNat = n
     simp
@@ -176,10 +207,11 @@ theorem node_ok (S : Scheme D M) (o : Opening D) (p : Std.U64) (l r : D) :
 
 /-- A subtree outside the queried range is read as one sibling. -/
 theorem outside (S : Scheme D M) (o : Opening D) (p w s loc e : Std.U64)
-    (bound : s.val + w.val ≤ 2^62) (off : s.val + w.val ≤ loc.val ∨ e.val ≤ s.val) :
+    (bound : s.val + w.val ≤ maxLeaves) (off : s.val + w.val ≤ loc.val ∨ e.val ≤ s.val) :
     traversal.reconstruct (backend S) o p w s loc e =
       traversal.Opening.Insts.Commonware_symbolicTraversalBackend.sibling (mmr S) single element
         (noCollect D) o := by
+  have fits := maxLeaves_fits
   obtain ⟨stop, hstop, stopv⟩ := add_ok s w (by scalar_tac)
   rw [traversal.reconstruct.eq_def]
   simp only [hstop, bind_ok]
@@ -192,8 +224,7 @@ theorem outside (S : Scheme D M) (o : Opening D) (p w s loc e : Std.U64)
 
 /-- A subtree of one leaf inside the queried range is read as that leaf. -/
 theorem reconstruct_one (S : Scheme D M) (o : Opening D) (p w s loc e : Std.U64)
-    (hw : w.val = 1) (bound : s.val + 1 ≤ 2^62) (c1 : ¬ s.val + 1 ≤ loc.val)
-    (c2 : ¬ e.val ≤ s.val) :
+    (hw : w.val = 1) (c1 : ¬ s.val + 1 ≤ loc.val) (c2 : ¬ e.val ≤ s.val) :
     traversal.reconstruct (backend S) o p w s loc e =
       traversal.Opening.Insts.Commonware_symbolicTraversalBackend.leaf (mmr S) single element
         (noCollect D) o p := by
@@ -205,11 +236,11 @@ theorem reconstruct_one (S : Scheme D M) (o : Opening D) (p w s loc e : Std.U64)
   simp [c1', c2, c3]
 
 theorem reconstruct_leaf (S : Scheme D M) (o : Opening D) (a : Slice Std.U8)
-    (h : o.elements = some a) (p w s loc e : Std.U64) (hw : w.val = 1) (bound : s.val + 1 ≤ 2^62)
+    (h : o.elements = some a) (p w s loc e : Std.U64) (hw : w.val = 1)
     (inside : s.val ≤ loc.val ∧ loc.val < s.val + 1) (finish : e.val = loc.val + 1) :
     traversal.reconstruct (backend S) o p w s loc e =
       RustM.ok (.Ok (S.hash (leafInput S p a)), { o with elements := none }) := by
-  rw [reconstruct_one S o p w s loc e hw bound (by omega) (by omega), leaf_some S o a h p]
+  rw [reconstruct_one S o p w s loc e hw (by omega) (by omega), leaf_some S o a h p]
 
 /-! ## The hash inputs of an opening -/
 
@@ -283,8 +314,8 @@ theorem inputs_right {S : Scheme D M} {item : Slice Std.U8} {loc n p s : Nat} {w
 /-- A successful run of the production traversal over a subtree that holds the queried location
 hashes exactly the inputs of `inputs` and returns the hash of the first. -/
 theorem reconstruct_inputs (S : Scheme D M) (H : Nat) : ∀ (p w s loc e : Std.U64)
-    (o r : Opening D) (item : Slice Std.U8) (d : D), w.val = 2^H → H ≤ 62 →
-    2*(w.val-1) ≤ p.val → s.val + w.val ≤ 2^62 → s.val ≤ loc.val → loc.val < s.val + w.val →
+    (o r : Opening D) (item : Slice Std.U8) (d : D), w.val = 2^H → H ≤ maxHeight →
+    2*(w.val-1) ≤ p.val → s.val + w.val ≤ maxLeaves → s.val ≤ loc.val → loc.val < s.val + w.val →
     e.val = loc.val + 1 → o.elements = some item →
     traversal.reconstruct (backend S) o p w s loc e = RustM.ok (.Ok d, r) →
     ∃ m ms, inputs S item loc.val H p.val s.val (o.siblings.val.drop o.cursor.val) =
@@ -294,7 +325,7 @@ theorem reconstruct_inputs (S : Scheme D M) (H : Nat) : ∀ (p w s loc e : Std.U
   | zero =>
     intro p w s loc e o r item d width _ _ bound low high finish elems run
     simp at width
-    rw [reconstruct_leaf S o item elems p w s loc e width (by omega) ⟨low, by omega⟩ finish]
+    rw [reconstruct_leaf S o item elems p w s loc e width ⟨low, by omega⟩ finish]
       at run
     have same := ok_inj run
     simp only [Prod.mk.injEq, CoreModels.core.result.Result.Ok.injEq] at same
@@ -303,7 +334,7 @@ theorem reconstruct_inputs (S : Scheme D M) (H : Nat) : ∀ (p w s loc e : Std.U
   | succ n ih =>
     intro p w s loc e o r item d width bound position start low high finish elems run
     have one : 1 ≤ 2^n := Nat.one_le_two_pow
-    have small : 2^n ≤ 2^61 := Nat.pow_le_pow_right (by decide) (by omega)
+    have fits := maxLeaves_fits
     have double : 2^(n+1) = 2*2^n := by rw [Nat.pow_succ]; omega
     obtain ⟨stop, hstop, stopv⟩ := add_ok s w (by scalar_tac)
     have c1 : ¬ stop.val ≤ loc.val := by omega
@@ -437,18 +468,20 @@ theorem eq_ok (S : Scheme D M) (a b : D) :
 theorem verify_true (S : Scheme D M) {h : Std.U32} {loc : Std.U64} {root : D}
     {item : Slice Std.U8} {ws : Slice D}
     (acc : qmdb.verify S.terms () h loc root item ws = RustM.ok true) :
-    h.val ≤ 62 ∧ loc.val < 2^h.val ∧ ∃ (w p e : Std.U64) (peak : D) (r : Opening D),
+    h.val ≤ maxHeight ∧ loc.val < 2^h.val ∧ ∃ (w p e : Std.U64) (peak : D) (r : Opening D),
       w.val = 2^h.val ∧ p.val = 2*(2^h.val-1) ∧ e.val = loc.val + 1 ∧
       traversal.reconstruct (backend S)
         { nodes := (), elements := some item, siblings := ws, cursor := 0#usize, collected := () }
         p w 0#u64 loc e = RustM.ok (.Ok peak, r) ∧ S.hash (rootInput S domain w peak) = root ∧
       r.cursor.val = ws.val.length := by
   unfold qmdb.verify at acc
-  by_cases tall : h.val > 62
-  · have : h > qmdb.MAX_HEIGHT := by simp [qmdb.MAX_HEIGHT]; scalar_tac
+  have top := maxHeight_eq
+  have fits := maxLeaves_fits
+  by_cases tall : h.val > maxHeight
+  · have : h > qmdb.MAX_HEIGHT := (above_maxHeight h).mpr tall
     simp [this] at acc
-  · have short : ¬ h > qmdb.MAX_HEIGHT := by simp [qmdb.MAX_HEIGHT]; scalar_tac
-    have small : 2^h.val ≤ 2^62 := Nat.pow_le_pow_right (by decide) (by omega)
+  · have short : ¬ h > qmdb.MAX_HEIGHT := mt (above_maxHeight h).mp tall
+    have small : 2^h.val ≤ maxLeaves := leaves_le_maxLeaves (by omega)
     have one : 1 ≤ 2^h.val := Nat.one_le_two_pow
     obtain ⟨w, hw, wv⟩ := pow_ok h (by omega)
     by_cases out : loc.val ≥ 2^h.val
@@ -480,11 +513,11 @@ sibling. -/
 theorem verify_inputs (S : Scheme D M) {h : Std.U32} {loc : Std.U64} {root : D}
     {item : Slice Std.U8} {ws : Slice D}
     (acc : qmdb.verify S.terms () h loc root item ws = RustM.ok true) :
-    h.val ≤ 62 ∧ loc.val < 2^h.val ∧ ∃ m ms,
+    h.val ≤ maxHeight ∧ loc.val < 2^h.val ∧ ∃ m ms,
       inputs S item loc.val h.val (2*(2^h.val-1)) 0 ws.val = some (m, ms, []) ∧
       S.hash (rootInput S domain (pos (2^h.val)) (S.hash m)) = root := by
   obtain ⟨hh, hl, w, p, e, peak, r, wv, pv, ev, run, rooted, used⟩ := verify_true S acc
-  have small : 2^h.val ≤ 2^62 := Nat.pow_le_pow_right (by decide) hh
+  have small : 2^h.val ≤ maxLeaves := leaves_le_maxLeaves hh
   obtain ⟨m, ms, path, rfl, kept⟩ := reconstruct_inputs S h.val p w 0#u64 loc e _ r item peak wv hh
     (by omega) (by simp; omega) (by simp) (by simp; omega) ev rfl run
   have width : w = pos (2^h.val) := by rw [← wv, pos_val]
@@ -568,8 +601,8 @@ theorem drop_append {α} {l : List α} {c : Nat} {a b : List α} (h : l.drop c =
 /-- The production traversal rebuilds the honest subtree digest from the honest siblings,
 reading exactly them and the one claimed item. -/
 theorem honest_rec (S : Scheme D M) (items : Std.U64 → Slice Std.U8) (H : Nat) :
-    ∀ (p w s loc e : Std.U64) (o : Opening D) (rest : List D), w.val = 2^H → H ≤ 62 →
-    2*(w.val-1) ≤ p.val → s.val + w.val ≤ 2^62 → s.val ≤ loc.val → loc.val < s.val + w.val → e.val = loc.val + 1 →
+    ∀ (p w s loc e : Std.U64) (o : Opening D) (rest : List D), w.val = 2^H → H ≤ maxHeight →
+    2*(w.val-1) ≤ p.val → s.val + w.val ≤ maxLeaves → s.val ≤ loc.val → loc.val < s.val + w.val → e.val = loc.val + 1 →
     o.elements = some (items loc) →
     o.siblings.val.drop o.cursor.val = path S items H p.val s.val loc.val ++ rest →
     ∃ r : Opening D, traversal.reconstruct (backend S) o p w s loc e =
@@ -582,12 +615,12 @@ theorem honest_rec (S : Scheme D M) (items : Std.U64 → Slice Std.U8) (H : Nat)
     have at_loc : s = loc := UScalar.eq_of_val_eq (by omega)
     subst at_loc
     refine ⟨{ o with elements := none }, ?_, rfl, rfl, rfl⟩
-    rw [reconstruct_leaf S o (items s) elems p w s s e width (by omega) ⟨low, by omega⟩ finish]
+    rw [reconstruct_leaf S o (items s) elems p w s s e width ⟨low, by omega⟩ finish]
     simp [tree, pos_val]
   | succ n ih =>
     intro p w s loc e o rest width bound position start low high finish elems sib
     have one : 1 ≤ 2^n := Nat.one_le_two_pow
-    have small : 2^n ≤ 2^61 := Nat.pow_le_pow_right (by decide) (by omega)
+    have fits := maxLeaves_fits
     have double : 2^(n+1) = 2*2^n := by rw [Nat.pow_succ]; omega
     obtain ⟨stop, hstop, stopv⟩ := add_ok s w (by scalar_tac)
     have c1 : ¬ stop.val ≤ loc.val := by omega
@@ -638,21 +671,24 @@ def honestRoot (S : Scheme D M) (items : Std.U64 → Slice Std.U8) (h : Nat) : D
 
 /-- The honest siblings of `loc` in a snapshot of height `h`, as a slice. -/
 def honestSiblings (S : Scheme D M) (items : Std.U64 → Slice Std.U8) (h : Nat) (loc : Std.U64)
-    (bound : h ≤ 62) : Slice D :=
-  Slice.from (path S items h (2*(2^h-1)) 0 loc.val) (by rw [path_length]; scalar_tac)
+    (bound : h ≤ maxHeight) : Slice D :=
+  Slice.from (path S items h (2*(2^h-1)) 0 loc.val)
+    (by rw [path_length]; have top := maxHeight_eq; scalar_tac)
 
 /-- On the honest siblings of an honest snapshot followed by `rest`, the production verifier
 accepts exactly when `rest` is empty. -/
 theorem honest_verify (S : Scheme D M) (items : Std.U64 → Slice Std.U8) (h : Std.U32)
-    (bound : h.val ≤ 62)
+    (bound : h.val ≤ maxHeight)
     (loc : Std.U64) (inside : loc.val < 2^h.val) (ws : Slice D) (rest : List D)
     (siblings : ws.val = path S items h.val (2*(2^h.val-1)) 0 loc.val ++ rest) :
     qmdb.verify S.terms () h loc (honestRoot S items h.val) (items loc) ws =
       RustM.ok (decide (rest = [])) := by
-  have small : 2^h.val ≤ 2^62 := Nat.pow_le_pow_right (by decide) bound
+  have top := maxHeight_eq
+  have fits := maxLeaves_fits
+  have small : 2^h.val ≤ maxLeaves := leaves_le_maxLeaves bound
   have one : 1 ≤ 2^h.val := Nat.one_le_two_pow
   obtain ⟨w, hw, wv⟩ := pow_ok h (by omega)
-  have short : ¬ h > qmdb.MAX_HEIGHT := by simp [qmdb.MAX_HEIGHT]; scalar_tac
+  have short : ¬ h > qmdb.MAX_HEIGHT := mt (above_maxHeight h).mp (by omega)
   have inside' : ¬ loc ≥ w := by scalar_tac
   obtain ⟨i, hi, iv⟩ := sub_ok w 1#u64 (by scalar_tac)
   obtain ⟨p, hp, pv⟩ := mul_ok 2#u64 i (by scalar_tac)
@@ -689,7 +725,7 @@ theorem honest_verify (S : Scheme D M) (items : Std.U64 → Slice Std.U8) (h : S
 
 /-- The production verifier accepts every honest opening of an honest snapshot. -/
 theorem honest_opening (S : Scheme D M) (items : Std.U64 → Slice Std.U8) (h : Std.U32)
-    (bound : h.val ≤ 62)
+    (bound : h.val ≤ maxHeight)
     (loc : Std.U64) (inside : loc.val < 2^h.val) :
     qmdb.verify S.terms () h loc (honestRoot S items h.val) (items loc)
       (honestSiblings S items h.val loc bound) = RustM.ok true := by
@@ -697,7 +733,7 @@ theorem honest_opening (S : Scheme D M) (items : Std.U64 → Slice Std.U8) (h : 
 
 /-- The production verifier rejects an honest opening followed by an unused sibling. -/
 theorem extra_sibling_rejected (S : Scheme D M) (items : Std.U64 → Slice Std.U8) (h : Std.U32)
-    (bound : h.val ≤ 62) (loc : Std.U64) (inside : loc.val < 2^h.val) (ws : Slice D)
+    (bound : h.val ≤ maxHeight) (loc : Std.U64) (inside : loc.val < 2^h.val) (ws : Slice D)
     (extra : D) (siblings : ws.val = path S items h.val (2*(2^h.val-1)) 0 loc.val ++ [extra]) :
     qmdb.verify S.terms () h loc (honestRoot S items h.val) (items loc) ws = RustM.ok false := by
   simpa using honest_verify S items h bound loc inside ws [extra] siblings
@@ -725,7 +761,7 @@ theorem leaf_total (S : Scheme D M) (o : Opening D) (p : Std.U64) : ∃ res r,
 /-- The production traversal returns, without panicking or diverging, on every subtree of an
 MMR within the production size limit, whatever the siblings, elements and queried range. -/
 theorem reconstruct_total (S : Scheme D M) (H : Nat) : ∀ (p w s loc e : Std.U64) (o : Opening D),
-    w.val = 2^H → H ≤ 62 → 2*(w.val-1) ≤ p.val → s.val + w.val ≤ 2^62 →
+    w.val = 2^H → H ≤ maxHeight → 2*(w.val-1) ≤ p.val → s.val + w.val ≤ maxLeaves →
     ∃ res r, traversal.reconstruct (backend S) o p w s loc e = RustM.ok (res, r) := by
   induction H with
   | zero =>
@@ -734,12 +770,12 @@ theorem reconstruct_total (S : Scheme D M) (H : Nat) : ∀ (p w s loc e : Std.U6
     by_cases off : s.val + w.val ≤ loc.val ∨ e.val ≤ s.val
     · rw [outside S o p w s loc e bound off]
       exact sibling_total S o
-    rw [reconstruct_one S o p w s loc e width (by omega) (by omega) (by omega)]
+    rw [reconstruct_one S o p w s loc e width (by omega) (by omega)]
     exact leaf_total S o p
   | succ n ih =>
     intro p w s loc e o width bound position start
     have one : 1 ≤ 2^n := Nat.one_le_two_pow
-    have small : 2^n ≤ 2^61 := Nat.pow_le_pow_right (by decide) (by omega)
+    have fits := maxLeaves_fits
     have double : 2^(n+1) = 2*2^n := by rw [Nat.pow_succ]; omega
     by_cases off : s.val + w.val ≤ loc.val ∨ e.val ≤ s.val
     · rw [outside S o p w s loc e start off]
@@ -767,11 +803,13 @@ theorem reconstruct_total (S : Scheme D M) (H : Nat) : ∀ (p w s loc e : Std.U6
 theorem verify_total (S : Scheme D M) (h : Std.U32) (loc : Std.U64) (root : D) (item : Slice Std.U8)
     (ws : Slice D) : ∃ b, qmdb.verify S.terms () h loc root item ws = RustM.ok b := by
   unfold qmdb.verify
-  by_cases tall : h.val > 62
-  · have : h > qmdb.MAX_HEIGHT := by simp [qmdb.MAX_HEIGHT]; scalar_tac
+  have top := maxHeight_eq
+  have fits := maxLeaves_fits
+  by_cases tall : h.val > maxHeight
+  · have : h > qmdb.MAX_HEIGHT := (above_maxHeight h).mpr tall
     simp [this]
-  · have short : ¬ h > qmdb.MAX_HEIGHT := by simp [qmdb.MAX_HEIGHT]; scalar_tac
-    have small : 2^h.val ≤ 2^62 := Nat.pow_le_pow_right (by decide) (by omega)
+  · have short : ¬ h > qmdb.MAX_HEIGHT := mt (above_maxHeight h).mp tall
+    have small : 2^h.val ≤ maxLeaves := leaves_le_maxLeaves (by omega)
     have one : 1 ≤ 2^h.val := Nat.one_le_two_pow
     obtain ⟨w, hw, wv⟩ := pow_ok h (by omega)
     by_cases out : loc.val ≥ 2^h.val

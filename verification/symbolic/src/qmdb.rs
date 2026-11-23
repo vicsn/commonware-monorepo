@@ -18,7 +18,7 @@ pub(crate) const MMR_DOMAIN: u8 = 0;
 /// Domain byte of forward-fold peak bagging.
 pub(crate) const FORWARD_FOLD: u8 = 0;
 
-/// Largest height whose `2^height` leaves fit the production MMR limit of `2^62`.
+/// Largest height whose `2^height` leaves fit production's `mmr::Family::MAX_LEAVES`.
 pub(crate) const MAX_HEIGHT: u32 = 62;
 
 /// MMR nodes hashed with the production encodings.

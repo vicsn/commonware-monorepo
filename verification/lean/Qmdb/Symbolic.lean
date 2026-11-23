@@ -85,7 +85,8 @@ theorem client_step_carrying (T : terms.Terms Unit Bytes) (root : Bytes) (h : St
   simp only [bind_ok]
 
 /-- The extracted client logs the honest acceptance for every honest opening. -/
-theorem honest_accepted (items : Std.U64 → Slice Std.U8) (h : Std.U32) (bound : h.val ≤ 62)
+theorem honest_accepted (items : Std.U64 → Slice Std.U8) (h : Std.U32)
+    (bound : h.val ≤ Verifier.maxHeight)
     (loc : Std.U64) (inside : loc.val < 2^h.val) :
     qmdb.client_step dyTerms messages () (Verifier.honestRoot symbolic items h.val) h
       (carrying (items loc)) loc (Verifier.honestSiblings symbolic items h.val loc bound) =
@@ -95,7 +96,8 @@ theorem honest_accepted (items : Std.U64 → Slice Std.U8) (h : Std.U32) (bound 
 
 /-- The extracted client rejects every other item at an honest snapshot's location, whatever
 the siblings. -/
-theorem substitution_rejected (items : Std.U64 → Slice Std.U8) (h : Std.U32) (bound : h.val ≤ 62)
+theorem substitution_rejected (items : Std.U64 → Slice Std.U8) (h : Std.U32)
+    (bound : h.val ≤ Verifier.maxHeight)
     (loc : Std.U64) (inside : loc.val < 2^h.val) (item : Slice Std.U8) (other : item ≠ items loc)
     (ws : Slice Bytes) :
     qmdb.client_step dyTerms messages () (Verifier.honestRoot symbolic items h.val) h

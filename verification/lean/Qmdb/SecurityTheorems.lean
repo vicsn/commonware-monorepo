@@ -43,10 +43,11 @@ theorem production_unique (h : Std.U32) (loc : Std.U64) (root : Bytes) (a b : Sl
     (hb : qmdb.verify dyTerms () h loc root b wb = RustM.ok true) : a = b ∧ wa = wb :=
   Symbolic.unique h loc root a b wa wb ha hb
 
-/-- The snapshot assumption is satisfiable under every hash: for any items and height up to 62,
-some root and siblings give every stored item an opening that the production verifier accepts. -/
+/-- The snapshot assumption is satisfiable under every hash: for any items and any height that the
+client accepts, some root and siblings give every stored item an opening that the production
+verifier accepts. -/
 theorem honest_snapshots_exist (hash : Bytes → Bytes) (items : Std.U64 → Slice Std.U8)
-    (h : Std.U32) (bound : h.val ≤ 62) :
+    (h : Std.U32) (bound : h.val ≤ Verifier.maxHeight) :
     ∃ (root : Bytes) (siblings : Std.U64 → Slice Bytes), ∀ loc : Std.U64, loc.val < 2^h.val →
       qmdb.verify (hashing hash).terms () h loc root (items loc) (siblings loc) = RustM.ok true :=
   ⟨_, fun loc => Verifier.honestSiblings (hashing hash) items h.val loc bound,

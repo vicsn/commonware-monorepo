@@ -11,8 +11,8 @@ use crate::{
 };
 use commonware_cryptography::{Hasher as _, Sha256, sha256};
 use commonware_storage::merkle::{
-    Bagging,
-    mmr::{Location, Proof, StandardHasher, mem::Mmr},
+    Bagging, Family as _,
+    mmr::{self, Location, Proof, StandardHasher, mem::Mmr},
 };
 use commonware_utils::test_rng;
 use rand::RngExt as _;
@@ -236,6 +236,8 @@ fn verifiers_agree_with_production() {
 
 #[test]
 fn client_rejects_heights_above_the_bound() {
+    // The bound is production's limit on the leaves of an MMR, as a height.
+    assert_eq!(1u64 << qmdb::MAX_HEIGHT, mmr::Family::MAX_LEAVES.as_u64());
     let message = vec![1];
     for height in [qmdb::MAX_HEIGHT + 1, u32::MAX] {
         assert!(

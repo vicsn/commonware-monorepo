@@ -32,13 +32,13 @@ instance snapshot : Snapshot where
   height := 1#u32
   root := honestRoot symbolic items 1
   items := items
-  siblings loc := honestSiblings symbolic items 1 loc (by decide)
-  honest loc inside := honest_opening symbolic items 1#u32 (by decide) loc inside
+  siblings loc := honestSiblings symbolic items 1 loc one_le_maxHeight
+  honest loc inside := honest_opening symbolic items 1#u32 one_le_maxHeight loc inside
 
 noncomputable section
 
-def honestAlice : Slice Bytes := honestSiblings symbolic items 1 0#u64 (by decide)
-def honestBob : Slice Bytes := honestSiblings symbolic items 1 1#u64 (by decide)
+def honestAlice : Slice Bytes := honestSiblings symbolic items 1 0#u64 one_le_maxHeight
+def honestBob : Slice Bytes := honestSiblings symbolic items 1 1#u64 one_le_maxHeight
 
 /-- The client step of the protocol on a message carrying `item`. -/
 abbrev verdict (item : Slice Std.U8) (loc : Std.U64) (ws : Slice Bytes) :=
@@ -46,20 +46,20 @@ abbrev verdict (item : Slice Std.U8) (loc : Std.U64) (ws : Slice Bytes) :=
 
 theorem accepts_alice : verdict alice 0#u64 honestAlice =
     RustM.ok (some { height := 1#u32, location := 0#u64, item := alice }) :=
-  honest_accepted items 1#u32 (by decide) 0#u64 (by decide)
+  honest_accepted items 1#u32 one_le_maxHeight 0#u64 (by decide)
 
 theorem accepts_bob : verdict bob 1#u64 honestBob =
     RustM.ok (some { height := 1#u32, location := 1#u64, item := bob }) :=
-  honest_accepted items 1#u32 (by decide) 1#u64 (by decide)
+  honest_accepted items 1#u32 one_le_maxHeight 1#u64 (by decide)
 
 /-- `Bob` claimed at Alice's location, whatever the siblings. -/
 theorem rejects_substituted (ws : Slice Bytes) : verdict bob 0#u64 ws = RustM.ok none :=
-  substitution_rejected items 1#u32 (by decide) 0#u64 (by decide) bob
+  substitution_rejected items 1#u32 one_le_maxHeight 0#u64 (by decide) bob
     (by simp [items]; exact alice_ne_bob.symm) ws
 
 /-- `Alice` claimed at Bob's location, whatever the siblings. -/
 theorem rejects_misplaced (ws : Slice Bytes) : verdict alice 1#u64 ws = RustM.ok none :=
-  substitution_rejected items 1#u32 (by decide) 1#u64 (by decide) alice
+  substitution_rejected items 1#u32 one_le_maxHeight 1#u64 (by decide) alice
     (by simp [items]; exact alice_ne_bob) ws
 
 /-- Alice's honest opening followed by one unused sibling. -/
@@ -68,7 +68,7 @@ def longAlice (extra : Bytes) : Slice Bytes :=
     (by simp [path_length]; scalar_tac)
 
 theorem rejects_long (extra : Bytes) : verdict alice 0#u64 (longAlice extra) = RustM.ok none := by
-  have rejected := extra_sibling_rejected symbolic items 1#u32 (by decide) 0#u64 (by decide)
+  have rejected := extra_sibling_rejected symbolic items 1#u32 one_le_maxHeight 0#u64 (by decide)
     (longAlice extra) extra (by simp [longAlice, Slice.from_val])
   have stored : items 0#u64 = alice := by simp [items]
   rw [stored] at rejected
@@ -112,16 +112,17 @@ two-item snapshot, and the finder returns a collision between that opening and t
 the collision alternative of the trace theorem cannot be dropped. -/
 theorem flat_accepts_substituted :
     qmdb.client_step (hashing flat).terms messages () (honestRoot (hashing flat) items 1) 1#u32
-        (carrying bob) 0#u64 (honestSiblings (hashing flat) (fun _ => bob) 1 0#u64 (by decide)) =
+        (carrying bob) 0#u64
+        (honestSiblings (hashing flat) (fun _ => bob) 1 0#u64 one_le_maxHeight) =
       RustM.ok (some { height := 1#u32, location := 0#u64, item := bob }) ∧
     ∃ x y, finder (hashing flat) 1#u32 0#u64 bob alice
-      (honestSiblings (hashing flat) (fun _ => bob) 1 0#u64 (by decide))
-      (honestSiblings (hashing flat) items 1 0#u64 (by decide)) = some (x, y) ∧ x ≠ y := by
+      (honestSiblings (hashing flat) (fun _ => bob) 1 0#u64 one_le_maxHeight)
+      (honestSiblings (hashing flat) items 1 0#u64 one_le_maxHeight) = some (x, y) ∧ x ≠ y := by
   have root : honestRoot (hashing flat) (fun _ => bob) (1#u32 : Std.U32).val =
       honestRoot (hashing flat) items (1#u32 : Std.U32).val := rfl
   have accepted :=
-    honest_opening (hashing flat) (fun _ => bob) 1#u32 (by decide) 0#u64 (by decide)
-  have honest := honest_opening (hashing flat) items 1#u32 (by decide) 0#u64 (by decide)
+    honest_opening (hashing flat) (fun _ => bob) 1#u32 one_le_maxHeight 0#u64 (by decide)
+  have honest := honest_opening (hashing flat) items 1#u32 one_le_maxHeight 0#u64 (by decide)
   have stored : items 0#u64 = alice := by simp [items]
   rw [root] at accepted
   rw [stored] at honest
@@ -130,7 +131,7 @@ theorem flat_accepts_substituted :
     show (do
       let b ← qmdb.verify (hashing flat).terms () 1#u32 0#u64
         (honestRoot (hashing flat) items (1#u32 : Std.U32).val) bob
-        (honestSiblings (hashing flat) (fun _ => bob) (1#u32 : Std.U32).val 0#u64 (by decide))
+        (honestSiblings (hashing flat) (fun _ => bob) (1#u32 : Std.U32).val 0#u64 one_le_maxHeight)
       if b then
         RustM.ok (some ({ height := 1#u32, location := 0#u64, item := bob } : qmdb.Acceptance))
       else RustM.ok none) = _
@@ -153,7 +154,8 @@ def constant : ByteHash Unit where
 
 /-- Under the constant hash, honest openings of two snapshots that differ at a location verify
 under the same root, and the finder returns two different byte strings with that digest. -/
-theorem finder_finds (first second : Std.U64 → Slice Std.U8) (h : Std.U32) (bound : h.val ≤ 62)
+theorem finder_finds (first second : Std.U64 → Slice Std.U8) (h : Std.U32)
+    (bound : h.val ≤ maxHeight)
     (loc : Std.U64) (inside : loc.val < 2^h.val) (differ : first loc ≠ second loc) :
     ∃ x y, finder constant.scheme h loc (first loc) (second loc)
       (honestSiblings constant.scheme first h.val loc bound)
@@ -198,12 +200,12 @@ store different items at location 1 verify under the same root with different si
 finder returns two different byte strings with that digest. -/
 theorem finder_finds_sibling :
     ∃ x y, finder coarse.scheme 1#u32 0#u64 alice alice
-      (honestSiblings coarse.scheme twins 1 0#u64 (by decide))
-      (honestSiblings coarse.scheme items 1 0#u64 (by decide)) = some (x, y) ∧ x ≠ y := by
+      (honestSiblings coarse.scheme twins 1 0#u64 one_le_maxHeight)
+      (honestSiblings coarse.scheme items 1 0#u64 one_le_maxHeight) = some (x, y) ∧ x ≠ y := by
   have root (h : Nat) : honestRoot coarse.scheme items h = honestRoot coarse.scheme twins h := by
     simp [honestRoot, rootInput, ByteHash.scheme, coarse, be_length, Array.val_to_slice]
-  have differ : honestSiblings coarse.scheme twins 1 0#u64 (by decide) ≠
-      honestSiblings coarse.scheme items 1 0#u64 (by decide) := by
+  have differ : honestSiblings coarse.scheme twins 1 0#u64 one_le_maxHeight ≠
+      honestSiblings coarse.scheme items 1 0#u64 one_le_maxHeight := by
     intro same
     have lists := congrArg (fun s : Slice Bool => s.val) same
     simp [honestSiblings, Slice.from_val, path, tree, leafInput, ByteHash.scheme, coarse,
@@ -212,8 +214,8 @@ theorem finder_finds_sibling :
     · rename_i zero
       exact absurd zero (by decide)
     · simp [Slice.from_val] at lists
-  have one := honest_opening coarse.scheme twins 1#u32 (by decide) 0#u64 (by decide)
-  have two := honest_opening coarse.scheme items 1#u32 (by decide) 0#u64 (by decide)
+  have one := honest_opening coarse.scheme twins 1#u32 one_le_maxHeight 0#u64 (by decide)
+  have two := honest_opening coarse.scheme items 1#u32 one_le_maxHeight 0#u64 (by decide)
   have stored : items 0#u64 = alice := by simp [items]
   rw [stored, root] at two
   rcases byte_unique_or_collision coarse 1#u32 0#u64 _ alice alice _ _ one two with
@@ -224,8 +226,8 @@ theorem finder_finds_sibling :
 -- Executed: for those two openings of `Alice` the root inputs agree and the finder returns the
 -- two node inputs, each the position, the digest of Alice's leaf and a sibling.
 #guard (finder coarse.scheme 1#u32 0#u64 alice alice
-      (honestSiblings coarse.scheme twins 1 0#u64 (by decide))
-      (honestSiblings coarse.scheme items 1 0#u64 (by decide))).map
+      (honestSiblings coarse.scheme twins 1 0#u64 one_le_maxHeight)
+      (honestSiblings coarse.scheme items 1 0#u64 one_le_maxHeight)).map
     (fun found => (values found.1, values found.2)) ==
   some ([0, 0, 0, 0, 0, 0, 0, 2, 1, 1], [0, 0, 0, 0, 0, 0, 0, 2, 1, 0])
 
