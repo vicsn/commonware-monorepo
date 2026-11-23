@@ -177,7 +177,7 @@ right = [
 ]
 notes = [
   "QMDB's operation roots use `BackwardFold`, whose domain byte is 1. The client hashes `[0, 0]`, so the modelled tree is a forward-fold MMR, not a QMDB root.",
-  "Production bounds the number of leaves by `2^62`. The client bounds the height by 62, which is the same for a power of two.",
+  "Production bounds the number of leaves by `MAX_LEAVES`. The client bounds the height by `MAX_HEIGHT`, which is the same for a power of two. `client_rejects_heights_above_the_bound` asserts that the two agree.",
 ]
 
 [[panel]]
@@ -396,7 +396,7 @@ right_label = "Assumed in Lean"
 right = [{ file = "verification/lean/Qmdb/Assumptions.lean", lean = "Snapshot" }]
 notes = [
   "`items` is whatever opens under the root. Nothing ties it to the journal, so a consistent off-by-one between journal index and leaf location would not be seen.",
-  "`honest_snapshots_exist` proves that the assumption can be met for every hash at every height up to 62, by building the tree in Lean.",
+  "`honest_snapshots_exist` proves that the assumption can be met for every hash at every height up to `maxHeight`, by building the tree in Lean.",
 ]
 
 [[panel]]
@@ -405,12 +405,14 @@ kind = "reading"
 title = "What honest means in the statements about honest openings"
 link = "`honest_opening`, `extra_sibling_rejected` and `honest_snapshots_exist` are about the tree that these four definitions build. It is a Lean tree over the same hash inputs as the verifier."
 left = [
+  { file = "verification/lean/Qmdb/Verifier.lean", lean = "maxHeight", context = false },
   { file = "verification/lean/Qmdb/Verifier.lean", lean = "tree", context = false },
   { file = "verification/lean/Qmdb/Verifier.lean", lean = "path", context = false },
   { file = "verification/lean/Qmdb/Verifier.lean", lean = "honestRoot", context = false },
   { file = "verification/lean/Qmdb/Verifier.lean", lean = "honestSiblings", context = false },
 ]
 right = [{ prose = [
+  "`maxHeight` is the client's `MAX_HEIGHT`, read from the extraction. Its value is stated once, in `maxHeight_eq`.",
   "`tree` is the digest of the subtree of height `n` at position `p` whose first leaf is `s`: a leaf hashes its item, a node hashes its two children.",
   "`path` lists the siblings of one leaf in the order in which the verifier reads them.",
   "`honestRoot` hashes the single peak with the domain and the number of leaves.",
@@ -509,19 +511,27 @@ backed_by = [
 reading = "The hypothesis `free` says the hash is injective. That holds for DyLean's constructor and for no real hash."
 
 [[claim]]
-sentence = "The snapshot supplies a root and an accepted opening for each stored item; such snapshots exist for every hash at every height up to 62."
+sentence = "The snapshot supplies a root and an accepted opening for each stored item; such snapshots exist for every hash at every height up to MAX_HEIGHT."
 backed_by = [{ file = "verification/lean/Qmdb/SecurityTheorems.lean", lean = "honest_snapshots_exist" }]
 reading = "The assumption is not contradictory. It does not show that production's tree builder produces such a snapshot; the tests in step 6 sample that."
 
 [[claim]]
-sentence = "It rejects heights above 62 and out-of-range locations, accepts honest openings and rejects them when an unused sibling follows."
+sentence = "It rejects heights above MAX_HEIGHT and out-of-range locations, accepts honest openings and rejects them when an unused sibling follows."
 backed_by = [
   { file = "verification/lean/Qmdb/Verifier.lean", lean = "verify_true" },
   { file = "verification/lean/Qmdb/Verifier.lean", lean = "extra_sibling_rejected" },
 ]
-reading = "`verify_true`: acceptance implies `h ≤ 62` and an in-range location. `extra_sibling_rejected`: one unused sibling after the honest ones. Neither is restated in `SecurityTheorems.lean`."
+reading = "`verify_true`: acceptance implies `h ≤ maxHeight` and an in-range location. `extra_sibling_rejected`: one unused sibling after the honest ones. Neither is restated in `SecurityTheorems.lean`."
 
 # Facts that the prose of the guide states and no panel shows.
+
+[[fact]]
+file = "verification/lean/Qmdb/Verifier.lean"
+text = "theorem maxHeight_eq : maxHeight = 62"
+
+[[fact]]
+file = "verification/symbolic/src/qmdb/tests.rs"
+text = "assert_eq!(1u64 << qmdb::MAX_HEIGHT, mmr::Family::MAX_LEAVES.as_u64());"
 
 [[fact]]
 file = "storage/src/qmdb/mod.rs"

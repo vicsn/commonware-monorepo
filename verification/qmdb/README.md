@@ -4,7 +4,7 @@
 - Status: complete for uniqueness of the single-item openings that the extracted production
   verifier accepts under any hash, and for client authentication up to an explicit collision on
   top of it.
-- Updated: 2026-11-20. Source: `0d3bf4a23`. It changes the production files
+- Updated: 2026-11-23. Source: `110d5b582`. It changes the production files
   `storage/src/merkle/{hasher.rs,hasher/terms.rs,proof.rs,proof/traversal.rs}`.
 - Proved scope: for any hash, two openings that the production verifier accepts at one location
   under one root carry the same item and the same siblings, or an explicit finder returns two
@@ -18,10 +18,11 @@
   involved.
 - Assumption: the application's snapshot supplies a root and, for every stored item, the siblings
   of an opening that the production verifier accepts under it. `honest_snapshots_exist` shows
-  that such roots and siblings exist for every hash at every height up to 62.
-- Last validation: `bash verification/check.sh` on 2026-11-20 at `0d3bf4a23`, passed. 3 Rust
+  that such roots and siblings exist for every hash at every height up to `MAX_HEIGHT`, the
+  client's limit, which is production's `MAX_LEAVES` as a height.
+- Last validation: `bash verification/check.sh` on 2026-11-23 at `110d5b582`, passed. 3 Rust
   tests (1,653 differential claims and 511 honest production openings), reproducible extraction,
-  an axiom audit of all 126 theorems in `Qmdb` and `Commonware.Symbolic` (standard Lean axioms),
+  an axiom audit of all 131 theorems in `Qmdb` and `Commonware.Symbolic` (standard Lean axioms),
   3 executed finder checks and 7 rejected mutations. The production files are
   unchanged since `just test -p commonware-storage` passed on 2026-11-18 (4,672 passed, 994
   skipped). Logs: `verification/.lake/logs/`, with the earlier runs in
@@ -93,6 +94,8 @@ root inputs apart. It proves the following for every scheme, by induction over t
 - `binding_or_collision`: the item half of that statement.
 - `byte_unique_or_collision` and `byte_binding_or_collision`: the same for `ByteHash.scheme`,
   whose encoding Lean proves unambiguous, so the collision is between two byte strings.
+- `maxHeight` and `maxLeaves`: the extracted `MAX_HEIGHT` and the leaves of a tree of that
+  height. Every statement and proof names them, and `maxHeight_eq` states the value once.
 - `verify_total`: `verify` returns a verdict on every input, so adversarial siblings cannot make
   it panic or diverge.
 - `honest_opening` and `extra_sibling_rejected`: on an honest snapshot the honest siblings are
