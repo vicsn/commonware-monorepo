@@ -161,7 +161,7 @@ edits = [
   { file = "verification/lean/Qmdb/Protocol.lean", original = "#combine into ReachabilityConfig from\n  Network,\n  client,\n", mutated = "#combine into ReachabilityConfig from\n  Network,\n" },
   { file = "verification/lean/Qmdb/Protocol.lean", original = "#combine into ReachabilityTheorem from\n  Network,\n  client,\n", mutated = "#combine into ReachabilityTheorem from\n  Network,\n" },
 ]
-expect = ["Qmdb.SanityChecks"]
+expect = ["Qmdb.Completeness"]
 
 [[probe]]
 name = "L8 client never logs"

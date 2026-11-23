@@ -3,7 +3,7 @@
 - Approach / branch: DyLean, `verify/qmdb-hax-dylean`.
 - Status: complete for uniqueness of the single-item openings that the extracted verifier accepts
   under DyLean's ideal hash, and for client authentication on top of it.
-- Updated: 2026-11-23. Source: `ff69c8859`. It changes the production files
+- Updated: 2026-11-23. Source: `b1b152ab1`. It changes the production files
   `storage/src/merkle/{hasher.rs,hasher/terms.rs,proof.rs,proof/traversal.rs}`.
 - Proved scope: the hash is DyLean's hash constructor, so a root is one term that fixes every
   digest below it. Two openings that the extracted verifier accepts at one location under one
@@ -16,9 +16,9 @@
   of an opening that the extracted verifier accepts under it. `honest_snapshots_exist` shows
   that such roots and siblings exist at every height up to `MAX_HEIGHT`, the client's limit,
   which is production's `MAX_LEAVES` as a height.
-- Last validation: `bash verification/check.sh` on 2026-11-23 at `ff69c8859`, passed. 3 Rust tests (1,653
+- Last validation: `bash verification/check.sh` on 2026-11-23 at `b1b152ab1`, passed. 3 Rust tests (1,653
   differential claims and 511 honest production openings), reproducible extraction, an axiom
-  audit of all 98 theorems in `Qmdb` and `Commonware.Symbolic` (standard Lean axioms) and 7
+  audit of all 102 theorems in `Qmdb` and `Commonware.Symbolic` (standard Lean axioms) and 7
   rejected mutations. The production files are unchanged since `just test -p commonware-storage`
   passed on 2026-11-18 (4,672 passed, 994 skipped). Logs: `verification/.lake/logs/`.
 - Remaining boundary: the hash function itself, which the model treats as ideal, and production's
@@ -99,19 +99,26 @@ siblings of every stored item and their honest-opening assumption.
 client step accepts names the snapshot height and an in-range location, and its item is the
 stored one, because the snapshot has an accepted opening there and accepted openings are unique.
 From that, `honest_accepted` and `substitution_rejected`: honest messages are accepted; any other
-item at a location is rejected whatever the siblings.
+item at a location is rejected whatever the siblings. `client_step_complete` is the same for the openings that
+the snapshot supplies.
 
 [Protocol](../lean/Qmdb/Protocol.lean) is trusted. Its `client` is the shared `receive` action over
 the extracted `client_step`: it receives a message and logs the acceptance that `client_step`
 returns. The shared `receive_preserves` reduces the Hoare triple to `client_step_sound`.
-[SecurityTheorems](../lean/Qmdb/SecurityTheorems.lean) states the two results about the protocol
+[Completeness](../lean/Qmdb/Completeness.lean) shows that the client logs what it accepts. An
+`attempt` sends a message that the attacker knows and runs the client on it; `attempt_reachable` proves
+that every attempt is a reachable trace, and `attempt_logs` that the accepted event is in its trace. It
+imports DyLean's `sendMessage`, `receiveMessage` and `logEvent` with their bodies (`import all`),
+because DyLean exports only their partial Hoare triples.
+[SecurityTheorems](../lean/Qmdb/SecurityTheorems.lean) states the three results about the protocol
 and its assumption. `client_authentication`: an acceptance logged on a reachable trace names the
 snapshot height, an in-range location and the item stored there. `honest_snapshots_exist`: the
-snapshot assumption can be met. Root authenticity is an input. No theorem is stated twice: the
+snapshot assumption can be met. `honest_acceptance_logged`: for every location of the snapshot
+some reachable trace has logged the acceptance of the item stored there, so `client_authentication`
+is not about an empty set of events. Root authenticity is an input. No theorem is stated twice: the
 verifier's properties are cited from `Verifier.lean`.
 [SanityChecks](../lean/Qmdb/SanityChecks.lean) instantiates a two-item snapshot, proves the
-extracted client's decisions on honest, substituted, misplaced and long openings, and proves the
-send/client traces reachable. [Audit](../lean/Qmdb/Audit.lean) checks that every theorem in `Qmdb`
+extracted client's decisions on honest, substituted, misplaced and long openings. [Audit](../lean/Qmdb/Audit.lean) checks that every theorem in `Qmdb`
 and `Commonware.Symbolic` depends only on Lean's standard axioms.
 
 [mutations.toml](mutations.toml), run by [mutate.py](../mutate.py), re-extracts the crate after
