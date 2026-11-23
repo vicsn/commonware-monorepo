@@ -299,6 +299,7 @@ title = "What production hashes, and what the ideal hash leaves out"
 link = "Assumption A4. The left side is what production runs. The statements replace it by `dyTerms` of the panel above, and nothing relates the two."
 left = [
   { file = "storage/src/merkle/hasher.rs", rust = "fn hash", within = "impl Terms for ByteTerms", label = "ByteTerms::hash" },
+  { file = "storage/src/merkle/hasher.rs", rust = "fn hash_parts", label = "hash_parts" },
   { file = "storage/src/merkle/hasher.rs", rust = "fn hash", within = "trait Hasher", label = "merkle::Hasher::hash" },
   { file = "storage/src/merkle/hasher.rs", rust = "fn hash", within = "impl CHasher> Standard<H>", label = "Standard::hash" },
   { file = "cryptography/src/lib.rs", rust = "fn hash", within = "trait Hasher", label = "commonware_cryptography::Hasher::hash" },
@@ -410,12 +411,12 @@ strength = "trusted"
 title = "The three `#combine` blocks that define statements"
 link = "`#combine` assembles DyLean's types from the listed parts. These three fix what a term is, what a trace holds and which actions build a reachable trace."
 left = [
-  { file = "verification/lean/Qmdb/Assumptions.lean", from = "#combine +toplevel into BytesFunctor", through = "Hash,", label = "terms" },
+  { file = "verification/lean/Qmdb/Assumptions.lean", from = "#combine +toplevel into BytesFunctor", through = "Commonware.Symbolic.Keccak,", label = "terms" },
   { file = "verification/lean/Qmdb/Protocol.lean", from = "#combine +toplevel into ExecEntryT", through = "ProtocolEvent Acceptance,", label = "trace entries" },
   { file = "verification/lean/Qmdb/Protocol.lean", from = "#combine into ReachabilityConfig", through = "client,", label = "reachable traces" },
 ]
 right = [{ prose = [
-  "Terms: literals, concatenations and hashes, and nothing else. The attacker can build any term from these and from what it has seen.",
+  "The algebra contains literal bytes, concatenation and separate SHA-256 and Keccak-256 constructors. An attacker can apply each constructor to inputs it knows.",
   "Trace entries: messages on the network and `Acceptance` events.",
   "Reachable traces: the attacker sends a message it can derive (`Network`), or the client runs with any handle, any location and any siblings (`client`). There is no other party and no key.",
   "The other `#combine` blocks in `Protocol.lean` and the event invariant set up the proof. A mistake in them makes the build fail; it cannot change what the theorems say.",

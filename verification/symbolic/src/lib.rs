@@ -13,8 +13,18 @@
 // The crate exists for extraction and tests, so nothing is public.
 #![allow(dead_code)]
 
+/// Production rules for addressing an operation's activity bit.
+#[path = "../../../storage/src/qmdb/current/proof/activity.rs"]
+pub(crate) mod activity;
+
 pub(crate) mod bls;
 pub(crate) mod client;
+
+/// Production cyclic range decision for QMDB successor intervals.
+#[path = "../../../utils/src/range/cyclic.rs"]
+pub(crate) mod cyclic;
+
+pub(crate) mod ordered;
 pub(crate) mod qmdb;
 
 /// Production rules of BLS12-381 certificates.

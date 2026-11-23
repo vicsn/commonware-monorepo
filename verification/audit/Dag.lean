@@ -53,7 +53,7 @@ partial def ownerOf (decl : Name) : CoreM (Option Name) := do
   let env ← getEnv
   if let some (.ctorInfo ctor) := env.find? decl then return ← ownerOf ctor.induct
   if let .str parent _ := decl then
-    if isStructure env parent && env.contains decl then return ← ownerOf parent
+    if (env.getProjectionFnInfo? decl).isSome then return ← ownerOf parent
     if let some (.ctorInfo ctor) := env.find? parent then return ← ownerOf ctor.induct
   if (← findDeclarationRanges? decl).isSome then return some decl
   match decl with

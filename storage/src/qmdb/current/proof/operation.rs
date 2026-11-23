@@ -1,6 +1,6 @@
 //! Operation proofs with fixed-size or runtime-sized bitmap chunks.
 
-use super::{RangeProof, chunk_bits};
+use super::{RangeProof, activity, chunk_bits};
 use crate::{
     merkle::{ElementPlan, Graftable, Location, Position, storage::Storage},
     qmdb::Error,
@@ -95,8 +95,7 @@ impl<F: Graftable, D: Digest, C: AsRef<[u8]>> Proof<F, D, C> {
             return false;
         };
 
-        let bit = *self.loc % bits;
-        if chunk[(bit / 8) as usize] & (1 << (bit % 8)) == 0 {
+        if !activity::get(chunk, *self.loc, bits) {
             debug!(?self.loc, "proof verification failed, operation is inactive");
             return false;
         }

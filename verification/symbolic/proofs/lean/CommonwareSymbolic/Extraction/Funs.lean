@@ -365,7 +365,7 @@ def sake.listen_end
 
 /-- [commonware_symbolic::terms::MAX_PARTS]
     Source: 'src/../../../storage/src/merkle/hasher/terms.rs', lines 26:0-26:38 -/
-@[global_simps, irreducible] def terms.MAX_PARTS : Std.Usize := 4#usize
+@[global_simps, irreducible] def terms.MAX_PARTS : Std.Usize := 5#usize
 
 /-- [commonware_symbolic::terms::leaf_digest]:
     Source: 'src/../../../storage/src/merkle/hasher/terms.rs', lines 29:0-31:1 -/
@@ -458,6 +458,58 @@ def terms.empty_root
     core.array.Array.as_slice
       (Array.make 2#usize [ terms.Part.Bytes s, terms.Part.Bytes s1 ])
   TermsInst.hash terms1 s2
+
+/-- [commonware_symbolic::terms::current_root]:
+    Source: 'src/../../../storage/src/merkle/hasher/terms.rs', lines 84:0-109:1 -/
+def terms.current_root
+  {T : Type _} {Clause0_Digest : Type _} (TermsInst : terms.Terms T
+  Clause0_Digest) (terms1 : T) (ops : Clause0_Digest)
+  (grafted : Clause0_Digest) (pending : core.option.Option Clause0_Digest)
+  («partial» : core.option.Option (Std.U64 × Clause0_Digest)) :
+  RustM Clause0_Digest
+  := do
+  match pending with
+  | core.option.Option.None =>
+    match «partial» with
+    | core.option.Option.None =>
+      let s ←
+        core.array.Array.as_slice
+          (Array.make 2#usize [
+            terms.Part.Digest ops, terms.Part.Digest grafted
+            ])
+      TermsInst.hash terms1 s
+    | core.option.Option.Some p =>
+      let (next, d) := p
+      let a ← core.num.U64.to_be_bytes next
+      let s ← core.array.Array.as_slice a
+      let s1 ←
+        core.array.Array.as_slice
+          (Array.make 4#usize [
+            terms.Part.Digest ops, terms.Part.Digest grafted, terms.Part.Bytes
+            s, terms.Part.Digest d
+            ])
+      TermsInst.hash terms1 s1
+  | core.option.Option.Some p =>
+    match «partial» with
+    | core.option.Option.None =>
+      let s ←
+        core.array.Array.as_slice
+          (Array.make 3#usize [
+            terms.Part.Digest ops, terms.Part.Digest grafted, terms.Part.Digest
+            p
+            ])
+      TermsInst.hash terms1 s
+    | core.option.Option.Some p1 =>
+      let (next, d) := p1
+      let a ← core.num.U64.to_be_bytes next
+      let s ← core.array.Array.as_slice a
+      let s1 ←
+        core.array.Array.as_slice
+          (Array.make 5#usize [
+            terms.Part.Digest ops, terms.Part.Digest grafted, terms.Part.Digest
+            p, terms.Part.Bytes s, terms.Part.Digest d
+            ])
+      TermsInst.hash terms1 s1
 
 /-- [commonware_symbolic::traversal::reconstruct]:
     Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 32:0-59:1 -/
@@ -659,6 +711,115 @@ def traversal.Opening.Insts.Commonware_symbolicTraversalBackend {N : Type _} {E
     coreconvertAsRefClause1_ItemSliceU8Inst CollectInst
 }
 
+/-- [commonware_symbolic::ordered::claim::membership]:
+    Source: 'src/../../../storage/src/qmdb/current/ordered/proof/claim.rs', lines 9:0-19:1 -/
+def ordered.claim.membership
+  {F : Type _} {K : Type _} {V : Type _} {Clause2_Value : Type _}
+  (GraftableInst : ordered.Graftable F) (KeyInst : ordered.Key K)
+  (ValueEncodingInst : ordered.ValueEncoding V Clause2_Value) (key : K)
+  (value : Clause2_Value) (next : K) :
+  RustM (ordered.Operation F K V Clause2_Value)
+  := do
+  let t ← KeyInst.corecloneCloneInst.clone next
+  ok (ordered.Operation.Update { key, value, next_key := t })
+
+/-- [commonware_symbolic::ordered::{impl core::clone::Clone for commonware_symbolic::ordered::Update<K, V, Clause1_Value>}::clone]:
+    Source: 'src/ordered.rs', lines 32:4-38:5
+    Visibility: public -/
+def ordered.Update.Insts.CoreCloneClone.clone
+  {K : Type _} {V : Type _} {Clause1_Value : Type _} (KeyInst : ordered.Key K)
+  (ValueEncodingInst : ordered.ValueEncoding V Clause1_Value)
+  (self : ordered.Update K V Clause1_Value) :
+  RustM (ordered.Update K V Clause1_Value)
+  := do
+  let t ← KeyInst.corecloneCloneInst.clone self.key
+  let t1 ← ValueEncodingInst.corecloneCloneInst.clone self.value
+  let t2 ← KeyInst.corecloneCloneInst.clone self.next_key
+  ok { key := t, value := t1, next_key := t2 }
+
+/-- [commonware_symbolic::cyclic::contains]:
+    Source: 'src/../../../utils/src/range/cyclic.rs', lines 4:0-10:1 -/
+def cyclic.contains
+  (wraps : Bool) (after_start : Bool) (before_end : Bool) : RustM Bool := do
+  if wraps
+  then if after_start
+       then ok true
+       else ok before_end
+  else if after_start
+       then ok before_end
+       else ok false
+
+/-- [commonware_symbolic::ordered::contains_cyclic]:
+    Source: 'src/ordered.rs', lines 17:0-23:1 -/
+def ordered.contains_cyclic
+  {K : Type _} (KeyInst : ordered.Key K) (span : core.ops.range.Range K)
+  (key : K) :
+  RustM Bool
+  := do
+  let b ← KeyInst.less span.start span.end
+  let b1 ← KeyInst.less key span.start
+  let b2 ← KeyInst.less key span.end
+  cyclic.contains (¬ b) (¬ b1) b2
+
+/-- [commonware_symbolic::ordered::claim::exclusion]:
+    Source: 'src/../../../storage/src/qmdb/current/ordered/proof/claim.rs', lines 25:0-40:1 -/
+def ordered.claim.exclusion
+  {F : Type _} {K : Type _} {V : Type _} {D : Type _} {C : Type _}
+  {Clause2_Value : Type _} (GraftableInst : ordered.Graftable F) (KeyInst :
+  ordered.Key K) (ValueEncodingInst : ordered.ValueEncoding V Clause2_Value)
+  (DigestInst : ordered.Digest D) (key : K)
+  (proof : ordered.ExclusionProof F K V D C Clause2_Value) :
+  RustM (core.option.Option ((ordered.OperationProof F D C) ×
+    (ordered.Operation F K V Clause2_Value)))
+  := do
+  match proof with
+  | ordered.ExclusionProof.KeyValue op_proof data =>
+    let b ← KeyInst.corecmpPartialEqInst.eq data.key key
+    if b
+    then ok core.option.Option.None
+    else
+      let b1 ←
+        ordered.contains_cyclic KeyInst
+          { start := data.key, «end» := data.next_key } key
+      if b1
+      then
+        let u ←
+          ordered.Update.Insts.CoreCloneClone.clone KeyInst ValueEncodingInst
+            data
+        ok (core.option.Option.Some (op_proof, ordered.Operation.Update u))
+      else ok core.option.Option.None
+  | ordered.ExclusionProof.Commit op_proof metadata =>
+    let o ←
+      core.option.Option.Insts.CoreCloneClone.clone
+        ValueEncodingInst.corecloneCloneInst metadata
+    ok (core.option.Option.Some (op_proof, ordered.Operation.Commit o
+      op_proof.loc))
+
+/-- [commonware_symbolic::activity::offset]:
+    Source: 'src/../../../storage/src/qmdb/current/proof/activity.rs', lines 5:0-7:1 -/
+def activity.offset (location : Std.U64) (bits : Std.U64) : RustM Std.U64 := do
+  location % bits
+
+/-- [commonware_symbolic::activity::is_set]:
+    Source: 'src/../../../storage/src/qmdb/current/proof/activity.rs', lines 11:0-13:1 -/
+def activity.is_set (byte : Std.U8) (offset : Std.U64) : RustM Bool := do
+  let i ← offset % 8#u64
+  let i1 ← 1#u8 <<< i
+  let i2 ← lift (byte &&& i1)
+  ok (i2 != 0#u8)
+
+/-- [commonware_symbolic::activity::get]:
+    Source: 'src/../../../storage/src/qmdb/current/proof/activity.rs', lines 17:0-20:1 -/
+def activity.get
+  (chunk : Slice Std.U8) (location : Std.U64) (bits : Std.U64) :
+  RustM Bool
+  := do
+  let bit ← activity.offset location bits
+  let i ← bit / 8#u64
+  let i1 ← lift (UScalar.cast .Usize i)
+  let i2 ← Slice.index_usize chunk i1
+  activity.is_set i2 bit
+
 /-- [commonware_symbolic::bls::{impl commonware_symbolic::rules::Committee<K> for commonware_symbolic::bls::N3f1<'_0, C>}::key]:
     Source: 'src/bls.rs', lines 22:4-24:5 -/
 def bls.N3f1.Insts.Commonware_symbolicRulesCommittee.key
@@ -732,6 +893,18 @@ def bls.client_step
           rulesCommitteeInst committee
       ok (core.option.Option.Some { members, quorum := i })
     else ok core.option.Option.None
+
+/-- Trait implementation: [commonware_symbolic::ordered::{impl core::clone::Clone for commonware_symbolic::ordered::Update<K, V, Clause1_Value>}]
+    Source: 'src/ordered.rs', lines 31:0-39:1 -/
+@[reducible]
+impl_def ordered.Update.Insts.CoreCloneClone {K : Type _} {V : Type _}
+  {Clause1_Value : Type _} (KeyInst : ordered.Key K) (ValueEncodingInst :
+  ordered.ValueEncoding V Clause1_Value) : core.clone.Clone (ordered.Update K V
+  Clause1_Value) := {
+  clone := ordered.Update.Insts.CoreCloneClone.clone KeyInst ValueEncodingInst
+  clone_from := core.clone.Clone.clone_from.default
+    (ordered.Update.Insts.CoreCloneClone KeyInst ValueEncodingInst)
+}
 
 /-- [commonware_symbolic::qmdb::MMR_DOMAIN]
     Source: 'src/qmdb.rs', lines 16:0-16:36 -/

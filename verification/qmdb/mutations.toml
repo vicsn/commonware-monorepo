@@ -50,3 +50,17 @@ file = "verification/symbolic/src/qmdb.rs"
 original = "if verify(terms, height, location, root, item, siblings) {"
 mutated = "if true {"
 fails = "Qmdb.Symbolic"
+
+[[mutation]]
+name = "ordered exclusion accepts the start of its span"
+file = "storage/src/qmdb/current/ordered/proof/claim.rs"
+original = "data.key == *key || !contains_cyclic"
+mutated = "!contains_cyclic"
+fails = "Qmdb.Ordered.Extraction"
+
+[[mutation]]
+name = "ordered membership reconstructs the successor as the query key"
+file = "storage/src/qmdb/current/ordered/proof/claim.rs"
+original = "key,\n        value,\n        next_key: next.clone(),"
+mutated = "key: next.clone(),\n        value,\n        next_key: key,"
+fails = "Qmdb.Ordered.Extraction"

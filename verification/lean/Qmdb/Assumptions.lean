@@ -1,8 +1,9 @@
 module
 public import Commonware.Symbolic.Terms
+public import Commonware.Symbolic.Keccak
 
 /-! QMDB's term algebra and the input that the application supplies. Trusted. `#combine` fixes
-DyLean's bytes to literals, concatenation and hashing, which the shared reading in
+DyLean's bytes to literals, concatenation, SHA-256 and Keccak-256, which the shared reading in
 `Commonware.Symbolic.Terms` needs. `Snapshot` is the authenticated historical snapshot: its root,
 and the assumption that the siblings it supplies for every stored item make an opening that the
 extracted verifier accepts under that root. -/
@@ -15,6 +16,7 @@ open DY Aeneas Aeneas.Std CoreModels Commonware.Symbolic commonware_symbolic
   Literal,
   Concat,
   Hash,
+  Commonware.Symbolic.Keccak,
 
 /-- A fixed, authenticated historical snapshot with `2 ^ height` leaves. The
 application supplies its root and, for every stored item, siblings that make an
