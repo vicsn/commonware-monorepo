@@ -25,7 +25,7 @@ def Exchange.signed (e : Exchange) : Bytes :=
 
 /-- The confirmation of a transcript for a label. -/
 def confirmation (transcript : Bytes) (label : Slice Std.U8) : Bytes :=
-  KdfExpand.kdfExpand (Hash.hash transcript) (Literal.literalToBytes (toByteArray label)) 32
+  Mac.mac (Hash.hash transcript) (Literal.literalToBytes (toByteArray label))
 
 /-- The label of the listener's confirmation, `confirmation_l2d`. -/
 def listenerLabel : Slice Std.U8 :=
@@ -130,7 +130,23 @@ theorem verify_other {key nonce signed checked : Bytes} (differ : checked ≠ si
   simp only [Signature.verify, Signature.vk, Signature.sign]
   grind
 
-/-! ## Transcripts are told apart -/
+/-! ## Keys, labels and transcripts are told apart -/
+
+theorem vk_inj {a b : Bytes} (h : Signature.vk a = Signature.vk b) : a = b := by
+  simp only [Signature.vk] at h
+  grind
+
+/-- The two confirmations are codes of different messages. -/
+theorem label_ne :
+    (Literal.literalToBytes (toByteArray dialerLabel) : Bytes) ≠
+      Literal.literalToBytes (toByteArray listenerLabel) := by
+  intro h
+  have same := congrArg (Literal.bytesToLiteral (Bytes := Bytes)) h
+  simp only [Literal.bytesToLiteral_literalToBytes, Option.some.injEq] at same
+  have slices := toByteArray_inj same
+  have vals := congrArg Slice.val slices
+  simp [dialerLabel, listenerLabel, Array.to_slice] at vals
+
 
 theorem be_inj {a b : Std.U64}
     (h : (Aeneas.Std.core.num.U64.to_be_bytes a).to_slice =

@@ -9,8 +9,8 @@ public import DY.Comparse
 import DY.Meta
 
 /-! The DyLean protocol around the extracted SAKE steps. Trusted: the events, what a peer keeps
-between its steps, the messages on the network, the four actions and the `#combine`
-configuration.
+between its steps, the messages on the network, the actions, what the attacker may compromise
+and the `#combine` configuration.
 
 Each action looks up identity keys in a public-key infrastructure that stands for the peer set
 an application configures, draws its randomness, runs one extracted production step with
@@ -18,8 +18,13 @@ an application configures, draws its randomness, runs one extracted production s
 message that the step returns. The attacker controls the network and the schedule: it chooses
 who dials whom, every namespace, clock value and window, the claimed dialer of a `Syn` and the
 timestamps of the messages that a peer receives. Timestamps are public, so they are inputs of
-the receiving action and not fields of the message on the network. The attacker can also
-compromise any identity key. -/
+the receiving action and not fields of the message on the network.
+
+The attacker can compromise any identity key. It can also compromise what a peer keeps between
+its steps, at any time, including after the handshake has finished. What a peer keeps is stored
+twice: as the record that its next step reads, and as its secret part, which is what a
+compromise reveals. The secret part of a dialer is its ephemeral secret, and that of a listener
+is the secret transcript; everything else a peer keeps is public. -/
 
 namespace Sake
 open DY DY.Comparse Aeneas Aeneas.Std CoreModels Commonware.Symbolic commonware_symbolic
@@ -62,6 +67,22 @@ structure Listening where
   /-- The secret transcript that its first step returned. -/
   transcript : Bytes
 
+/-- The secret part of what a dialer keeps, which the attacker may
+compromise. -/
+structure DialerSecret where
+  /-- The dialer's ephemeral public key. -/
+  epk : Bytes
+  /-- The dialer's ephemeral secret. -/
+  esk : Bytes
+
+/-- The secret part of what a listener keeps, which the attacker may
+compromise. -/
+structure ListenerSecret where
+  /-- The listener's ephemeral public key. -/
+  epk : Bytes
+  /-- The secret transcript. -/
+  transcript : Bytes
+
 /-- The first message on the network. -/
 structure SynMessage where
   /-- The dialer's ephemeral public key. -/
@@ -90,6 +111,18 @@ instance : ParseableSerializeable SynAckMessage := .make <|
     (fun ⟨epk, sig, confirmation⟩ => { epk, sig, confirmation })
     (fun { epk, sig, confirmation } => ⟨epk, sig, confirmation⟩)
 
+instance : ParseableSerializeable DialerSecret := .make <|
+  .triviallyIsomorphic
+    (.prod .unboundedBytes .bytes)
+    (fun ⟨epk, esk⟩ => { epk, esk })
+    (fun { epk, esk } => ⟨epk, esk⟩)
+
+instance : ParseableSerializeable ListenerSecret := .make <|
+  .triviallyIsomorphic
+    (.prod .unboundedBytes .bytes)
+    (fun ⟨epk, transcript⟩ => { epk, transcript })
+    (fun { epk, transcript } => ⟨epk, transcript⟩)
+
 instance : LongTermKeys.ExecConfig "SAKE PKI" Signature.vk where
 
 #combine +toplevel into ExecEntryT, baseAttackerKnowledge from
@@ -98,7 +131,23 @@ instance : LongTermKeys.ExecConfig "SAKE PKI" Signature.vk where
   ProtocolEvent Event,
   PersistentLocalState.State Dialing,
   PersistentLocalState.State Listening,
+  PersistentLocalState.CompromisableState DialerSecret,
+  PersistentLocalState.CompromisableState ListenerSecret,
   LongTermKeys "SAKE PKI",
+
+/-- The attacker compromised what `dialer` keeps for the ephemeral key `epk`:
+its ephemeral secret. -/
+def DialerCompromised
+    (dialer : Participant) (epk : Bytes) (tr : ExecTrace) : Prop :=
+  ∃ esk, PersistentLocalState.LocalStateCompromised dialer
+    ({ epk, esk } : DialerSecret) tr
+
+/-- The attacker compromised what `listener` keeps for the ephemeral key
+`epk`: the secret transcript. -/
+def ListenerCompromised
+    (listener : Participant) (epk : Bytes) (tr : ExecTrace) : Prop :=
+  ∃ transcript, PersistentLocalState.LocalStateCompromised listener
+    ({ epk, transcript } : ListenerSecret) tr
 
 noncomputable section
 
@@ -107,7 +156,7 @@ clock reads `now` and it will accept listener timestamps in `window`. -/
 def dial
     (me listener : Participant) (skHandle pkHandle : Nat)
     (ns : ByteArray) (now : Std.U64) (window : sake.Window) :
-    Traceful (Nat × Nat) := do
+    Traceful (Nat × Nat × Nat) := do
   let key ← LongTermKeys.getPrivateKey "SAKE PKI" me skHandle
   let listenerKey ← LongTermKeys.getPublicKey "SAKE PKI" listener pkHandle
   let drawn ← Random.genRand 32
@@ -122,9 +171,11 @@ def dial
   ProtocolEvent.logEvent (Event.dialStart me opening)
   let stHandle ← PersistentLocalState.storeLocalState me
     ({ listener, opening, secret, transcript, window } : Dialing)
+  let secretHandle ← PersistentLocalState.storeLocalState me
+    ({ epk := syn.epk, esk := secret } : DialerSecret)
   let msgHandle ← Network.sendMessage
     (serialize ({ epk := syn.epk, sig := syn.sig } : SynMessage))
-  return (stHandle, msgHandle)
+  return (stHandle, secretHandle, msgHandle)
 
 /-- A listener answers the `Syn` at `msgHandle`, stamped `dialed`, as a
 handshake from `dialer` in the namespace `ns`. Its clock reads `now` and it
@@ -133,7 +184,7 @@ def listen
     (me dialer : Participant) (skHandle pkHandle msgHandle : Nat)
     (ns : ByteArray) (now : Std.U64) (window : sake.Window)
     (dialed : Std.U64) :
-    Traceful (Nat × Nat) := do
+    Traceful (Nat × Nat × Nat) := do
   let received ← Network.receiveMessage msgHandle
   let msg : SynMessage ← parse received
   let key ← LongTermKeys.getPrivateKey "SAKE PKI" me skHandle
@@ -153,11 +204,13 @@ def listen
   ProtocolEvent.logEvent (Event.listenStart me exchange transcript)
   let stHandle ← PersistentLocalState.storeLocalState me
     ({ dialer, exchange, transcript } : Listening)
+  let secretHandle ← PersistentLocalState.storeLocalState me
+    ({ epk := synAck.epk, transcript } : ListenerSecret)
   let answer : SynAckMessage :=
     { epk := synAck.epk, sig := synAck.sig,
       confirmation := synAck.confirmation }
   let msgHandle ← Network.sendMessage (serialize answer)
-  return (stHandle, msgHandle)
+  return (stHandle, secretHandle, msgHandle)
 
 /-- A dialer finishes the handshake it kept at `stHandle` on the `SynAck` at
 `msgHandle`, stamped `answered`, and sends its confirmation. -/
@@ -191,6 +244,14 @@ def finishListen
   ProtocolEvent.logEvent
     (Event.listenFinish me kept.dialer kept.exchange secret)
 
+/-- The attacker compromises the secret part of what a dialer keeps. -/
+def compromiseDialer (handle : Nat) : Traceful Nat :=
+  PersistentLocalState.compromise DialerSecret handle
+
+/-- The attacker compromises the secret part of what a listener keeps. -/
+def compromiseListener (handle : Nat) : Traceful Nat :=
+  PersistentLocalState.compromise ListenerSecret handle
+
 /-- Starting a dial as a step of reachable traces, for any inputs. -/
 def dial.reachability : ReachabilityConfig :=
   .make fun (me, listener, skHandle, pkHandle, ns, now, window) =>
@@ -211,6 +272,14 @@ def finishDial.reachability : ReachabilityConfig :=
 def finishListen.reachability : ReachabilityConfig :=
   .make fun (me, stHandle, msgHandle) => finishListen me stHandle msgHandle
 
+/-- Compromising a dialer as a step of reachable traces, for any handle. -/
+def compromiseDialer.reachability : ReachabilityConfig :=
+  .make fun handle => compromiseDialer handle
+
+/-- Compromising a listener as a step of reachable traces, for any handle. -/
+def compromiseListener.reachability : ReachabilityConfig :=
+  .make fun handle => compromiseListener handle
+
 #combine into ReachabilityConfig from
   Network,
   Random,
@@ -219,6 +288,8 @@ def finishListen.reachability : ReachabilityConfig :=
   listen,
   finishDial,
   finishListen,
+  compromiseDialer,
+  compromiseListener,
 
 end
 

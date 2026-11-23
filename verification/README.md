@@ -83,8 +83,14 @@ identity commits itself to a transcript and signs it), `Peer` (the peer's identi
 and its signature checked) and `Fresh` (an ephemeral secret that is drawn when it is first
 needed). Production instantiates them with BLAKE3 transcripts, X25519, its signature schemes and
 its random number generator. Lean reads them in [Sake/Terms](lean/Sake/Terms.lean) with DyLean's
-signatures, Diffie-Hellman and key derivation, so this target's `#combine` adds those
-constructors and fresh values to literals, concatenation and hashing.
+signatures and Diffie-Hellman and with message authentication codes, so this target's `#combine`
+adds those constructors and fresh values to literals, concatenation and hashing.
+
+DyLean has no theory of message authentication codes.
+[Mac](lean/Commonware/Symbolic/Mac.lean) adds one in the form of DyLean's own theories: a code
+is a constructor of a key and a message that the attacker obtains only by computing it, and a
+protocol attaches a predicate to the codes that its honest participants compute. A target that
+includes it gets `Mac` as one more name for its `#combine`.
 
 ## Clients
 
@@ -212,4 +218,5 @@ the definitions in `Terms.lean` (`part`, `chain`, `dyTerms`, `messages`), in
 `Audit.lean`, the compatibility patch and the tool pins. Lean checks the rest, including the
 lemmas in `Terms.lean` and `Linear.lean`, `accept_preserves`, `receive_preserves`, `run_returns`,
 `run_ok` and `RustM.lean`. The hax/Charon/Aeneas translation, CoreModels, DyLean and Lean's
-kernel are trusted. Each target's README lists what it adds.
+kernel are trusted. Each target's README lists what it adds; the constructor and attacker rule
+of `Mac.lean` are listed with the SAKE target, the only one that uses them.

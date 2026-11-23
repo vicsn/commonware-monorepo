@@ -2,17 +2,25 @@ module
 public import Sake.Proof
 import DY.Meta
 
-/-! What the SAKE target proves. Trusted: the four statements.
+/-! What the SAKE target proves. Trusted: the seven statements.
 
 `handshake_completes` and `foreign_signature_rejected` speak about the extracted steps alone.
-The two authentication statements hold on every trace that the attacker can reach with the
-actions of `Sake.Protocol`: it controls the network and the schedule, and it can compromise any
-identity key.
+The other five hold on every trace that the attacker can reach with the actions of
+`Sake.Protocol`: it controls the network and the schedule, and it can compromise any identity
+key and what any peer keeps between its steps.
 
-The statements say nothing about freshness. A listener that finishes has checked the dialer's
-confirmation, but DyLean has no theory in which that check authenticates the dialer, so
-`listener_authentication` rests on the dialer's signature alone and a replayed `Syn` satisfies
-it. They also say nothing about the secrecy of the transcript. -/
+- `dialer_authentication`: for the dialer, the listener answered this exchange with this
+  transcript.
+- `listener_authentication`: for the listener, the dialer started this opening.
+- `listener_key_confirmation`: for the listener, the dialer finished this exchange with this
+  transcript.
+- `dialer_secrecy` and `listener_secrecy`: the attacker does not know the transcript.
+
+Each holds unless the identity key of the peer was compromised before the handshake finished.
+Key confirmation and secrecy also fail when what either peer keeps for the exchange is
+compromised: the dialer's ephemeral secret or the listener's secret transcript. Secrecy does not
+fail when an identity key is compromised after the handshake finished. Nothing here speaks about
+time, about V0 or about the record protocol. -/
 
 namespace Sake
 open DY Aeneas Aeneas.Std CoreModels Commonware.Symbolic commonware_symbolic
@@ -77,7 +85,8 @@ theorem foreign_signature_rejected
 /-- Authentication of the listener. On every reachable trace, a dialer that
 finishes a handshake with a listener finishes an exchange that this listener
 answered earlier with the same secret transcript, unless the listener's
-identity key was compromised before. -/
+identity key was compromised before. The listener therefore holds the
+transcript that the dialer returns. -/
 theorem dialer_authentication
     (dialer listener : Participant) (exchange : Exchange) (secret : Bytes)
     (time : Nat) :
@@ -91,9 +100,13 @@ theorem dialer_authentication
         exchange.listener (tr.prefix time) := by
   apply Trace.apply_Reachable_implies_Invariant
   intro tr inv logged
-  have := Trace.EventLoggedAt_imp_EventInv _ _ _ inv logged
-  simp only [ProtocolEvent.EventInv.invariant] at this
-  simpa [LongTermKeys.label] using this
+  have held := Trace.EventLoggedAt_imp_EventInv _ _ _ inv logged
+  simp only [ProtocolEvent.EventInv.invariant] at held
+  rcases held.2 with ⟨answered, -⟩ | leaked
+  · left
+    simpa using answered
+  · right
+    simpa [LongTermKeys.label] using leaked
 
 /-- Authentication of the dialer. On every reachable trace, a listener that
 finishes a handshake with a dialer finishes an exchange whose opening this
@@ -101,7 +114,7 @@ dialer started earlier, unless the dialer's identity key was compromised
 before. The opening names the namespace, both identity keys, the dialer's
 timestamp and its ephemeral key. Nothing here says that the opening is
 fresh: a recorded `Syn` that is replayed inside the listener's window
-satisfies this statement. -/
+satisfies this statement. `listener_key_confirmation` says more. -/
 theorem listener_authentication
     (listener dialer : Participant) (exchange : Exchange) (secret : Bytes)
     (time : Nat) :
@@ -115,9 +128,106 @@ theorem listener_authentication
         exchange.dialer (tr.prefix time) := by
   apply Trace.apply_Reachable_implies_Invariant
   intro tr inv logged
-  have := Trace.EventLoggedAt_imp_EventInv _ _ _ inv logged
-  simp only [ProtocolEvent.EventInv.invariant] at this
-  simpa [LongTermKeys.label] using this
+  have held := Trace.EventLoggedAt_imp_EventInv _ _ _ inv logged
+  simp only [ProtocolEvent.EventInv.invariant] at held
+  rcases held with ⟨started, -⟩ | leaked
+  · left
+    simpa using started
+  · right
+    simpa [LongTermKeys.label] using leaked
+
+/-- Key confirmation for the listener. On every reachable trace, a listener
+that finishes a handshake with a dialer finishes an exchange that this
+dialer finished earlier with the same secret transcript, unless the dialer's
+identity key or what either peer keeps for the exchange was compromised
+before. The listener checks the dialer's confirmation, and only a dialer
+that finished with this transcript, or an attacker that knows the
+transcript, computes it. A replayed `Syn` does not satisfy this statement:
+the dialer's finish names the listener's timestamp and ephemeral key. -/
+theorem listener_key_confirmation
+    (listener dialer : Participant) (exchange : Exchange) (secret : Bytes)
+    (time : Nat) :
+    ∀ tr : ExecTrace,
+      tr.Reachable reachability →
+      tr.EventLoggedAt
+        (Event.listenFinish listener dialer exchange secret) time →
+      (∃ expected, (tr.prefix time).EventLogged
+        (Event.dialFinish dialer expected exchange secret)) ∨
+      LongTermKeys.LongTermKeyCompromised "SAKE PKI" dialer
+        exchange.dialer (tr.prefix time) ∨
+      DialerCompromised dialer exchange.dialerKey (tr.prefix time) ∨
+      ListenerCompromised listener exchange.listenerKey (tr.prefix time) := by
+  apply Trace.apply_Reachable_implies_Invariant
+  intro tr inv logged
+  have held := Trace.EventLoggedAt_imp_EventInv _ _ _ inv logged
+  simp only [ProtocolEvent.EventInv.invariant] at held
+  rcases held with ⟨-, -, -, ⟨expected, finished⟩ | known⟩ | leaked
+  · left
+    exact ⟨expected, by simpa using finished⟩
+  · right
+    right
+    simpa [exchangeSecrecy, dialerSecrecy, listenerSecrecy] using known
+  · right
+    left
+    simpa [LongTermKeys.label] using leaked
+
+/-- Secrecy for the dialer. On every reachable trace, the attacker knows the
+secret transcript of a handshake that a dialer finished with a listener only
+if the listener's identity key was compromised before the dialer finished,
+or what either peer keeps for the exchange is compromised at some time. A
+compromise of an identity key after the dialer finished does not reveal the
+transcript. -/
+theorem dialer_secrecy
+    (dialer listener : Participant) (exchange : Exchange) (secret : Bytes)
+    (time : Nat) :
+    ∀ tr : ExecTrace,
+      tr.Reachable reachability →
+      tr.EventLoggedAt
+        (Event.dialFinish dialer listener exchange secret) time →
+      secret.AttackerKnows tr →
+      LongTermKeys.LongTermKeyCompromised "SAKE PKI" listener
+        exchange.listener (tr.prefix time) ∨
+      DialerCompromised dialer exchange.dialerKey tr ∨
+      ListenerCompromised listener exchange.listenerKey tr := by
+  apply Trace.apply_Reachable_implies_Invariant
+  intro tr inv logged known
+  have held := Trace.EventLoggedAt_imp_EventInv _ _ _ inv logged
+  simp only [ProtocolEvent.EventInv.invariant] at held
+  rcases held.2 with ⟨-, valid, sealed⟩ | leaked
+  · right
+    simpa [exchangeSecrecy, dialerSecrecy, listenerSecrecy] using
+      revealed_of_known inv known valid sealed
+  · left
+    simpa [LongTermKeys.label] using leaked
+
+/-- Secrecy for the listener. On every reachable trace, the attacker knows
+the secret transcript of a handshake that a listener finished with a dialer
+only if the dialer's identity key was compromised before the listener
+finished, or what either peer keeps for the exchange is compromised at some
+time. A compromise of an identity key after the listener finished does not
+reveal the transcript. -/
+theorem listener_secrecy
+    (listener dialer : Participant) (exchange : Exchange) (secret : Bytes)
+    (time : Nat) :
+    ∀ tr : ExecTrace,
+      tr.Reachable reachability →
+      tr.EventLoggedAt
+        (Event.listenFinish listener dialer exchange secret) time →
+      secret.AttackerKnows tr →
+      LongTermKeys.LongTermKeyCompromised "SAKE PKI" dialer
+        exchange.dialer (tr.prefix time) ∨
+      DialerCompromised dialer exchange.dialerKey tr ∨
+      ListenerCompromised listener exchange.listenerKey tr := by
+  apply Trace.apply_Reachable_implies_Invariant
+  intro tr inv logged known
+  have held := Trace.EventLoggedAt_imp_EventInv _ _ _ inv logged
+  simp only [ProtocolEvent.EventInv.invariant] at held
+  rcases held with ⟨-, valid, sealed, -⟩ | leaked
+  · right
+    simpa [exchangeSecrecy, dialerSecrecy, listenerSecrecy] using
+      revealed_of_known inv known valid sealed
+  · left
+    simpa [LongTermKeys.label] using leaked
 
 end
 end Sake

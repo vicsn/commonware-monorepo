@@ -7,17 +7,25 @@ import DY.Meta
 
 An identity key signs only two kinds of transcript: the one a dialer signs once it has logged
 that it started, and the one a listener signs once it has logged that it answered. The two are
-told apart by `Opening.signed_ne`. A dialer that verifies the listener's signature therefore
-finds the listener's answer on the trace, unless the listener's identity key is compromised, and
-a listener that verifies the dialer's signature finds the dialer's start. The event invariant
-records these two facts for the events that finish a handshake, and each action is shown to
-preserve the invariant over the extracted step it runs. -/
+told apart by `Opening.signed_ne`. A peer that verifies a signature therefore finds the matching
+event of the key's owner on the trace, unless that identity key is compromised. The signature
+also says that the signed ephemeral key belongs to a secret that only a compromise of what its
+owner keeps reveals, which is what makes the shared secret, and with it the secret transcript,
+secret.
+
+A confirmation is a message authentication code under the hash of the secret transcript. The
+dialer's confirmation is computed only by a dialer that has logged that it finished the exchange
+with that transcript, so a listener that checks it finds that event, unless the attacker knows
+the transcript. The listener's confirmation carries no claim: its signature already binds it.
+
+The event invariant records these facts for the events that finish a handshake, and each action
+is shown to preserve the invariant over the extracted step it runs. -/
 
 namespace Sake
 open DY DY.Comparse Aeneas Aeneas.Std CoreModels Commonware.Symbolic commonware_symbolic
 @[expose] public section
 
-/-! ## Messages -/
+/-! ## Messages and secrets -/
 
 theorem SynMessage.IsWellFormed_eq
     (pre : Bytes → τ → Prop) [BytesCompatibleTracePred pre] (x : SynMessage) (tr : τ) :
@@ -35,6 +43,20 @@ theorem SynAckMessage.IsWellFormed_eq
 grind_pattern SynAckMessage.IsWellFormed_eq => IsWellFormed pre x tr
 grind_pattern [grind_later] SynAckMessage.IsWellFormed_eq => IsWellFormed pre x tr
 
+theorem DialerSecret.IsWellFormed_eq
+    (pre : Bytes → τ → Prop) [BytesCompatibleTracePred pre] (x : DialerSecret) (tr : τ) :
+    IsWellFormed pre x tr = (pre x.epk tr ∧ pre x.esk tr) := by
+  simp [Comparse.IsWellFormed, Comparse.ParseableSerializeable.mf]
+
+grind_pattern DialerSecret.IsWellFormed_eq => IsWellFormed pre x tr
+
+theorem ListenerSecret.IsWellFormed_eq
+    (pre : Bytes → τ → Prop) [BytesCompatibleTracePred pre] (x : ListenerSecret) (tr : τ) :
+    IsWellFormed pre x tr = (pre x.epk tr ∧ pre x.transcript tr) := by
+  simp [Comparse.IsWellFormed, Comparse.ParseableSerializeable.mf]
+
+grind_pattern ListenerSecret.IsWellFormed_eq => IsWellFormed pre x tr
+
 /-! ## What terms and entries must satisfy -/
 
 #combine +toplevel into ProofEntryT from
@@ -43,7 +65,38 @@ grind_pattern [grind_later] SynAckMessage.IsWellFormed_eq => IsWellFormed pre x 
   ProtocolEvent Event,
   PersistentLocalState.State Dialing,
   PersistentLocalState.State Listening,
+  PersistentLocalState.CompromisableState DialerSecret,
+  PersistentLocalState.CompromisableState ListenerSecret,
   LongTermKeys "SAKE PKI",
+
+theorem DialerCompromised_le (dialer : Participant) (epk : Bytes) (tr1 tr2 : ExecTrace) :
+    tr1 ≤ tr2 → DialerCompromised dialer epk tr1 → DialerCompromised dialer epk tr2 := by
+  simp only [DialerCompromised]
+  grind
+
+grind_pattern DialerCompromised_le => tr1 ≤ tr2, DialerCompromised dialer epk tr1
+
+theorem ListenerCompromised_le (listener : Participant) (epk : Bytes) (tr1 tr2 : ExecTrace) :
+    tr1 ≤ tr2 → ListenerCompromised listener epk tr1 → ListenerCompromised listener epk tr2 := by
+  simp only [ListenerCompromised]
+  grind
+
+grind_pattern ListenerCompromised_le => tr1 ≤ tr2, ListenerCompromised listener epk tr1
+
+/-- Who may know the ephemeral secret of a dialer: nobody, until the attacker compromises what
+the dialer keeps for its ephemeral key. -/
+def dialerSecrecy (dialer : Participant) (epk : Bytes) : Label where
+  isCorrupt tr := DialerCompromised dialer epk tr
+
+/-- Who may know the ephemeral secret of a listener: nobody, until the attacker compromises what
+the listener keeps for its ephemeral key. -/
+def listenerSecrecy (listener : Participant) (epk : Bytes) : Label where
+  isCorrupt tr := ListenerCompromised listener epk tr
+
+/-- Who may know the secret transcript of an exchange: whoever compromises what either peer
+keeps for it. -/
+def exchangeSecrecy (dialer listener : Participant) (exchange : Exchange) : Label :=
+  (dialerSecrecy dialer exchange.dialerKey).join (listenerSecrecy listener exchange.listenerKey)
 
 /-- The owner of an identity key, as the data of its usage. -/
 structure Owner where
@@ -70,32 +123,63 @@ theorem identityUsage_inj : Function.Injective identityUsage := by
   grind
 
 /-- What an identity key signs: the opening of a dialer that logged its start, or the exchange
-of a listener that logged its answer with the secret transcript that its ephemeral key gives. -/
+of a listener that logged its answer with the secret transcript that its ephemeral key gives.
+Either way the signed ephemeral key belongs to a secret that only a compromise of what the
+signer keeps reveals. -/
 instance signPred : Signature.SignPred where
   pred usage _ msg tr :=
-    (∃ dialer opening,
+    (∃ dialer opening secret,
       usage = identityUsage dialer ∧
       msg = Hash.hash opening.signed ∧
+      opening.dialerKey = DiffieHellman.dhPk secret ∧
+      secret.label tr = dialerSecrecy dialer opening.dialerKey ∧
       tr.erase.EventLogged (Event.dialStart dialer opening)) ∨
     (∃ listener exchange secret,
       usage = identityUsage listener ∧
       msg = Hash.hash exchange.signed ∧
       exchange.listenerKey = DiffieHellman.dhPk secret ∧
+      secret.label tr = listenerSecrecy listener exchange.listenerKey ∧
       tr.erase.EventLogged (Event.listenStart listener exchange
         (Concat.concat exchange.signed (DiffieHellman.dh exchange.dialerKey secret))))
 
-instance [BytesInvariants] : Signature.SignPredProof where
+instance
+    [BytesInvariants]
+    [BytesInvariants.Has DiffieHellman.DhPk.invariants]
+    [BytesInvariants.Has Literal.invariants]
+    [BytesInvariants.Has Concat.invariants]
+    [BytesInvariants.Has Hash.invariants] :
+    Signature.SignPredProof where
   pred_later := by
-    intro _ _ _ _ _ _ _ _ _ _ _ signed
-    rcases signed with ⟨dialer, opening, h⟩ | ⟨listener, exchange, secret, h⟩
-    · exact Or.inl ⟨dialer, opening, by grind⟩
-    · exact Or.inr ⟨listener, exchange, secret, by grind⟩
+    intro _ _ _ _ _ _ tr1 tr2 _ wf _ signed
+    rcases signed with ⟨dialer, opening, secret, usage, rfl, key, label, logged⟩ |
+      ⟨listener, exchange, secret, usage, rfl, key, label, logged⟩
+    · refine Or.inl ⟨dialer, opening, secret, usage, rfl, key, ?_, by grind⟩
+      simp only [Hash.hash.WellFormed, Opening.signed, Concat.concat.WellFormed, key,
+        DiffieHellman.dhPk.WellFormed] at wf
+      grind
+    · refine Or.inr ⟨listener, exchange, secret, usage, rfl, key, ?_, by grind⟩
+      simp only [Hash.hash.WellFormed, Exchange.signed, Concat.concat.WellFormed, key,
+        DiffieHellman.dhPk.WellFormed] at wf
+      grind
 
-/-- Every derived value is public: the handshake derives only the confirmations that it
-sends. -/
-instance : KdfExpand.KdfExpandInvariant where
-  usage _ _ := Usage.nothing
-  label _ _ _ := Label.pub
+/-- What a confirmation claims. The listener's confirmation claims nothing. The dialer's
+confirmation is the code of its label under the hash of a secret transcript, and it claims that
+a dialer logged that it finished the exchange with that transcript. -/
+instance macPred : Mac.MacPred where
+  pred key msg tr :=
+    msg = Literal.literalToBytes (toByteArray listenerLabel) ∨
+    (∃ dialer listener exchange shared,
+      key = Hash.hash (Concat.concat exchange.signed shared) ∧
+      msg = Literal.literalToBytes (toByteArray dialerLabel) ∧
+      tr.erase.EventLogged (Event.dialFinish dialer listener exchange
+        (Concat.concat exchange.signed shared)))
+
+instance [BytesInvariants] : Mac.MacPredProof where
+  pred_later := by
+    intro _ _ _ _ _ _ _ _ _ _ claim
+    rcases claim with listener | ⟨dialer, listener, exchange, shared, h⟩
+    · exact Or.inl listener
+    · exact Or.inr ⟨dialer, listener, exchange, shared, by grind⟩
 
 #combine +toplevel into BytesInvariants, BytesInvariantsProofs from
   Random,
@@ -104,7 +188,7 @@ instance : KdfExpand.KdfExpandInvariant where
   Hash,
   Signature,
   DiffieHellman,
-  KdfExpand,
+  Mac,
 
 @[grind]
 instance : LongTermKeys.ProofConfig "SAKE PKI" identityUsage (LongTermKeys.label "SAKE PKI") where
@@ -116,39 +200,91 @@ instance : LongTermKeys.ProofConfig "SAKE PKI" identityUsage (LongTermKeys.label
     simp_all [Bytes.Publishable]
     grind
 
-/-- What a dialer keeps is the secret of its ephemeral key and the transcript of its opening,
-for a listener whose identity key it looked up. -/
+/-- The secret part of what a dialer keeps is the secret of its ephemeral key, which only a
+compromise of this part reveals. -/
+instance dialerSecretInv : PersistentLocalState.CompromisableLocalStateInv DialerSecret where
+  invariant me kept tr :=
+    kept.epk = DiffieHellman.dhPk kept.esk ∧
+    kept.epk.Publishable tr ∧
+    kept.esk.Invariant tr ∧
+    kept.esk.label tr = dialerSecrecy me kept.epk
+  invariant_later := by grind
+  invariant_implies_KnowableBy participant state tr := by
+    have : (dialerSecrecy participant state.epk).canFlow
+        (PersistentLocalState.label participant state) tr.erase := by
+      cases state
+      simp [Label.canFlow, dialerSecrecy, DialerCompromised]
+      grind
+    grind [canFlowTrans]
+
+/-- The secret part of what a listener keeps is a transcript that a compromise of this part may
+reveal. -/
+instance listenerSecretInv : PersistentLocalState.CompromisableLocalStateInv ListenerSecret where
+  invariant me kept tr :=
+    kept.epk.Publishable tr ∧
+    kept.transcript.Invariant tr ∧
+    (kept.transcript.label tr).canFlow (listenerSecrecy me kept.epk) tr.erase
+  invariant_later := by grind
+  invariant_implies_KnowableBy participant state tr := by
+    have : (listenerSecrecy participant state.epk).canFlow
+        (PersistentLocalState.label participant state) tr.erase := by
+      cases state
+      simp [Label.canFlow, listenerSecrecy, ListenerCompromised]
+      grind
+    grind [canFlowTrans]
+
+/-- What a dialer keeps is the secret of its ephemeral key and the transcript of the opening
+that it logged, for a listener whose identity key it looked up. -/
 instance dialingInv : PersistentLocalState.LocalStateInv Dialing where
-  invariant _ kept tr :=
+  invariant me kept tr :=
     kept.secret.Invariant tr ∧
+    kept.secret.label tr = dialerSecrecy me kept.opening.dialerKey ∧
     kept.opening.dialerKey = DiffieHellman.dhPk kept.secret ∧
     kept.transcript = kept.opening.signed ∧
     kept.transcript.Publishable tr ∧
-    LongTermKeys.IsLongTermPublicKey "SAKE PKI" kept.listener kept.opening.listener tr
+    LongTermKeys.IsLongTermPublicKey "SAKE PKI" kept.listener kept.opening.listener tr ∧
+    tr.erase.EventLogged (Event.dialStart me kept.opening)
   invariant_later := by grind
 
-/-- A listener keeps a transcript only for an opening that the dialer it looked up started,
-unless that dialer's identity key is compromised. -/
+/-- A listener keeps the secret transcript of its exchange. Unless the identity key of the
+dialer it looked up is compromised, that dialer started the opening, and only a compromise of
+what either peer keeps reveals the transcript. -/
 instance listeningInv : PersistentLocalState.LocalStateInv Listening where
-  invariant _ kept tr :=
-    tr.erase.EventLogged (Event.dialStart kept.dialer kept.exchange.toOpening) ∨
-    (LongTermKeys.label "SAKE PKI" kept.dialer kept.exchange.dialer).isCorrupt tr.erase
+  invariant me kept tr :=
+    kept.transcript.Invariant tr ∧
+    (∃ shared, kept.transcript = Concat.concat kept.exchange.signed shared) ∧
+    ((tr.erase.EventLogged (Event.dialStart kept.dialer kept.exchange.toOpening) ∧
+        (exchangeSecrecy kept.dialer me kept.exchange).canFlow (kept.transcript.label tr)
+          tr.erase) ∨
+      (LongTermKeys.label "SAKE PKI" kept.dialer kept.exchange.dialer).isCorrupt tr.erase)
   invariant_later := by grind
 
-/-- A dialer finishes only an exchange that the listener it looked up answered with the same
-secret transcript, and a listener finishes only an exchange whose opening the dialer it looked
-up started, unless the identity key of that peer is compromised. -/
+/-- A dialer starts only under its own identity key. A dialer finishes only an exchange whose
+opening it started and that the listener it looked up answered with the same secret transcript,
+which only a compromise of what either peer keeps reveals. A listener finishes only an exchange
+whose opening the dialer it looked up started, whose transcript is secret in the same way, and
+that this dialer finished with the same transcript unless what either peer keeps is
+compromised. Each holds unless the identity key of the peer is compromised. -/
 instance eventInv : ProtocolEvent.EventInv Event where
   invariant tr event :=
     match event with
-    | .dialStart _ _ => True
+    | .dialStart dialer opening =>
+      ∃ key, opening.dialer = Signature.vk key ∧
+        LongTermKeys.IsLongTermSecretKey "SAKE PKI" dialer key tr
     | .listenStart _ _ _ => True
-    | .dialFinish _ listener exchange secret =>
-      tr.erase.EventLogged (Event.listenStart listener exchange secret) ∨
-      (LongTermKeys.label "SAKE PKI" listener exchange.listener).isCorrupt tr.erase
-    | .listenFinish _ dialer exchange _ =>
-      tr.erase.EventLogged (Event.dialStart dialer exchange.toOpening) ∨
-      (LongTermKeys.label "SAKE PKI" dialer exchange.dialer).isCorrupt tr.erase
+    | .dialFinish dialer listener exchange secret =>
+      tr.erase.EventLogged (Event.dialStart dialer exchange.toOpening) ∧
+      ((tr.erase.EventLogged (Event.listenStart listener exchange secret) ∧
+          secret.Invariant tr ∧
+          (exchangeSecrecy dialer listener exchange).canFlow (secret.label tr) tr.erase) ∨
+        (LongTermKeys.label "SAKE PKI" listener exchange.listener).isCorrupt tr.erase)
+    | .listenFinish listener dialer exchange secret =>
+      (tr.erase.EventLogged (Event.dialStart dialer exchange.toOpening) ∧
+          secret.Invariant tr ∧
+          (exchangeSecrecy dialer listener exchange).canFlow (secret.label tr) tr.erase ∧
+          ((∃ expected, tr.erase.EventLogged (Event.dialFinish dialer expected exchange secret)) ∨
+            (exchangeSecrecy dialer listener exchange).isCorrupt tr.erase)) ∨
+        (LongTermKeys.label "SAKE PKI" dialer exchange.dialer).isCorrupt tr.erase
 
 #combine +toplevel into SubTraceInvariant, SubBaseAttackerKnowledgeTheorem from
   Network,
@@ -156,6 +292,8 @@ instance eventInv : ProtocolEvent.EventInv Event where
   ProtocolEvent Event,
   PersistentLocalState.State Dialing,
   PersistentLocalState.State Listening,
+  PersistentLocalState.CompromisableState DialerSecret,
+  PersistentLocalState.CompromisableState ListenerSecret,
   LongTermKeys "SAKE PKI",
 
 #combine +toplevel into SubAttackerKnowledgeTheorem from
@@ -165,7 +303,7 @@ instance eventInv : ProtocolEvent.EventInv Event where
   Hash,
   Signature,
   DiffieHellman,
-  KdfExpand,
+  Mac,
 
 /-! ## Terms that may be sent -/
 
@@ -177,6 +315,10 @@ theorem start_publishable (ns : ByteArray) (tr : ProofTrace) : (start ns).Publis
   simp only [start]
   grind [Hash.hash.Invariant, Hash.hash.label, Literal.literalToBytes.Invariant,
     Literal.literalToBytes.label]
+
+theorem label_publishable (label : Slice Std.U8) (tr : ProofTrace) :
+    (Literal.literalToBytes (toByteArray label) : Bytes).Publishable tr := by
+  grind [Literal.literalToBytes.Invariant, Literal.literalToBytes.label]
 
 theorem concat_publishable {a b : Bytes} {tr : ProofTrace}
     (left : a.Publishable tr) (right : b.Publishable tr) :
@@ -206,15 +348,6 @@ theorem Exchange.signed_publishable {e : Exchange} {tr : ProofTrace}
     e.signed.Publishable tr :=
   concat_publishable (concat_publishable opening (stamp_publishable _ _)) key
 
-theorem confirmation_publishable {transcript : Bytes} (label : Slice Std.U8) {tr : ProofTrace}
-    (valid : transcript.Invariant tr) : (confirmation transcript label).Publishable tr := by
-  have used : (Hash.hash transcript).HasUsage ((Hash.hash transcript).usage tr) tr := Or.inl rfl
-  have flows : ((confirmation transcript label).label tr).canFlow Label.pub tr.erase :=
-    (KdfExpand.kdfExpand.label (Hash.hash transcript)
-      (Literal.literalToBytes (toByteArray label)) 32 _ tr used).1
-  simp only [confirmation] at flows ⊢
-  grind [KdfExpand.kdfExpand.Invariant, Hash.hash.Invariant, Literal.literalToBytes.Invariant]
-
 /-- The secret transcript of an exchange is a valid term when the peer's ephemeral key came
 from the network and the local ephemeral secret is valid. -/
 theorem agreed_invariant {signed key secret : Bytes} {tr : ProofTrace}
@@ -224,6 +357,48 @@ theorem agreed_invariant {signed key secret : Bytes} {tr : ProofTrace}
   have shared := DiffieHellman.dh.Invariant key secret tr ⟨by grind, own⟩
   grind [Concat.concat.Invariant]
 
+/-- Only whoever may know one of the two ephemeral secrets may know the secret transcript. -/
+theorem agreed_secrecy {signed theirs ours : Bytes} {tr : ProofTrace} :
+    ((theirs.label tr).join (ours.label tr)).canFlow
+      ((Concat.concat signed (DiffieHellman.dh (DiffieHellman.dhPk theirs) ours)).label tr)
+      tr.erase := by
+  simp only [Concat.concat.label, DiffieHellman.dh.label, Bytes.dhSkLabel_dhPk]
+  grind [Label.canFlow]
+
+/-- Whoever may know the local ephemeral secret may know the secret transcript. -/
+theorem agreed_known {signed key ours : Bytes} {tr : ProofTrace}
+    (sent : signed.Publishable tr) :
+    ((Concat.concat signed (DiffieHellman.dh key ours)).label tr).canFlow
+      (ours.label tr) tr.erase := by
+  simp only [Concat.concat.label, DiffieHellman.dh.label]
+  grind [Label.canFlow]
+
+theorem join_comm_canFlow {a b c : Label} {tr : ExecTrace} (h : (a.join b).canFlow c tr) :
+    (b.join a).canFlow c tr := by
+  grind [Label.canFlow]
+
+/-- The listener's confirmation of a valid transcript may be sent. -/
+theorem listener_confirmation_publishable {transcript : Bytes} {tr : ProofTrace}
+    (valid : transcript.Invariant tr) :
+    (confirmation transcript listenerLabel).Publishable tr := by
+  simp only [confirmation]
+  refine Mac.mac_invariant (by grind [Hash.hash.Invariant]) (label_publishable _ _) ?_
+  simp only [Mac.MacPred.pred]
+  exact Or.inl (by trivial)
+
+/-- The dialer's confirmation of a valid transcript may be sent once the dialer has logged that
+it finished the exchange with that transcript. -/
+theorem dialer_confirmation_publishable {dialer listener : Participant} {exchange : Exchange}
+    {shared : Bytes} {tr : ProofTrace}
+    (valid : (Concat.concat exchange.signed shared).Invariant tr)
+    (finished : tr.erase.EventLogged (Event.dialFinish dialer listener exchange
+      (Concat.concat exchange.signed shared))) :
+    (confirmation (Concat.concat exchange.signed shared) dialerLabel).Publishable tr := by
+  simp only [confirmation]
+  refine Mac.mac_invariant (by grind [Hash.hash.Invariant]) (label_publishable _ _) ?_
+  simp only [Mac.MacPred.pred]
+  exact Or.inr ⟨dialer, listener, exchange, shared, by trivial, by trivial, finished⟩
+
 /-! ## Every action preserves the invariant -/
 
 attribute [local grind] ProtocolEvent.EventInv.invariant
@@ -231,8 +406,11 @@ attribute [local grind] eventInv
 attribute [local grind] Signature.SignPred.pred
 attribute [local grind] signPred
 attribute [local grind] PersistentLocalState.LocalStateInv.invariant
+attribute [local grind] PersistentLocalState.CompromisableLocalStateInv.toLocalStateInv
 attribute [local grind] dialingInv
 attribute [local grind] listeningInv
+attribute [local grind] dialerSecretInv
+attribute [local grind] listenerSecretInv
 attribute [local grind] LongTermKeys.IsLongTermPublicKey
 attribute [local grind] LongTermKeys.IsLongTermSecretKey
 
@@ -244,24 +422,30 @@ theorem dial.proof (me listener : Participant) (skHandle pkHandle : Nat) (ns : B
   unfold dial
   step
   step
-  step with ⟨fun _ => Label.secret, Usage.nothing⟩
+  step with ⟨fun secret => dialerSecrecy me (DiffieHellman.dhPk secret), Usage.nothing⟩
   step with ⟨fun _ => Label.secret, Usage.nothing⟩
   rw [dial_start_eq, run_ok]
   simp only [pure_bind]
-  step
   set opening : Opening :=
     { ns, dialer := Signature.vk key, listener := listenerKey, dialed := now,
       dialerKey := DiffieHellman.dhPk drawn } with opening_eq
+  step by
+    simp only [ProtocolEvent.EventInv.invariant]
+    exact ⟨key, rfl, by assumption⟩
   have signed : opening.signed.Publishable tr :=
     Opening.signed_publishable (vk_publishable (by grind)) (by grind) (dhPk_publishable (by grind))
   step by
     simp only [PersistentLocalState.LocalStateInv.invariant]
     grind
   step by
+    simp only [PersistentLocalState.LocalStateInv.invariant]
+    have ephemeral := dhPk_publishable (tr := tr) (secret := drawn) (by grind)
+    grind
+  step by
     have pred : Signature.SignPred.pred (identityUsage me) (Signature.vk key)
         (Hash.hash opening.signed) tr := by
       simp only [Signature.SignPred.pred]
-      exact Or.inl ⟨me, opening, rfl, rfl, by assumption⟩
+      exact Or.inl ⟨me, opening, drawn, rfl, rfl, rfl, by assumption, by assumption⟩
     have valid : (Signature.sign key nonce (Hash.hash opening.signed)).Publishable tr := by
       have hashed : (Hash.hash opening.signed).Publishable tr := hash_publishable (by grind)
       have := Signature.sign.Invariant key nonce _ (identityUsage me) tr
@@ -282,7 +466,7 @@ theorem listen.proof (me dialer : Participant) (skHandle pkHandle msgHandle : Na
   step
   step
   step
-  step with ⟨fun _ => Label.secret, Usage.nothing⟩
+  step with ⟨fun secret => listenerSecrecy me (DiffieHellman.dhPk secret), Usage.nothing⟩
   step with ⟨fun _ => Label.secret, Usage.nothing⟩
   rw [listen_start_eq, run_ok]
   simp only [pure_bind]
@@ -295,7 +479,16 @@ theorem listen.proof (me dialer : Participant) (skHandle pkHandle msgHandle : Na
     have sig : msg.sig.Publishable tr := by grind
     have opened : exchange.toOpening.signed.Publishable tr :=
       Opening.signed_publishable (by grind) (vk_publishable (by grind)) epk
-    have authentic : tr.erase.EventLogged (Event.dialStart dialer exchange.toOpening) ∨
+    have answered : exchange.signed.Publishable tr :=
+      Exchange.signed_publishable opened (dhPk_publishable (by grind))
+    have valid : (Concat.concat exchange.signed (DiffieHellman.dh msg.epk drawn)).Invariant tr :=
+      agreed_invariant answered epk (by grind)
+    have own : drawn.label tr = listenerSecrecy me exchange.listenerKey := by assumption
+    have authentic :
+        (tr.erase.EventLogged (Event.dialStart dialer exchange.toOpening) ∧
+          (exchangeSecrecy dialer me exchange).canFlow
+            ((Concat.concat exchange.signed (DiffieHellman.dh msg.epk drawn)).label tr)
+            tr.erase) ∨
         (LongTermKeys.label "SAKE PKI" dialer dialerKey).isCorrupt tr.erase := by
       have hashed := hash_publishable opened
       rcases Signature.verify.Invariant dialerKey (Hash.hash exchange.toOpening.signed) msg.sig
@@ -303,34 +496,43 @@ theorem listen.proof (me dialer : Participant) (skHandle pkHandle msgHandle : Na
         with signed | leaked
       · have signed := signed rfl
         simp only [Signature.SignPred.pred] at signed
-        rcases signed with ⟨dialer', opening', usage, same, logged⟩ |
+        rcases signed with ⟨dialer', opening', secret', usage, same, theirs, label, logged⟩ |
           ⟨listener', exchange', secret', usage, same, -⟩
         · obtain rfl := identityUsage_inj usage
           obtain rfl := Opening.signed_inj (Hash.hash_inj _ _ same)
-          exact Or.inl logged
+          have peer : msg.epk = DiffieHellman.dhPk secret' := theirs
+          have secrecy := agreed_secrecy (signed := exchange.signed) (theirs := secret')
+            (ours := drawn) (tr := tr)
+          rw [label, own, ← peer] at secrecy
+          exact Or.inl ⟨logged, secrecy⟩
         · exact absurd (Hash.hash_inj _ _ same) (Opening.signed_ne _ _)
       · right
         grind [canFlowPubEqIsCorrupt]
-    have answered : exchange.signed.Publishable tr :=
-      Exchange.signed_publishable opened (dhPk_publishable (by grind))
+    have known := agreed_known (signed := exchange.signed) (key := msg.epk) (ours := drawn)
+      answered
+    rw [own] at known
     step
     step by
       simp only [PersistentLocalState.LocalStateInv.invariant]
+      exact ⟨by grind, ⟨_, rfl⟩, by grind⟩
+    step by
+      simp only [PersistentLocalState.LocalStateInv.invariant]
+      have ephemeral := dhPk_publishable (tr := tr) (secret := drawn) (by grind)
       grind
     step by
       have hashed : (Hash.hash exchange.signed).Publishable tr := hash_publishable (by grind)
       have pred : Signature.SignPred.pred (identityUsage me) (Signature.vk key)
           (Hash.hash exchange.signed) tr := by
         simp only [Signature.SignPred.pred]
-        exact Or.inr ⟨me, exchange, drawn, rfl, rfl, rfl, by assumption⟩
+        exact Or.inr ⟨me, exchange, drawn, rfl, rfl, rfl, by assumption, by assumption⟩
       have signature : (Signature.sign key nonce (Hash.hash exchange.signed)).Publishable tr := by
         have := Signature.sign.Invariant key nonce _ (identityUsage me) tr
           ⟨by grind, by grind, by grind, by grind, by grind, Or.inl ⟨rfl, pred⟩⟩
         grind [Signature.sign.label]
       have ephemeral := dhPk_publishable (tr := tr) (secret := drawn) (by grind)
-      have confirmed := confirmation_publishable listenerLabel
-        (agreed_invariant (signed := exchange.signed) (key := msg.epk) (secret := drawn)
-          (tr := tr) (by grind) (by grind) (by grind))
+      have confirmed := listener_confirmation_publishable
+        (transcript := Concat.concat exchange.signed (DiffieHellman.dh msg.epk drawn))
+        (tr := tr) (by grind)
       grind
     step
     grind
@@ -351,12 +553,14 @@ theorem finishDial.proof (me : Participant) (stHandle msgHandle : Nat) (answered
   simp only [pure_bind]
   split_ifs with inside verified confirmed
   · simp only []
-    obtain ⟨own, ephemeral, transcript, sent, registered⟩ :
+    obtain ⟨own, secrecy, ephemeral, transcript, sent, registered, started⟩ :
         kept.secret.Invariant tr ∧
+        kept.secret.label tr = dialerSecrecy me kept.opening.dialerKey ∧
         kept.opening.dialerKey = DiffieHellman.dhPk kept.secret ∧
         kept.transcript = kept.opening.signed ∧
         kept.transcript.Publishable tr ∧
-        LongTermKeys.IsLongTermPublicKey "SAKE PKI" kept.listener kept.opening.listener tr := by
+        LongTermKeys.IsLongTermPublicKey "SAKE PKI" kept.listener kept.opening.listener tr ∧
+        tr.erase.EventLogged (Event.dialStart me kept.opening) := by
       have := ‹PersistentLocalState.LocalStateInv.invariant me kept tr›
       simpa only [PersistentLocalState.LocalStateInv.invariant] using this
     set exchange : Exchange :=
@@ -371,9 +575,15 @@ theorem finishDial.proof (me : Participant) (stHandle msgHandle : Nat) (answered
     have sig : msg.sig.Publishable tr := by grind
     have answer : exchange.signed.Publishable tr :=
       Exchange.signed_publishable (by rw [← transcript]; exact sent) epk
+    have valid : (Concat.concat exchange.signed
+        (DiffieHellman.dh msg.epk kept.secret)).Invariant tr :=
+      agreed_invariant answer epk own
     have authentic :
-        tr.erase.EventLogged (Event.listenStart kept.listener exchange
-          (Concat.concat exchange.signed (DiffieHellman.dh msg.epk kept.secret))) ∨
+        (tr.erase.EventLogged (Event.listenStart kept.listener exchange
+            (Concat.concat exchange.signed (DiffieHellman.dh msg.epk kept.secret))) ∧
+          (exchangeSecrecy me kept.listener exchange).canFlow
+            ((Concat.concat exchange.signed (DiffieHellman.dh msg.epk kept.secret)).label tr)
+            tr.erase) ∨
         (LongTermKeys.label "SAKE PKI" kept.listener kept.opening.listener).isCorrupt
           tr.erase := by
       have hashed := hash_publishable answer
@@ -382,26 +592,28 @@ theorem finishDial.proof (me : Participant) (stHandle msgHandle : Nat) (answered
         with signature | leaked
       · have signature := signature rfl
         simp only [Signature.SignPred.pred] at signature
-        rcases signature with ⟨dialer', opening', usage, same, -⟩ |
-          ⟨listener', exchange', secret', usage, same, key, logged⟩
+        rcases signature with ⟨dialer', opening', secret', usage, same, -⟩ |
+          ⟨listener', exchange', secret', usage, same, key, label, logged⟩
         · exact absurd (Hash.hash_inj _ _ same).symm (Opening.signed_ne _ _)
         · obtain rfl := identityUsage_inj usage
           obtain rfl : exchange' = exchange := (Exchange.signed_inj (Hash.hash_inj _ _ same)).symm
+          have peer : msg.epk = DiffieHellman.dhPk secret' := key
           have shared : DiffieHellman.dh exchange.dialerKey secret' =
               DiffieHellman.dh msg.epk kept.secret := by
-            have peer : msg.epk = DiffieHellman.dhPk secret' := key
             rw [peer, show exchange.dialerKey = DiffieHellman.dhPk kept.secret from ephemeral]
             exact DiffieHellman.dh_commutes _ _
           rw [shared] at logged
-          exact Or.inl logged
+          have sealed := agreed_secrecy (signed := exchange.signed) (theirs := secret')
+            (ours := kept.secret) (tr := tr)
+          rw [label, secrecy, ← peer] at sealed
+          exact Or.inl ⟨logged, join_comm_canFlow sealed⟩
       · right
         grind [canFlowPubEqIsCorrupt]
-    have derived := confirmation_publishable dialerLabel
-      (agreed_invariant (secret := kept.secret) answer epk own)
     step by
       simp only [ProtocolEvent.EventInv.invariant]
-      exact authentic
-    step
+      exact ⟨started, authentic.imp (fun ⟨logged, sealed⟩ => ⟨logged, valid, sealed⟩) id⟩
+    step by
+      exact dialer_confirmation_publishable (by grind) (by assumption)
     grind
   · simp only []
     step
@@ -409,6 +621,45 @@ theorem finishDial.proof (me : Participant) (stHandle msgHandle : Nat) (answered
     step
   · simp only []
     step
+
+/-- A dialer that finished an exchange started its opening. -/
+theorem finisher_started {dialer listener : Participant} {exchange : Exchange} {secret : Bytes}
+    {tr : ProofTrace} (inv : tr.Invariant)
+    (finished : tr.erase.EventLogged (Event.dialFinish dialer listener exchange secret)) :
+    tr.erase.EventLogged (Event.dialStart dialer exchange.toOpening) := by
+  obtain ⟨time, held⟩ := Trace.EventLogged_imp_EventInv _ tr inv finished
+  simp only [ProtocolEvent.EventInv.invariant] at held
+  have := held.1
+  grind
+
+/-- Whoever started an opening holds the signing key of its dialer identity. -/
+theorem starter_key {dialer : Participant} {opening : Opening} {tr : ProofTrace}
+    (inv : tr.Invariant) (started : tr.erase.EventLogged (Event.dialStart dialer opening)) :
+    ∃ key, opening.dialer = Signature.vk key ∧
+      LongTermKeys.IsLongTermSecretKey "SAKE PKI" dialer key tr := by
+  obtain ⟨time, held⟩ := Trace.EventLogged_imp_EventInv _ tr inv started
+  simp only [ProtocolEvent.EventInv.invariant] at held
+  obtain ⟨key, identity, owned⟩ := held
+  exact ⟨key, identity, LongTermKeys.IsLongTermSecretKey_later "SAKE PKI" dialer key _ tr
+    (Trace.prefix_le_self tr time) owned⟩
+
+/-- Two participants that started the same opening are the same, unless its dialer identity key
+is compromised. -/
+theorem starter_unique {first second : Participant} {opening : Opening} {tr : ProofTrace}
+    (inv : tr.Invariant)
+    (one : tr.erase.EventLogged (Event.dialStart first opening))
+    (other : tr.erase.EventLogged (Event.dialStart second opening)) :
+    first = second ∨
+      (LongTermKeys.label "SAKE PKI" first opening.dialer).isCorrupt tr.erase := by
+  obtain ⟨key, identity, owned⟩ := starter_key inv one
+  obtain ⟨key', identity', owned'⟩ := starter_key inv other
+  obtain rfl := vk_inj (identity.symm.trans identity')
+  simp only [LongTermKeys.IsLongTermSecretKey] at owned owned'
+  rcases Bytes.HasUsage_inj key _ _ tr owned.2.2 owned'.2.2 with same | leaked
+  · exact Or.inl (identityUsage_inj same)
+  · right
+    rw [identity, ← owned.2.1]
+    grind [canFlowPubEqIsCorrupt]
 
 @[instance]
 theorem finishListen.proof (me : Participant) (stHandle msgHandle : Nat) :
@@ -421,14 +672,54 @@ theorem finishListen.proof (me : Participant) (stHandle msgHandle : Nat) :
   simp only [pure_bind]
   split_ifs with confirmed
   · simp only []
-    have authentic := ‹PersistentLocalState.LocalStateInv.invariant me kept tr›
-    simp only [PersistentLocalState.LocalStateInv.invariant] at authentic
+    obtain ⟨valid, ⟨shared, transcript⟩, authentic⟩ :
+        kept.transcript.Invariant tr ∧
+        (∃ shared, kept.transcript = Concat.concat kept.exchange.signed shared) ∧
+        ((tr.erase.EventLogged (Event.dialStart kept.dialer kept.exchange.toOpening) ∧
+            (exchangeSecrecy kept.dialer me kept.exchange).canFlow (kept.transcript.label tr)
+              tr.erase) ∨
+          (LongTermKeys.label "SAKE PKI" kept.dialer kept.exchange.dialer).isCorrupt
+            tr.erase) := by
+      have := ‹PersistentLocalState.LocalStateInv.invariant me kept tr›
+      simpa only [PersistentLocalState.LocalStateInv.invariant] using this
+    have checked := Mac.mac_checked (code := confirmation) (key := Hash.hash kept.transcript)
+      (msg := Literal.literalToBytes (toByteArray dialerLabel)) (tr := tr) (by grind) confirmed
+    mark_non_monotone checked
     step by
       simp only [ProtocolEvent.EventInv.invariant]
-      exact authentic
+      rcases authentic with ⟨started, sealed⟩ | leaked
+      · rcases checked with claim | known
+        · simp only [Mac.MacPred.pred] at claim
+          rcases claim with same | ⟨dialer', listener', exchange', shared', key, -, finished⟩
+          · exact absurd same label_ne
+          · have agreed := Hash.hash_inj _ _ key
+            rw [transcript] at agreed
+            obtain ⟨signed, rfl⟩ := concat_inj agreed
+            obtain rfl : exchange' = kept.exchange := (Exchange.signed_inj signed).symm
+            rw [← transcript] at finished
+            rcases starter_unique h started (finisher_started h finished) with rfl | leaked
+            · exact Or.inl ⟨started, valid, sealed, Or.inl ⟨listener', finished⟩⟩
+            · exact Or.inr leaked
+        · refine Or.inl ⟨started, valid, sealed, Or.inr ?_⟩
+          grind [Label.canFlow, canFlowPubEqIsCorrupt, Hash.hash.label]
+      · exact Or.inr leaked
     grind
   · simp only []
     step
+
+@[instance]
+theorem compromiseDialer.proof (handle : Nat) :
+    HoareTriple (compromiseDialer handle) (fun _ => True) (fun _ _ => True) := by
+  unfold compromiseDialer
+  step
+  grind
+
+@[instance]
+theorem compromiseListener.proof (handle : Nat) :
+    HoareTriple (compromiseListener handle) (fun _ => True) (fun _ _ => True) := by
+  unfold compromiseListener
+  step
+  grind
 
 instance : ReachableImpliesInvariant dial.reachability :=
   .mk fun (me, listener, skHandle, pkHandle, ns, now, window) =>
@@ -444,6 +735,12 @@ instance : ReachableImpliesInvariant finishDial.reachability :=
 instance : ReachableImpliesInvariant finishListen.reachability :=
   .mk fun (me, stHandle, msgHandle) => finishListen.proof me stHandle msgHandle
 
+instance : ReachableImpliesInvariant compromiseDialer.reachability :=
+  .mk fun handle => compromiseDialer.proof handle
+
+instance : ReachableImpliesInvariant compromiseListener.reachability :=
+  .mk fun handle => compromiseListener.proof handle
+
 #combine into ReachabilityTheorem from
   Network,
   Random,
@@ -452,6 +749,23 @@ instance : ReachableImpliesInvariant finishListen.reachability :=
   listen,
   finishDial,
   finishListen,
+  compromiseDialer,
+  compromiseListener,
+
+/-- A term that the attacker knows, and that only the holders of a label may know, has been
+revealed to the attacker by what makes that label corrupt. -/
+theorem revealed_of_known {holders : Label} {secret : Bytes} {time : Nat} {tr : ProofTrace}
+    (inv : tr.Invariant) (known : secret.AttackerKnows tr.erase)
+    (valid : secret.Invariant (tr.prefix time))
+    (sealed : holders.canFlow (secret.label (tr.prefix time)) (tr.prefix time).erase) :
+    holders.isCorrupt tr.erase := by
+  have published := Bytes.AttackerKnows_implies_Publishable secret tr inv known
+  have same := Bytes.label_later_fast secret (tr.prefix time) tr
+    (Trace.prefix_le_self tr time) valid
+  have later := Trace.erase_le (tr.prefix time) tr (Trace.prefix_le_self tr time)
+  rw [same] at sealed
+  simp only [Bytes.Publishable] at published
+  exact sealed tr.erase later ((canFlowPubEqIsCorrupt _ _).mpr published.2)
 
 end
 end Sake

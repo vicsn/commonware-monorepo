@@ -2,18 +2,18 @@ module
 public import Commonware.Symbolic.Terms
 public import DY.EquationalTheory.Sign
 public import DY.EquationalTheory.DiffieHellman
-public import DY.EquationalTheory.KdfExpand
+public import Commonware.Symbolic.Mac
 public import DY.Actions.Random
 
 /-! SAKE's term algebra and the reading of the extracted handshake rules in DyLean. Trusted.
 `#combine` fixes DyLean's bytes to fresh values, literals, concatenation, hashing, signatures,
-Diffie-Hellman and key derivation.
+Diffie-Hellman and message authentication codes.
 
 A transcript is read as the term of everything committed to it, in order, starting from a hash
 of the namespace. Signing a transcript signs its hash. The secret that two ephemeral keys share
-is DyLean's Diffie-Hellman term, and the exchange is always contributory. A confirmation is a
-key derived from the hash of the transcript with the confirmation's label as its context:
-production derives it with BLAKE3 keyed by the transcript's summary. `Opening` and `Exchange`
+is DyLean's Diffie-Hellman term, and the exchange is always contributory. A confirmation is the
+message authentication code of the confirmation's label under the hash of the transcript:
+production computes it with BLAKE3 keyed by the transcript's summary. `Opening` and `Exchange`
 name what a handshake agrees on in public. -/
 
 namespace Sake
@@ -27,7 +27,7 @@ open DY Aeneas Aeneas.Std CoreModels Commonware.Symbolic commonware_symbolic
   Hash,
   Signature,
   DiffieHellman,
-  KdfExpand,
+  Mac,
 
 /-- A timestamp as a term: the literal of its big-endian bytes. -/
 def stamp (time : Std.U64) : Bytes :=
@@ -46,8 +46,8 @@ def sakeTerms : sake.Terms Unit Bytes Bytes Bytes Bytes where
   exchange _ transcript secret peer :=
     RustM.ok (true, Concat.concat transcript (DiffieHellman.dh peer secret))
   confirmation _ transcript label :=
-    RustM.ok (KdfExpand.kdfExpand (Hash.hash transcript)
-      (Literal.literalToBytes (toByteArray label)) 32)
+    RustM.ok (Mac.mac (Hash.hash transcript)
+      (Literal.literalToBytes (toByteArray label)))
   same _ a b := RustM.ok (decide (a = b))
 
 /-- A local identity: its signing key and the nonce of its next signature.
