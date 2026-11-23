@@ -22,7 +22,7 @@
 - Assumptions: the application supplies the committee's registered keys in member order, and a
   proof of possession is derivable for every flagged key of a submitted certificate. Production
   does not check proofs of possession; registration must.
-- Last validation: `bash verification/check.sh` on 2026-11-23 at `f3135358b`, passed. 3 Rust tests (198
+- Last validation: `bash verification/check.sh` on 2026-11-23 at `ff69c8859`, passed. 3 Rust tests (198
   certificate claims, 24 attestation claims and the quorum of every committee size up to
   100,000), reproducible extraction, an axiom audit of all 136 theorems in `Bls` and
   `Commonware.Symbolic` (standard Lean axioms), 3 executed checks and 10 rejected mutations. The
