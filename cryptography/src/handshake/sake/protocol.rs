@@ -800,4 +800,236 @@ mod test {
             assert_eq!(dialer.summarize(), listener.summarize());
         }
     }
+
+    /// Reconstructs the transcript of both peers once a [Syn] is verified, with both identities
+    /// committed.
+    fn after_syn<P: PublicKey>(
+        version: Version,
+        syn: &Syn<P::Signature>,
+        listener: &P,
+        dialer: &P,
+    ) -> Transcript {
+        let early = version.binds_identity_before_syn();
+        let mut transcript = syn_transcript(version, syn, listener, early.then_some(dialer));
+        if !early {
+            transcript.commit(dialer.encode());
+        }
+        transcript
+    }
+
+    /// Accepts a peer timestamp at either end of the accepted range and rejects the timestamps
+    /// just outside it.
+    #[test]
+    fn test_timestamp_range() {
+        for version in VERSIONS {
+            let mut rng = test_rng();
+            let dialer_crypto = PrivateKey::random(&mut rng);
+            let listener_crypto = PrivateKey::random(&mut rng);
+
+            // The listener accepts dialer timestamps in 10..20 and the dialer accepts listener
+            // timestamps in 30..40.
+            let run = |rng: &mut _, dialer_time: u64, listener_time: u64| {
+                let (d_state, msg1) = dial_start(
+                    &mut *rng,
+                    Context::new(
+                        b"test_namespace",
+                        dialer_time,
+                        30..40,
+                        dialer_crypto.clone(),
+                        listener_crypto.public_key(),
+                        version,
+                    ),
+                );
+                let (_, msg2) = listen_start(
+                    &mut *rng,
+                    Context::new(
+                        b"test_namespace",
+                        listener_time,
+                        10..20,
+                        listener_crypto.clone(),
+                        dialer_crypto.public_key(),
+                        version,
+                    ),
+                    msg1,
+                )?;
+                dial_end(d_state, msg2).map(|_| ())
+            };
+
+            for time in [10, 19] {
+                assert!(run(&mut rng, time, 30).is_ok(), "{version:?} {time}");
+            }
+            for time in [9, 20] {
+                assert!(matches!(
+                    run(&mut rng, time, 30),
+                    Err(Error::InvalidTimestamp(found, range)) if found == time && range == (10..20)
+                ));
+            }
+            for time in [30, 39] {
+                assert!(run(&mut rng, 10, time).is_ok(), "{version:?} {time}");
+            }
+            for time in [29, 40] {
+                assert!(matches!(
+                    run(&mut rng, 10, time),
+                    Err(Error::InvalidTimestamp(found, range)) if found == time && range == (30..40)
+                ));
+            }
+        }
+    }
+
+    /// Rejects a [Syn] when the dialer expects a different listener identity.
+    #[test]
+    fn test_mismatched_listener_identity_fails() {
+        for version in VERSIONS {
+            let mut rng = test_rng();
+            let dialer_crypto = PrivateKey::random(&mut rng);
+            let listener_crypto = PrivateKey::random(&mut rng);
+            let expected_crypto = PrivateKey::random(&mut rng);
+
+            let (_, msg1) = dial_start(
+                &mut rng,
+                Context::new(
+                    b"test_namespace",
+                    0,
+                    0..1,
+                    dialer_crypto.clone(),
+                    expected_crypto.public_key(),
+                    version,
+                ),
+            );
+
+            let result = listen_start(
+                &mut rng,
+                Context::new(
+                    b"test_namespace",
+                    0,
+                    0..1,
+                    listener_crypto,
+                    dialer_crypto.public_key(),
+                    version,
+                ),
+                msg1,
+            );
+
+            assert!(matches!(result, Err(Error::InvalidSignature)));
+        }
+    }
+
+    /// Rejects a [SynAck] signed by an identity other than the listener the dialer expects.
+    #[test]
+    fn test_syn_ack_from_unexpected_listener_fails() {
+        for version in VERSIONS {
+            let mut rng = test_rng();
+            let dialer_crypto = PrivateKey::random(&mut rng);
+            let expected_crypto = PrivateKey::random(&mut rng);
+            let impostor_crypto = PrivateKey::random(&mut rng);
+            let (dialer, expected) = (dialer_crypto.public_key(), expected_crypto.public_key());
+
+            let (state, syn) = dial_start(
+                &mut rng,
+                Context::new(
+                    b"test_namespace",
+                    0,
+                    0..1,
+                    dialer_crypto,
+                    expected.clone(),
+                    version,
+                ),
+            );
+
+            // The impostor signs the transcript that the expected listener would sign.
+            let mut transcript = after_syn(version, &syn, &expected, &dialer);
+            let epk = SecretKey::new(&mut rng).public();
+            let sig = transcript
+                .commit(0u64.encode())
+                .commit(epk.encode())
+                .sign(&impostor_crypto);
+            let syn_ack = SynAck {
+                time_ms: 0,
+                epk,
+                sig,
+                confirmation: transcript.summarize(),
+            };
+
+            assert!(matches!(
+                dial_end(state, syn_ack),
+                Err(Error::InvalidSignature)
+            ));
+        }
+    }
+
+    /// Rejects a correctly signed [Syn] or [SynAck] whose ephemeral key makes the exchange
+    /// non-contributory.
+    #[test]
+    fn test_non_contributory_exchange_fails() {
+        for version in VERSIONS {
+            let mut rng = test_rng();
+            let dialer_crypto = PrivateKey::random(&mut rng);
+            let listener_crypto = PrivateKey::random(&mut rng);
+            let (dialer, listener) = (dialer_crypto.public_key(), listener_crypto.public_key());
+            let zero = || EphemeralPublicKey::decode(Copying(&[0u8; 32][..])).unwrap();
+
+            // The listener rejects a Syn that carries the zero key under a valid signature.
+            let (_, mut syn) = dial_start(
+                &mut rng,
+                Context::new(
+                    b"test_namespace",
+                    0,
+                    0..1,
+                    dialer_crypto.clone(),
+                    listener.clone(),
+                    version,
+                ),
+            );
+            syn.epk = zero();
+            syn.sig = syn_transcript(
+                version,
+                &syn,
+                &listener,
+                version.binds_identity_before_syn().then_some(&dialer),
+            )
+            .sign(&dialer_crypto);
+            let result = listen_start(
+                &mut rng,
+                Context::new(
+                    b"test_namespace",
+                    0,
+                    0..1,
+                    listener_crypto.clone(),
+                    dialer.clone(),
+                    version,
+                ),
+                syn,
+            );
+            assert!(matches!(result, Err(Error::InvalidEphemeralKey)));
+
+            // The dialer rejects a SynAck that carries the zero key under a valid signature.
+            let (state, syn) = dial_start(
+                &mut rng,
+                Context::new(
+                    b"test_namespace",
+                    0,
+                    0..1,
+                    dialer_crypto,
+                    listener.clone(),
+                    version,
+                ),
+            );
+            let mut transcript = after_syn(version, &syn, &listener, &dialer);
+            let epk = zero();
+            let sig = transcript
+                .commit(0u64.encode())
+                .commit(epk.encode())
+                .sign(&listener_crypto);
+            let syn_ack = SynAck {
+                time_ms: 0,
+                epk,
+                sig,
+                confirmation: transcript.summarize(),
+            };
+            assert!(matches!(
+                dial_end(state, syn_ack),
+                Err(Error::InvalidEphemeralKey)
+            ));
+        }
+    }
 }
