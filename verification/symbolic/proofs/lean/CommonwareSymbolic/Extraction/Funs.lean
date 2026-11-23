@@ -199,6 +199,170 @@ def rules.verify_identity
     let t ← TermsInst.message terms1 «namespace» message
     TermsInst.check terms1 identity t signature1
 
+/-- [commonware_symbolic::sake::LABEL_CONFIRMATION_L2D]
+    Source: 'src/../../../cryptography/src/handshake/sake/rules.rs', lines 9:0-9:58 -/
+@[global_simps, irreducible]
+def sake.LABEL_CONFIRMATION_L2D : RustM (Slice Std.U8) :=
+  core.array.Array.as_slice
+    (Array.make 16#usize [
+      99#u8, 111#u8, 110#u8, 102#u8, 105#u8, 114#u8, 109#u8, 97#u8, 116#u8,
+      105#u8, 111#u8, 110#u8, 95#u8, 108#u8, 50#u8, 100#u8
+      ])
+
+/-- [commonware_symbolic::sake::LABEL_CONFIRMATION_D2L]
+    Source: 'src/../../../cryptography/src/handshake/sake/rules.rs', lines 12:0-12:58 -/
+@[global_simps, irreducible]
+def sake.LABEL_CONFIRMATION_D2L : RustM (Slice Std.U8) :=
+  core.array.Array.as_slice
+    (Array.make 16#usize [
+      99#u8, 111#u8, 110#u8, 102#u8, 105#u8, 114#u8, 109#u8, 97#u8, 116#u8,
+      105#u8, 111#u8, 110#u8, 95#u8, 100#u8, 50#u8, 108#u8
+      ])
+
+/-- [commonware_symbolic::sake::{commonware_symbolic::sake::Window}::contains]:
+    Source: 'src/../../../cryptography/src/handshake/sake/rules.rs', lines 98:4-100:5 -/
+def sake.Window.contains
+  (self : sake.Window) (time_ms : Std.U64) : RustM Bool := do
+  if self.start <= time_ms
+  then ok (time_ms < self.end)
+  else ok false
+
+/-- [commonware_symbolic::sake::dial_start]:
+    Source: 'src/../../../cryptography/src/handshake/sake/rules.rs', lines 156:0-196:1 -/
+def sake.dial_start
+  {T : Type _} {I : Type _} {P : Type _} {F : Type _} {Clause0_Transcript :
+  Type _} {Clause0_Confirmation : Type _} {Clause0_Ephemeral : Type _}
+  {Clause0_Secret : Type _} {Clause1_Signature : Type _} {Clause2_Signature :
+  Type _} (TermsInst : sake.Terms T Clause0_Transcript Clause0_Confirmation
+  Clause0_Ephemeral Clause0_Secret) (IdentityInst : sake.Identity I
+  Clause0_Transcript Clause1_Signature) (PeerInst : sake.Peer P
+  Clause0_Transcript Clause2_Signature) (FreshInst : sake.Fresh F
+  Clause0_Secret) (terms1 : T) (context : sake.Context Clause0_Transcript I P)
+  (fresh : F) :
+  RustM (Clause0_Secret × Clause0_Transcript × (sake.Syn Clause0_Ephemeral
+    Clause1_Signature))
+  := do
+  let secret ← FreshInst.draw fresh
+  let epk ← TermsInst.«public» terms1 secret
+  let transcript ← TermsInst.time terms1 context.transcript context.now
+  let transcript1 ← PeerInst.commit context.peer transcript
+  let transcript2 ←
+    if context.early
+    then IdentityInst.commit context.signer transcript1
+    else ok transcript1
+  let transcript3 ← TermsInst.ephemeral terms1 transcript2 epk
+  let sig ← IdentityInst.sign context.signer transcript3
+  if context.early
+  then ok (secret, transcript3, { time_ms := context.now, epk, sig })
+  else
+    let transcript4 ← IdentityInst.commit context.signer transcript3
+    ok (secret, transcript4, { time_ms := context.now, epk, sig })
+
+/-- [commonware_symbolic::sake::listen_start]:
+    Source: 'src/../../../cryptography/src/handshake/sake/rules.rs', lines 201:0-260:1 -/
+def sake.listen_start
+  {T : Type _} {I : Type _} {P : Type _} {F : Type _} {Clause0_Transcript :
+  Type _} {Clause0_Confirmation : Type _} {Clause0_Ephemeral : Type _}
+  {Clause0_Secret : Type _} {Clause1_Signature : Type _} {Clause2_Signature :
+  Type _} (TermsInst : sake.Terms T Clause0_Transcript Clause0_Confirmation
+  Clause0_Ephemeral Clause0_Secret) (IdentityInst : sake.Identity I
+  Clause0_Transcript Clause1_Signature) (PeerInst : sake.Peer P
+  Clause0_Transcript Clause2_Signature) (FreshInst : sake.Fresh F
+  Clause0_Secret) (terms1 : T) (context : sake.Context Clause0_Transcript I P)
+  (fresh : F) (msg : sake.Syn Clause0_Ephemeral Clause2_Signature) :
+  RustM (core.result.Result (Clause0_Transcript × (sake.SynAck
+    Clause0_Ephemeral Clause1_Signature Clause0_Confirmation)) sake.Rejection)
+  := do
+  let b ← sake.Window.contains context.window msg.time_ms
+  if b
+  then
+    let transcript ← TermsInst.time terms1 context.transcript msg.time_ms
+    let transcript1 ← IdentityInst.commit context.signer transcript
+    let transcript2 ←
+      if context.early
+      then PeerInst.commit context.peer transcript1
+      else ok transcript1
+    let transcript3 ← TermsInst.ephemeral terms1 transcript2 msg.epk
+    let b1 ← PeerInst.verify context.peer transcript3 msg.sig
+    if b1
+    then
+      let transcript4 ←
+        if context.early
+        then ok transcript3
+        else PeerInst.commit context.peer transcript3
+      let secret ← FreshInst.draw fresh
+      let epk ← TermsInst.«public» terms1 secret
+      let transcript5 ← TermsInst.time terms1 transcript4 context.now
+      let transcript6 ← TermsInst.ephemeral terms1 transcript5 epk
+      let sig ← IdentityInst.sign context.signer transcript6
+      let (b2, transcript7) ←
+        TermsInst.exchange terms1 transcript6 secret msg.epk
+      if b2
+      then
+        let s ← sake.LABEL_CONFIRMATION_L2D
+        let confirmation ← TermsInst.confirmation terms1 transcript7 s
+        ok (core.result.Result.Ok (transcript7,
+          { time_ms := context.now, epk, sig, confirmation }))
+      else ok (core.result.Result.Err sake.Rejection.Ephemeral)
+    else ok (core.result.Result.Err sake.Rejection.Signature)
+  else ok (core.result.Result.Err sake.Rejection.Timestamp)
+
+/-- [commonware_symbolic::sake::dial_end]:
+    Source: 'src/../../../cryptography/src/handshake/sake/rules.rs', lines 264:0-293:1 -/
+def sake.dial_end
+  {T : Type _} {P : Type _} {Clause0_Transcript : Type _} {Clause0_Confirmation
+  : Type _} {Clause0_Ephemeral : Type _} {Clause0_Secret : Type _}
+  {Clause1_Signature : Type _} (TermsInst : sake.Terms T Clause0_Transcript
+  Clause0_Confirmation Clause0_Ephemeral Clause0_Secret) (PeerInst : sake.Peer
+  P Clause0_Transcript Clause1_Signature) (terms1 : T)
+  (secret : Clause0_Secret) (transcript : Clause0_Transcript) (peer : P)
+  (window : sake.Window)
+  (msg : sake.SynAck Clause0_Ephemeral Clause1_Signature Clause0_Confirmation)
+  :
+  RustM (core.result.Result (Clause0_Confirmation × Clause0_Transcript)
+    sake.Rejection)
+  := do
+  let b ← sake.Window.contains window msg.time_ms
+  if b
+  then
+    let transcript1 ← TermsInst.time terms1 transcript msg.time_ms
+    let transcript2 ← TermsInst.ephemeral terms1 transcript1 msg.epk
+    let b1 ← PeerInst.verify peer transcript2 msg.sig
+    if b1
+    then
+      let (b2, transcript3) ←
+        TermsInst.exchange terms1 transcript2 secret msg.epk
+      if b2
+      then
+        let s ← sake.LABEL_CONFIRMATION_L2D
+        let listener ← TermsInst.confirmation terms1 transcript3 s
+        let s1 ← sake.LABEL_CONFIRMATION_D2L
+        let dialer ← TermsInst.confirmation terms1 transcript3 s1
+        let b3 ← TermsInst.same terms1 msg.confirmation listener
+        if b3
+        then ok (core.result.Result.Ok (dialer, transcript3))
+        else ok (core.result.Result.Err sake.Rejection.Confirmation)
+      else ok (core.result.Result.Err sake.Rejection.Ephemeral)
+    else ok (core.result.Result.Err sake.Rejection.Signature)
+  else ok (core.result.Result.Err sake.Rejection.Timestamp)
+
+/-- [commonware_symbolic::sake::listen_end]:
+    Source: 'src/../../../cryptography/src/handshake/sake/rules.rs', lines 298:0-308:1 -/
+def sake.listen_end
+  {T : Type _} {Clause0_Transcript : Type _} {Clause0_Confirmation : Type _}
+  {Clause0_Ephemeral : Type _} {Clause0_Secret : Type _} (TermsInst :
+  sake.Terms T Clause0_Transcript Clause0_Confirmation Clause0_Ephemeral
+  Clause0_Secret) (terms1 : T) (transcript : Clause0_Transcript)
+  (confirmation : Clause0_Confirmation) :
+  RustM (core.option.Option Clause0_Transcript)
+  := do
+  let s ← sake.LABEL_CONFIRMATION_D2L
+  let dialer ← TermsInst.confirmation terms1 transcript s
+  let b ← TermsInst.same terms1 confirmation dialer
+  if b
+  then ok (core.option.Option.Some transcript)
+  else ok core.option.Option.None
+
 /-- [commonware_symbolic::terms::MAX_PARTS]
     Source: 'src/../../../storage/src/merkle/hasher/terms.rs', lines 26:0-26:38 -/
 @[global_simps, irreducible] def terms.MAX_PARTS : Std.Usize := 4#usize

@@ -22,8 +22,10 @@ prepare_dylean() {
     git -C "$dy" archive "$dy_pin" | tar xf - -C "$out"
     patch -s -d "$out" -p1 < "$verification/lean435.patch"
     (cd "$out" && lake +"$lean_toolchain" build DY.EquationalTheory.Hash \
-        DY.EquationalTheory.Concat DY.EquationalTheory.Literal DY.Actions.Network \
-        DY.Actions.ProtocolEvent DY.Meta) > "$logs/dylean-build.log"
+        DY.EquationalTheory.Concat DY.EquationalTheory.Literal DY.EquationalTheory.Sign \
+        DY.EquationalTheory.DiffieHellman DY.EquationalTheory.KdfExpand DY.Actions.Network \
+        DY.Actions.ProtocolEvent DY.Actions.Random DY.Actions.PersistentLocalState \
+        DY.Actions.LongTermKeys DY.Comparse DY.Meta) > "$logs/dylean-build.log"
 }
 
 # Optional: let the Lake package $1 reuse the dependency builds in $2 instead of building them.

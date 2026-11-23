@@ -9,6 +9,7 @@ terms and clients.
 | --- | --- | --- | --- |
 | QMDB single-item inclusion | [symbolic/src/qmdb.rs](symbolic/src/qmdb.rs) over production `terms.rs` and `traversal.rs` | [lean/Qmdb](lean/Qmdb) | [qmdb/README.md](qmdb/README.md) |
 | BLS certificates | [symbolic/src/bls.rs](symbolic/src/bls.rs) over production `rules.rs` | [lean/Bls](lean/Bls) | [bls/README.md](bls/README.md) |
+| SAKE handshake | production `handshake/sake/rules.rs`, with no module of its own | [lean/Sake](lean/Sake) | [sake/README.md](sake/README.md) |
 
 ## Layout
 
@@ -17,20 +18,22 @@ terms and clients.
   [lean435.patch](lean435.patch), and optional reuse of dependency builds.
 - [check.sh](check.sh): checks every target. Logs go to `.lake/logs`.
 - [mutate.py](mutate.py): re-extracts mutated Rust and requires the named proof modules to fail.
-  Each target lists its mutations in a table: [qmdb/mutations.toml](qmdb/mutations.toml) and
-  [bls/mutations.toml](bls/mutations.toml).
+  Each target lists its mutations in a table: [qmdb/mutations.toml](qmdb/mutations.toml),
+  [bls/mutations.toml](bls/mutations.toml) and [sake/mutations.toml](sake/mutations.toml).
 - [symbolic/](symbolic): the crate that hax extracts, outside the Commonware workspace.
   - `lib.rs` includes production modules unchanged through `#[path]`:
-    `storage/src/merkle/hasher/terms.rs`, `storage/src/merkle/proof/traversal.rs` and
-    `cryptography/src/bls12381/certificate/rules.rs`.
+    `storage/src/merkle/hasher/terms.rs`, `storage/src/merkle/proof/traversal.rs`,
+    `cryptography/src/bls12381/certificate/rules.rs` and
+    `cryptography/src/handshake/sake/rules.rs`.
   - [client.rs](symbolic/src/client.rs): what every client shares.
-  - One module per target, [qmdb.rs](symbolic/src/qmdb.rs) and [bls.rs](symbolic/src/bls.rs),
-    with differential tests against production.
+  - A module for each target whose client production does not state in full,
+    [qmdb.rs](symbolic/src/qmdb.rs) and [bls.rs](symbolic/src/bls.rs), with differential tests
+    against production. The steps of the SAKE handshake are production's own.
   - [concrete.rs](symbolic/src/concrete.rs): SHA-256 and BLS12-381 instances for those tests.
   - `proofs/lean/CommonwareSymbolic/`: the generated extraction.
 - [lean/](lean): the Lean package, on Lean's module system.
   - `Commonware/Symbolic/`: the glue that every target shares (below).
-  - One directory per target, `Qmdb/` and `Bls/`, ending in an `Audit` module.
+  - One directory per target, `Qmdb/`, `Bls/` and `Sake/`, ending in an `Audit` module.
 
 ## Terms
 
@@ -72,6 +75,17 @@ The linear model lives outside DyLean's term algebra: a target that uses it need
 in its `#combine` and states what the attacker may submit as the precondition of its client's
 transition.
 
+## Handshake
+
+Production owns this seam as well. `handshake/sake/rules.rs` states the four steps of the SAKE
+handshake over `Terms` (transcripts, ephemeral keys and confirmations), `Identity` (the local
+identity commits itself to a transcript and signs it), `Peer` (the peer's identity is committed
+and its signature checked) and `Fresh` (an ephemeral secret that is drawn when it is first
+needed). Production instantiates them with BLAKE3 transcripts, X25519, its signature schemes and
+its random number generator. Lean reads them in [Sake/Terms](lean/Sake/Terms.lean) with DyLean's
+signatures, Diffie-Hellman and key derivation, so this target's `#combine` adds those
+constructors and fresh values to literals, concatenation and hashing.
+
 ## Clients
 
 A client step is a pure Rust function. It takes the client's trusted state, a received message
@@ -84,9 +98,15 @@ runs a step whose inputs are already fixed and logs the event it accepts, or fai
 step handle` first receives the message at `handle` from the network. `accept_preserves` and
 `receive_preserves` reduce preservation of the trace invariant to the event invariant of every
 accepted event. A target supplies the step, its event type, its `#combine` configuration and its
-`ProtocolEvent.EventInv` instance, which is its security policy. Steps that keep state, send
-messages or draw nonces are not supported yet; add them to `client.rs` and `Client.lean` with
-the first target that needs them.
+`ProtocolEvent.EventInv` instance, which is its security policy.
+
+A step that keeps state, sends a message or needs randomness stays pure as well. It takes what
+it kept and returns what it keeps next, it returns the message to send, and the randomness and
+the clock value are arguments. `run step` returns what such a step returns, or fails. The
+target's action then draws the randomness with DyLean's `Random.genRand`, stores the state with
+`PersistentLocalState` and sends the message with `Network.sendMessage`. `run_returns` and
+`run_ok` let a proof about the action use that the step returned its result. The SAKE handshake
+is the first target of this kind.
 
 ## Adding a target
 
@@ -150,8 +170,9 @@ open.
 
 ## Report
 
-[hax-dylean.html](hax-dylean.html) records what is proved, assumed and validated for every
-target. Its links open files of the checkout that holds it.
+[hax-dylean.html](hax-dylean.html) records what is proved, assumed and validated for the QMDB
+and BLS targets; [sake/README.md](sake/README.md) is the record of the SAKE target. The report's
+links open files of the checkout that holds it.
 `python3 verification/qmdb/dylean-pictures.py` regenerates its pictures from the statements that
 Lean prints. `python3 verification/qmdb/report-artifact.py --out <file>` writes a copy for
 publishing, whose links open GitHub at a pushed revision. The report links to the audit guide:
@@ -187,8 +208,8 @@ their handwritten Lean readings, sentences of the report and theorem statements.
 
 Review once for all targets: the production modules that the crate includes, `client.rs`,
 the definitions in `Terms.lean` (`part`, `chain`, `dyTerms`, `messages`), in
-`Signing.lean` and in `Linear.lean`, `accept` and `receive` in `Client.lean`, `Audit.lean`, the
-compatibility patch and the tool pins. Lean checks the rest, including the lemmas in
-`Terms.lean` and `Linear.lean`, `accept_preserves`, `receive_preserves` and `RustM.lean`. The
-hax/Charon/Aeneas translation, CoreModels, DyLean and Lean's kernel are trusted. Each target's
-README lists what it adds.
+`Signing.lean` and in `Linear.lean`, `accept`, `receive` and `run` in `Client.lean`,
+`Audit.lean`, the compatibility patch and the tool pins. Lean checks the rest, including the
+lemmas in `Terms.lean` and `Linear.lean`, `accept_preserves`, `receive_preserves`, `run_returns`,
+`run_ok` and `RustM.lean`. The hax/Charon/Aeneas translation, CoreModels, DyLean and Lean's
+kernel are trusted. Each target's README lists what it adds.

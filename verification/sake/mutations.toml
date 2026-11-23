@@ -1,0 +1,68 @@
+# Mutations of the Rust that hax extracts for the SAKE handshake. Each replaces `original`, which
+# must occur once in `file` (relative to the repository), with `mutated`; `mutate.py` re-extracts
+# the crate and requires exactly the proof modules in `fails` to stop compiling. Every mutation
+# changes what a step computes, so the lemma in `Sake.Steps` that states what the step computes
+# fails first.
+
+[[mutation]]
+name = "listener skips the dialer's signature"
+file = "cryptography/src/handshake/sake/rules.rs"
+original = "    if !peer.verify(&transcript, &msg.sig) {\n        return Err(Rejection::Signature);\n    }\n    if !early {"
+mutated = "    if !early {"
+fails = "Sake.Steps"
+
+[[mutation]]
+name = "dialer skips the listener's signature"
+file = "cryptography/src/handshake/sake/rules.rs"
+original = "    if !peer.verify(&transcript, &msg.sig) {\n        return Err(Rejection::Signature);\n    }\n    if !terms.exchange(&mut transcript, secret, &msg.epk) {\n        return Err(Rejection::Ephemeral);\n    }\n    let listener"
+mutated = "    if !terms.exchange(&mut transcript, secret, &msg.epk) {\n        return Err(Rejection::Ephemeral);\n    }\n    let listener"
+fails = "Sake.Steps"
+
+[[mutation]]
+name = "dialer signs before committing its identity"
+file = "cryptography/src/handshake/sake/rules.rs"
+original = "    if early {\n        signer.commit(&mut transcript);\n    }\n    terms.ephemeral(&mut transcript, &epk);\n    let sig = signer.sign(&transcript);\n    if !early {\n        signer.commit(&mut transcript);\n    }"
+mutated = "    if !early {\n        signer.commit(&mut transcript);\n    }\n    terms.ephemeral(&mut transcript, &epk);\n    let sig = signer.sign(&transcript);\n    if early {\n        signer.commit(&mut transcript);\n    }"
+fails = "Sake.Steps"
+
+[[mutation]]
+name = "listener commits the dialer's identity before its own"
+file = "cryptography/src/handshake/sake/rules.rs"
+original = "    signer.commit(&mut transcript);\n    if early {\n        peer.commit(&mut transcript);\n    }\n    terms.ephemeral(&mut transcript, &msg.epk);"
+mutated = "    if early {\n        peer.commit(&mut transcript);\n    }\n    signer.commit(&mut transcript);\n    terms.ephemeral(&mut transcript, &msg.epk);"
+fails = "Sake.Steps"
+
+[[mutation]]
+name = "listener signs before committing its ephemeral key"
+file = "cryptography/src/handshake/sake/rules.rs"
+original = "    terms.ephemeral(&mut transcript, &epk);\n    let sig = signer.sign(&transcript);\n    if !terms.exchange"
+mutated = "    let sig = signer.sign(&transcript);\n    terms.ephemeral(&mut transcript, &epk);\n    if !terms.exchange"
+fails = "Sake.Steps"
+
+[[mutation]]
+name = "dialer skips the listener's confirmation"
+file = "cryptography/src/handshake/sake/rules.rs"
+original = "    if !terms.same(&msg.confirmation, &listener) {\n        return Err(Rejection::Confirmation);\n    }\n"
+mutated = ""
+fails = "Sake.Steps"
+
+[[mutation]]
+name = "listener accepts any confirmation"
+file = "cryptography/src/handshake/sake/rules.rs"
+original = "    if !terms.same(confirmation, &dialer) {\n        return None;\n    }\n"
+mutated = ""
+fails = "Sake.Steps"
+
+[[mutation]]
+name = "window accepts the timestamp at its end"
+file = "cryptography/src/handshake/sake/rules.rs"
+original = "self.start <= time_ms && time_ms < self.end"
+mutated = "self.start <= time_ms && time_ms <= self.end"
+fails = "Sake.Steps"
+
+[[mutation]]
+name = "both confirmations use the listener's label"
+file = "cryptography/src/handshake/sake/rules.rs"
+original = "    let dialer = terms.confirmation(&transcript, LABEL_CONFIRMATION_D2L);\n    if !terms.same(&msg.confirmation, &listener) {"
+mutated = "    let dialer = terms.confirmation(&transcript, LABEL_CONFIRMATION_L2D);\n    if !terms.same(&msg.confirmation, &listener) {"
+fails = "Sake.Steps"

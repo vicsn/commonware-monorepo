@@ -6,16 +6,49 @@ import DY.Meta
 
 /-! An extracted client step as a DyLean action. `accept` logs the event that a step accepts; if
 the step rejects or fails, the action fails and adds nothing to the trace. `receive` reads the
-message at a network handle and accepts the step on it. Each target fixes its trace with
+message at a network handle and accepts the step on it. `run` returns what a step returns, for a
+target whose action goes on to store state or send a message. Each target fixes its trace with
 `#combine` and its security policy with a `ProtocolEvent.EventInv` instance.
 
-Trusted: `accept` and `receive`. Checked: `accept_preserves` and `receive_preserves`, which
-reduce preservation of the trace invariant to the event invariant of every event that the step
-accepts. -/
+Trusted: `accept`, `receive` and `run`. Checked: `accept_preserves` and `receive_preserves`,
+which reduce preservation of the trace invariant to the event invariant of every event that the
+step accepts, and `run_ok` and `run_returns`, which let a proof about an action use that the
+step returned its result. -/
 
 namespace Commonware.Symbolic
 open DY Aeneas Aeneas.Std
 @[expose] public section
+
+section
+variable [ExecTraceTypes] {α : Type}
+
+/-- Run `step` and return its result. If the step does not return, the action
+fails and adds nothing to the trace. -/
+def run (step : RustM α) : Traceful α :=
+  match step.match with
+  | .ok result => pure result
+  | _ => failure
+
+theorem run_ok (result : α) : run (RustM.ok result) = pure result := by
+  simp [run]
+
+variable [ProofTraceTypes] [TraceInvariant]
+
+/-- An action continues after `run step` only with a result that `step` returned. -/
+@[instance]
+theorem run_returns (step : RustM α) :
+    HoareTriple (run step) (fun _ => True) (fun result _ => step = RustM.ok result) := by
+  apply HoareTriple.mk
+  unfold run hoareTriple
+  intro tr _ inv
+  split
+  · rename_i result returned
+    have returns := eq_ok_of_match returned
+    step
+    simp_all
+  · step
+
+end
 
 section
 variable [ExecTraceTypes] {Event : Type} [ExecTraceTypes.Has (ProtocolEvent.ExecEntryT Event)]

@@ -51,6 +51,80 @@ structure rules.Signers (Self : Type _) where
 structure rules.Decoded (Self : Type _) (T : Type _) where
   decoded : Self → RustM (core.option.Option T)
 
+/-- Trait declaration: [commonware_symbolic::sake::Terms]
+    Source: 'src/../../../cryptography/src/handshake/sake/rules.rs', lines 15:0-55:1 -/
+structure sake.Terms (Self : Type _) (Self_Transcript : Type _)
+  (Self_Confirmation : Type _) (Self_Ephemeral : Type _) (Self_Secret : Type _)
+  where
+  time : Self → Self_Transcript → Std.U64 → RustM Self_Transcript
+  ephemeral : Self → Self_Transcript → Self_Ephemeral → RustM
+    Self_Transcript
+  «public» : Self → Self_Secret → RustM Self_Ephemeral
+  exchange : Self → Self_Transcript → Self_Secret → Self_Ephemeral →
+    RustM (Bool × Self_Transcript)
+  confirmation : Self → Self_Transcript → Slice Std.U8 → RustM
+    Self_Confirmation
+  same : Self → Self_Confirmation → Self_Confirmation → RustM Bool
+
+/-- Trait declaration: [commonware_symbolic::sake::Identity]
+    Source: 'src/../../../cryptography/src/handshake/sake/rules.rs', lines 58:0-67:1 -/
+structure sake.Identity (Self : Type _) (X : Type _) (Self_Signature : Type _)
+  where
+  commit : Self → X → RustM X
+  sign : Self → X → RustM Self_Signature
+
+/-- Trait declaration: [commonware_symbolic::sake::Peer]
+    Source: 'src/../../../cryptography/src/handshake/sake/rules.rs', lines 71:0-80:1 -/
+structure sake.Peer (Self : Type _) (X : Type _) (Self_Signature : Type _)
+  where
+  commit : Self → X → RustM X
+  verify : Self → X → Self_Signature → RustM Bool
+
+/-- Trait declaration: [commonware_symbolic::sake::Fresh]
+    Source: 'src/../../../cryptography/src/handshake/sake/rules.rs', lines 83:0-86:1 -/
+structure sake.Fresh (Self : Type _) (S : Type _) where
+  draw : Self → RustM S
+
+/-- [commonware_symbolic::sake::Window]
+    Source: 'src/../../../cryptography/src/handshake/sake/rules.rs', lines 89:0-94:1 -/
+structure sake.Window where
+  start : Std.U64
+  «end» : Std.U64
+
+/-- [commonware_symbolic::sake::Context]
+    Source: 'src/../../../cryptography/src/handshake/sake/rules.rs', lines 104:0-117:1 -/
+structure sake.Context (X : Type _) (S : Type _) (P : Type _) where
+  early : Bool
+  transcript : X
+  now : Std.U64
+  window : sake.Window
+  signer : S
+  peer : P
+
+/-- [commonware_symbolic::sake::Syn]
+    Source: 'src/../../../cryptography/src/handshake/sake/rules.rs', lines 120:0-127:1 -/
+structure sake.Syn (E : Type _) (G : Type _) where
+  time_ms : Std.U64
+  epk : E
+  sig : G
+
+/-- [commonware_symbolic::sake::SynAck]
+    Source: 'src/../../../cryptography/src/handshake/sake/rules.rs', lines 130:0-139:1 -/
+structure sake.SynAck (E : Type _) (G : Type _) (C : Type _) where
+  time_ms : Std.U64
+  epk : E
+  sig : G
+  confirmation : C
+
+/-- [commonware_symbolic::sake::Rejection]
+    Source: 'src/../../../cryptography/src/handshake/sake/rules.rs', lines 142:0-151:1 -/
+@[discriminant isize]
+inductive sake.Rejection where
+| Timestamp : sake.Rejection
+| Signature : sake.Rejection
+| Ephemeral : sake.Rejection
+| Confirmation : sake.Rejection
+
 /-- [commonware_symbolic::terms::Part]
     Source: 'src/../../../storage/src/merkle/hasher/terms.rs', lines 9:0-14:1 -/
 @[discriminant isize]

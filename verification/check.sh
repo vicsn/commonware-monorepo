@@ -50,3 +50,4 @@ python3 audit/build.py --dag --check
 # Each mutation of the extracted Rust must break the named proof modules.
 python3 mutate.py qmdb/mutations.toml | tee "$logs/mutations.log"
 python3 mutate.py bls/mutations.toml | tee -a "$logs/mutations.log"
+python3 mutate.py sake/mutations.toml | tee -a "$logs/mutations.log"
