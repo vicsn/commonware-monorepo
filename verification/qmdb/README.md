@@ -3,7 +3,7 @@
 - Approach / branch: DyLean, `verify/qmdb-hax-dylean`.
 - Status: complete for uniqueness of the single-item openings that the extracted verifier accepts
   under DyLean's ideal hash, and for client authentication on top of it.
-- Updated: 2026-11-23. Source: `b1b152ab1`. It changes the production files
+- Updated: 2026-11-23. Source: `a02833212`. It changes the production files
   `storage/src/merkle/{hasher.rs,hasher/terms.rs,proof.rs,proof/traversal.rs}`.
 - Proved scope: the hash is DyLean's hash constructor, so a root is one term that fixes every
   digest below it. Two openings that the extracted verifier accepts at one location under one
@@ -16,9 +16,9 @@
   of an opening that the extracted verifier accepts under it. `honest_snapshots_exist` shows
   that such roots and siblings exist at every height up to `MAX_HEIGHT`, the client's limit,
   which is production's `MAX_LEAVES` as a height.
-- Last validation: `bash verification/check.sh` on 2026-11-23 at `b1b152ab1`, passed. 3 Rust tests (1,653
+- Last validation: `bash verification/check.sh` on 2026-11-23 at `a02833212`, passed. 3 Rust tests (1,653
   differential claims and 511 honest production openings), reproducible extraction, an axiom
-  audit of all 102 theorems in `Qmdb` and `Commonware.Symbolic` (standard Lean axioms) and 7
+  audit of all 104 theorems in `Qmdb` and `Commonware.Symbolic` (standard Lean axioms) and 7
   rejected mutations. The production files are unchanged since `just test -p commonware-storage`
   passed on 2026-11-18 (4,672 passed, 994 skipped). Logs: `verification/.lake/logs/`.
 - Remaining boundary: the hash function itself, which the model treats as ideal, and production's
