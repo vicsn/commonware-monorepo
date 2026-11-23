@@ -1,9 +1,9 @@
 # SAKE handshake with DyLean
 
 - Approach / branch: DyLean, `verify/qmdb-hax-dylean`.
-- Status: authentication in both directions, key confirmation and secrecy of the transcript are
-  proved on DyLean traces over the extracted production steps, for SAKE V1. Time, V0 and the
-  record protocol are [not covered](#what-is-not-proved).
+- Status: authentication in both directions, key confirmation, injective agreement and secrecy
+  of the transcript are proved on DyLean traces over the extracted production steps, for SAKE
+  V1. Time, V0 and the record protocol are [not covered](#what-is-not-proved).
 - Updated: 2026-11-23. Source: `7b9c5b7f7`. The production files
   `cryptography/src/handshake/sake/{rules.rs,protocol.rs,mod.rs}` are as in `75e42e942`.
 - Proved scope: on every trace that an attacker can reach who controls the network and the
@@ -12,8 +12,10 @@
     answered earlier with the same secret transcript; the exchange names the namespace, both
     identity keys, both timestamps and both ephemeral keys;
   - a listener that finishes a handshake with a dialer finishes an exchange that this dialer
-    finished earlier with the same secret transcript, so replaying a `Syn` does not by itself
-    get a listener to finish;
+    finished earlier with this listener and the same secret transcript, so replaying a `Syn`
+    does not by itself get a listener to finish;
+  - no event of a peer matches two finishes: an answer of a listener matches one finish of a
+    dialer, and a finish of a dialer matches one finish of a listener;
   - the attacker does not know the secret transcript of a finished handshake.
 
   Each holds unless the identity key of the peer was compromised before the handshake finished.
@@ -135,9 +137,14 @@ time: `compromiseDialer` reveals a dialer's ephemeral secret and `compromiseList
 listener's secret transcript. What a peer keeps is stored twice, as the record its next step
 reads and as this secret part; the rest of the record is public.
 
-Two things give the attacker more traces than production does: a peer may finish from what it
-kept more than once, and what it kept can be compromised after it finished, when production has
-erased it.
+A finishing action stops when the finish it would log is already on the trace (`firstTime`).
+This is the one part of an action that is not a step of the extracted Rust. It stands for
+production's ownership: `dial_end` and `listen_end` take what the peer kept by value, so a peer
+finishes from it at most once.
+
+Two things still give the attacker more traces than production does: a dialer may finish two
+different answers from one kept opening, and what a peer kept can be compromised after it
+finished, when production has erased it.
 
 ## What Lean proves
 
@@ -166,10 +173,15 @@ it.
   (`agreed_secrecy`).
 - Confirmations. The dialer's confirmation is computed only by a dialer that has logged that it
   finished the exchange with that transcript. A listener that checks it finds that event, unless
-  the attacker knows the transcript (`Mac.mac_checked`). `starter_unique` shows that the dialer
-  who finished is the one the listener looked up. The listener's confirmation carries no claim:
-  its signature already binds it, and `label_ne` keeps the attacker from sending it back as
-  the dialer's.
+  the attacker knows the transcript (`Mac.mac_checked`). The listener's confirmation carries no
+  claim: its signature already binds it, and `label_ne` keeps the attacker from sending it back
+  as the dialer's.
+- Names. An identity key has one owner: `owner_unique` in [Owner](../lean/Sake/Owner.lean),
+  from the label that DyLean's public-key infrastructure gives a key. So the dialer that
+  finished is the one the listener looked up (`starter_unique`), and the listener that a dialer
+  names when it finishes is the owner of the key it verified.
+- Finishing once. A finish is logged only if it is not on the trace yet, so the same finish is
+  never logged at two times (`dial_finish_once`, `listen_finish_once`).
 
 [The statements](../lean/Sake/SecurityTheorems.lean), with the sentence of the `Handshake`
 contract in `stream/src/lib.rs` that each backs:
@@ -180,7 +192,9 @@ contract in `stream/src/lib.rs` that each backs:
 | `foreign_signature_rejected` | `dial_end` rejects a `SynAck` that carries the listener's signature of another transcript | a sanity check |
 | `dialer_authentication` | a logged `dialFinish dialer listener exchange secret` has `listenStart listener exchange secret` logged earlier, or the listener's identity key compromised earlier | "A dial to `peer` succeeds only if `L` is `peer`"; properties 1 and 3 for the dialer |
 | `listener_authentication` | a logged `listenFinish listener dialer exchange secret` has `dialStart dialer exchange.toOpening` logged earlier, or the dialer's identity key compromised earlier | "returns `D`"; property 1. Rests on the signature alone, so a replayed `Syn` satisfies it |
-| `listener_key_confirmation` | a logged `listenFinish listener dialer exchange secret` has `dialFinish dialer _ exchange secret` logged earlier, or the dialer's identity key or what either peer keeps for the exchange compromised earlier | property 3 for the listener: "Each peer returns `T` only after verifying that the other peer holds `T`" |
+| `listener_key_confirmation` | a logged `listenFinish listener dialer exchange secret` has `dialFinish dialer listener exchange secret` logged earlier, or the dialer's identity key or what either peer keeps for the exchange compromised earlier | property 3 for the listener: "Each peer returns `T` only after verifying that the other peer holds `T`" |
+| `dialer_injective_agreement` | two logged `dialFinish` that are matched by one logged `listenStart` are the same finish, logged at the same time | with `dialer_authentication`: each finish of a dialer has an answer of its listener that no other finish shares |
+| `listener_injective_agreement` | two logged `listenFinish` that are matched by one logged `dialFinish` are the same finish, logged at the same time | with `listener_key_confirmation`: each finish of a listener has a finish of its dialer that no other finish shares |
 | `dialer_secrecy` | the attacker knows the `secret` of a logged `dialFinish` only if the listener's identity key was compromised before it, or what either peer keeps for the exchange is compromised at some time | property 2: "unpredictable to any party other than `D` and `L`" |
 | `listener_secrecy` | the same for a logged `listenFinish` and the dialer's identity key | property 2 |
 
@@ -219,7 +233,6 @@ builds and the question is whether the proofs after it still do.
 | Non-contributory exchanges. | Symbolic Diffie-Hellman has no low-order points, so `Rejection::Ephemeral` is never returned in the model. | Outside the symbolic model; the production test covers the rejection. |
 | Time. Timestamps are attacker-chosen numbers and no statement speaks about the window. | The clock is outside the steps. | A model of clocks and synchrony. |
 | The record protocol and its keys. | DyLean has no theory of authenticated encryption. | An AEAD theory; the secret transcript is the key material it would start from. |
-| Injective agreement: that each finish of a listener has its own finish of a dialer. | The statements are about the existence of the peer's event, and the model lets a peer finish from what it kept more than once. | Consuming what a peer kept when it finishes, and counting events. |
 
 ## Review boundary
 
@@ -227,7 +240,8 @@ Review the shared boundary listed in [verification/](../README.md) once. SAKE ad
 the definitions in `Terms.lean` (`stamp`, `start`, `sakeTerms`, `Signer`, `signer`, `peer`,
 `fresh`, `Opening`, `Exchange`), the constructor and attacker rule in `Mac.lean` (`Mac.SubF`,
 `mac`, `mac.attackerKnowledge`), the events, kept states and their secret parts, messages,
-actions, compromise predicates and `#combine` configuration in `Protocol.lean`, and the
-statements in `SecurityTheorems.lean`. Lean checks the proofs, the invariant in `Proof.lean`
-and the invariants of `Mac.lean` included. The production instance in `protocol.rs` is outside
+actions, the check `firstTime`, compromise predicates and `#combine` configuration in
+`Protocol.lean`, and the statements in `SecurityTheorems.lean`. Lean checks the proofs, the
+invariant in `Proof.lean` and the invariants of `Mac.lean` included. `Owner.lean` is checked
+too; it opens DyLean's definitions with `import all` to compute the label of a key. The production instance in `protocol.rs` is outside
 the extraction and covered by production's own tests and conformance fixtures.

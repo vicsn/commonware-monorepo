@@ -1,5 +1,5 @@
 module
-public import Sake.Protocol
+public import Sake.Owner
 public import Sake.Steps
 import DY.Meta
 
@@ -246,25 +246,33 @@ instance dialingInv : PersistentLocalState.LocalStateInv Dialing where
     tr.erase.EventLogged (Event.dialStart me kept.opening)
   invariant_later := by grind
 
-/-- A listener keeps the secret transcript of its exchange. Unless the identity key of the
-dialer it looked up is compromised, that dialer started the opening, and only a compromise of
-what either peer keeps reveals the transcript. -/
+/-- A listener keeps the secret transcript of its exchange, which names its own identity key.
+Unless the identity key of the dialer it looked up is compromised, that dialer started the
+opening, and only a compromise of what either peer keeps reveals the transcript. -/
 instance listeningInv : PersistentLocalState.LocalStateInv Listening where
   invariant me kept tr :=
     kept.transcript.Invariant tr ∧
     (∃ shared, kept.transcript = Concat.concat kept.exchange.signed shared) ∧
+    (∃ key, kept.exchange.listener = Signature.vk key ∧
+      LongTermKeys.IsLongTermSecretKey "SAKE PKI" me key tr) ∧
     ((tr.erase.EventLogged (Event.dialStart kept.dialer kept.exchange.toOpening) ∧
         (exchangeSecrecy kept.dialer me kept.exchange).canFlow (kept.transcript.label tr)
           tr.erase) ∨
       (LongTermKeys.label "SAKE PKI" kept.dialer kept.exchange.dialer).isCorrupt tr.erase)
-  invariant_later := by grind
+  invariant_later := by
+    intro me kept tr1 tr2 later ⟨valid, shared, ⟨key, identity, owned⟩, authentic⟩
+    exact ⟨by grind, shared,
+      ⟨key, identity, LongTermKeys.IsLongTermSecretKey_later "SAKE PKI" me key tr1 tr2 later owned⟩,
+      by grind⟩
 
 /-- A dialer starts only under its own identity key. A dialer finishes only an exchange whose
-opening it started and that the listener it looked up answered with the same secret transcript,
-which only a compromise of what either peer keeps reveals. A listener finishes only an exchange
+opening it started, whose listener identity key it looked up under the listener's name, and
+that this listener answered with the same secret transcript, which only a compromise of what
+either peer keeps reveals. A listener finishes only an exchange
 whose opening the dialer it looked up started, whose transcript is secret in the same way, and
 that this dialer finished with the same transcript unless what either peer keeps is
-compromised. Each holds unless the identity key of the peer is compromised. -/
+compromised. Each of these holds unless the identity key of the peer is compromised. No peer
+finishes an exchange that it has finished before. -/
 instance eventInv : ProtocolEvent.EventInv Event where
   invariant tr event :=
     match event with
@@ -273,18 +281,21 @@ instance eventInv : ProtocolEvent.EventInv Event where
         LongTermKeys.IsLongTermSecretKey "SAKE PKI" dialer key tr
     | .listenStart _ _ _ => True
     | .dialFinish dialer listener exchange secret =>
+      ¬ tr.erase.EventLogged (Event.dialFinish dialer listener exchange secret) ∧
       tr.erase.EventLogged (Event.dialStart dialer exchange.toOpening) ∧
+      LongTermKeys.IsLongTermPublicKey "SAKE PKI" listener exchange.listener tr ∧
       ((tr.erase.EventLogged (Event.listenStart listener exchange secret) ∧
           secret.Invariant tr ∧
           (exchangeSecrecy dialer listener exchange).canFlow (secret.label tr) tr.erase) ∨
         (LongTermKeys.label "SAKE PKI" listener exchange.listener).isCorrupt tr.erase)
     | .listenFinish listener dialer exchange secret =>
-      (tr.erase.EventLogged (Event.dialStart dialer exchange.toOpening) ∧
+      ¬ tr.erase.EventLogged (Event.listenFinish listener dialer exchange secret) ∧
+      ((tr.erase.EventLogged (Event.dialStart dialer exchange.toOpening) ∧
           secret.Invariant tr ∧
           (exchangeSecrecy dialer listener exchange).canFlow (secret.label tr) tr.erase ∧
-          ((∃ expected, tr.erase.EventLogged (Event.dialFinish dialer expected exchange secret)) ∨
+          (tr.erase.EventLogged (Event.dialFinish dialer listener exchange secret) ∨
             (exchangeSecrecy dialer listener exchange).isCorrupt tr.erase)) ∨
-        (LongTermKeys.label "SAKE PKI" dialer exchange.dialer).isCorrupt tr.erase
+        (LongTermKeys.label "SAKE PKI" dialer exchange.dialer).isCorrupt tr.erase)
 
 #combine +toplevel into SubTraceInvariant, SubBaseAttackerKnowledgeTheorem from
   Network,
@@ -414,6 +425,32 @@ attribute [local grind] listenerSecretInv
 attribute [local grind] LongTermKeys.IsLongTermPublicKey
 attribute [local grind] LongTermKeys.IsLongTermSecretKey
 
+theorem firstTime_run {event : Event} {tr : ExecTrace} (unlogged : ¬ tr.EventLogged event) :
+    (firstTime event).run tr = (some (), ⟨tr, Trace.le_refl tr⟩) := by
+  simp only [firstTime]
+  rw [Traceful.run_mk]
+  simp [unlogged]
+
+theorem firstTime_run_logged {event : Event} {tr : ExecTrace} (logged : tr.EventLogged event) :
+    (firstTime event).run tr = (none, ⟨tr, Trace.le_refl tr⟩) := by
+  simp only [firstTime]
+  rw [Traceful.run_mk]
+  simp [logged]
+
+/-- What follows `firstTime` runs only on a trace that has not logged the event. -/
+theorem firstTime_then {α : Type} {event : Event} {next : Traceful α}
+    {post : α → ProofTrace → Prop} {tr : ProofTrace} (inv : tr.Invariant)
+    (rest : ¬ tr.erase.EventLogged event → wp next post tr) :
+    wp (firstTime event >>= fun _ => next) post tr := by
+  by_cases logged : tr.erase.EventLogged event
+  · simp only [wp]
+    rw [Traceful.run_bind, firstTime_run_logged logged]
+    exact ⟨tr, trivial, inv, rfl, Trace.le_refl tr⟩
+  · have := rest logged
+    simp only [wp] at this ⊢
+    rw [Traceful.run_bind, firstTime_run logged]
+    exact this
+
 @[instance]
 theorem dial.proof (me listener : Participant) (skHandle pkHandle : Nat) (ns : ByteArray)
     (now : Std.U64) (window : sake.Window) :
@@ -514,7 +551,7 @@ theorem listen.proof (me dialer : Participant) (skHandle pkHandle msgHandle : Na
     step
     step by
       simp only [PersistentLocalState.LocalStateInv.invariant]
-      exact ⟨by grind, ⟨_, rfl⟩, by grind⟩
+      exact ⟨by grind, ⟨_, rfl⟩, ⟨key, rfl, by assumption⟩, by grind⟩
     step by
       simp only [PersistentLocalState.LocalStateInv.invariant]
       have ephemeral := dhPk_publishable (tr := tr) (secret := drawn) (by grind)
@@ -609,9 +646,13 @@ theorem finishDial.proof (me : Participant) (stHandle msgHandle : Nat) (answered
           exact Or.inl ⟨logged, join_comm_canFlow sealed⟩
       · right
         grind [canFlowPubEqIsCorrupt]
+    apply firstTime_then h
+    intro unfinished
+    mark_non_monotone unfinished
     step by
       simp only [ProtocolEvent.EventInv.invariant]
-      exact ⟨started, authentic.imp (fun ⟨logged, sealed⟩ => ⟨logged, valid, sealed⟩) id⟩
+      exact ⟨unfinished, started, registered,
+        authentic.imp (fun ⟨logged, sealed⟩ => ⟨logged, valid, sealed⟩) id⟩
     step by
       exact dialer_confirmation_publishable (by grind) (by assumption)
     grind
@@ -629,7 +670,7 @@ theorem finisher_started {dialer listener : Participant} {exchange : Exchange} {
     tr.erase.EventLogged (Event.dialStart dialer exchange.toOpening) := by
   obtain ⟨time, held⟩ := Trace.EventLogged_imp_EventInv _ tr inv finished
   simp only [ProtocolEvent.EventInv.invariant] at held
-  have := held.1
+  have := held.2.1
   grind
 
 /-- Whoever started an opening holds the signing key of its dialer identity. -/
@@ -643,23 +684,35 @@ theorem starter_key {dialer : Participant} {opening : Opening} {tr : ProofTrace}
   exact ⟨key, identity, LongTermKeys.IsLongTermSecretKey_later "SAKE PKI" dialer key _ tr
     (Trace.prefix_le_self tr time) owned⟩
 
-/-- Two participants that started the same opening are the same, unless its dialer identity key
-is compromised. -/
+/-- Two participants that started the same opening are the same: the opening names one
+identity key, and a key has one owner. -/
 theorem starter_unique {first second : Participant} {opening : Opening} {tr : ProofTrace}
     (inv : tr.Invariant)
     (one : tr.erase.EventLogged (Event.dialStart first opening))
     (other : tr.erase.EventLogged (Event.dialStart second opening)) :
-    first = second ∨
-      (LongTermKeys.label "SAKE PKI" first opening.dialer).isCorrupt tr.erase := by
+    first = second := by
   obtain ⟨key, identity, owned⟩ := starter_key inv one
   obtain ⟨key', identity', owned'⟩ := starter_key inv other
   obtain rfl := vk_inj (identity.symm.trans identity')
   simp only [LongTermKeys.IsLongTermSecretKey] at owned owned'
-  rcases Bytes.HasUsage_inj key _ _ tr owned.2.2 owned'.2.2 with same | leaked
-  · exact Or.inl (identityUsage_inj same)
-  · right
-    rw [identity, ← owned.2.1]
-    grind [canFlowPubEqIsCorrupt]
+  exact owner_unique (owned.2.1.symm.trans owned'.2.1)
+
+/-- The name under which a dialer that finished looked up the listener's identity key is the
+name of the participant that holds the key. -/
+theorem finisher_expected {dialer expected owner : Participant} {exchange : Exchange}
+    {secret key : Bytes} {tr : ProofTrace} (inv : tr.Invariant)
+    (finished : tr.erase.EventLogged (Event.dialFinish dialer expected exchange secret))
+    (identity : exchange.listener = Signature.vk key)
+    (owned : LongTermKeys.IsLongTermSecretKey "SAKE PKI" owner key tr) :
+    expected = owner := by
+  obtain ⟨time, held⟩ := Trace.EventLogged_imp_EventInv _ tr inv finished
+  simp only [ProtocolEvent.EventInv.invariant] at held
+  have registered := LongTermKeys.ProofConfig.IsLongTermPublicKey_le
+    expected exchange.listener _ tr (Trace.prefix_le_self tr time) held.2.2.1
+  simp only [LongTermKeys.IsLongTermSecretKey] at owned
+  simp only [LongTermKeys.ProofConfig.IsLongTermPublicKey, identity,
+    Bytes.signkeyLabel_vk] at registered
+  exact owner_unique (registered.2.1.symm.trans owned.2.1)
 
 @[instance]
 theorem finishListen.proof (me : Participant) (stHandle msgHandle : Nat) :
@@ -672,9 +725,11 @@ theorem finishListen.proof (me : Participant) (stHandle msgHandle : Nat) :
   simp only [pure_bind]
   split_ifs with confirmed
   · simp only []
-    obtain ⟨valid, ⟨shared, transcript⟩, authentic⟩ :
+    obtain ⟨valid, ⟨shared, transcript⟩, ⟨key, identity, owned⟩, authentic⟩ :
         kept.transcript.Invariant tr ∧
         (∃ shared, kept.transcript = Concat.concat kept.exchange.signed shared) ∧
+        (∃ key, kept.exchange.listener = Signature.vk key ∧
+          LongTermKeys.IsLongTermSecretKey "SAKE PKI" me key tr) ∧
         ((tr.erase.EventLogged (Event.dialStart kept.dialer kept.exchange.toOpening) ∧
             (exchangeSecrecy kept.dialer me kept.exchange).canFlow (kept.transcript.label tr)
               tr.erase) ∨
@@ -685,8 +740,12 @@ theorem finishListen.proof (me : Participant) (stHandle msgHandle : Nat) :
     have checked := Mac.mac_checked (code := confirmation) (key := Hash.hash kept.transcript)
       (msg := Literal.literalToBytes (toByteArray dialerLabel)) (tr := tr) (by grind) confirmed
     mark_non_monotone checked
+    apply firstTime_then h
+    intro unfinished
+    mark_non_monotone unfinished
     step by
       simp only [ProtocolEvent.EventInv.invariant]
+      refine ⟨unfinished, ?_⟩
       rcases authentic with ⟨started, sealed⟩ | leaked
       · rcases checked with claim | known
         · simp only [Mac.MacPred.pred] at claim
@@ -697,9 +756,9 @@ theorem finishListen.proof (me : Participant) (stHandle msgHandle : Nat) :
             obtain ⟨signed, rfl⟩ := concat_inj agreed
             obtain rfl : exchange' = kept.exchange := (Exchange.signed_inj signed).symm
             rw [← transcript] at finished
-            rcases starter_unique h started (finisher_started h finished) with rfl | leaked
-            · exact Or.inl ⟨started, valid, sealed, Or.inl ⟨listener', finished⟩⟩
-            · exact Or.inr leaked
+            obtain rfl := starter_unique h started (finisher_started h finished)
+            obtain rfl := finisher_expected h finished identity owned
+            exact Or.inl ⟨started, valid, sealed, Or.inl finished⟩
         · refine Or.inl ⟨started, valid, sealed, Or.inr ?_⟩
           grind [Label.canFlow, canFlowPubEqIsCorrupt, Hash.hash.label]
       · exact Or.inr leaked
@@ -751,6 +810,52 @@ instance : ReachableImpliesInvariant compromiseListener.reachability :=
   finishListen,
   compromiseDialer,
   compromiseListener,
+
+/-- One time holds one event. -/
+theorem same_event {one other : Event} {time : Nat} {tr : ExecTrace}
+    (first : tr.EventLoggedAt one time) (second : tr.EventLoggedAt other time) : one = other := by
+  rw [Trace.EventLoggedAt_eq_getEventAt] at first second
+  exact Option.some.inj (first.symm.trans second)
+
+/-- An event that was logged before a time is logged in the trace up to that time. -/
+theorem logged_before {event : Event} {first second : Nat} {tr : ProofTrace}
+    (logged : tr.erase.EventLoggedAt event first) (earlier : first < second) :
+    (tr.prefix second).erase.EventLogged event := by
+  rw [Trace.prefix_erase]
+  refine ⟨first, Trace.EventLoggedAt_le' event first _ tr.erase ?_
+    (Trace.prefix_le_self _ _) logged⟩
+  have := Trace.EventLoggedAt_implies_i_le_length event first tr.erase logged
+  grind [Trace.prefix_length]
+
+/-- A dialer finishes an exchange at most once. -/
+theorem dial_finish_once {dialer listener : Participant} {exchange : Exchange} {secret : Bytes}
+    {first second : Nat} {tr : ProofTrace} (inv : tr.Invariant)
+    (one : tr.erase.EventLoggedAt (Event.dialFinish dialer listener exchange secret) first)
+    (other : tr.erase.EventLoggedAt (Event.dialFinish dialer listener exchange secret) second) :
+    first = second := by
+  rcases Nat.lt_trichotomy first second with earlier | same | later
+  · have held := Trace.EventLoggedAt_imp_EventInv _ _ _ inv other
+    simp only [ProtocolEvent.EventInv.invariant] at held
+    exact absurd (logged_before one earlier) held.1
+  · exact same
+  · have held := Trace.EventLoggedAt_imp_EventInv _ _ _ inv one
+    simp only [ProtocolEvent.EventInv.invariant] at held
+    exact absurd (logged_before other later) held.1
+
+/-- A listener finishes an exchange at most once. -/
+theorem listen_finish_once {listener dialer : Participant} {exchange : Exchange} {secret : Bytes}
+    {first second : Nat} {tr : ProofTrace} (inv : tr.Invariant)
+    (one : tr.erase.EventLoggedAt (Event.listenFinish listener dialer exchange secret) first)
+    (other : tr.erase.EventLoggedAt (Event.listenFinish listener dialer exchange secret) second) :
+    first = second := by
+  rcases Nat.lt_trichotomy first second with earlier | same | later
+  · have held := Trace.EventLoggedAt_imp_EventInv _ _ _ inv other
+    simp only [ProtocolEvent.EventInv.invariant] at held
+    exact absurd (logged_before one earlier) held.1
+  · exact same
+  · have held := Trace.EventLoggedAt_imp_EventInv _ _ _ inv one
+    simp only [ProtocolEvent.EventInv.invariant] at held
+    exact absurd (logged_before other later) held.1
 
 /-- A term that the attacker knows, and that only the holders of a label may know, has been
 revealed to the attacker by what makes that label corrupt. -/

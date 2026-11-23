@@ -2,10 +2,10 @@ module
 public import Sake.Proof
 import DY.Meta
 
-/-! What the SAKE target proves. Trusted: the seven statements.
+/-! What the SAKE target proves. Trusted: the nine statements.
 
 `handshake_completes` and `foreign_signature_rejected` speak about the extracted steps alone.
-The other five hold on every trace that the attacker can reach with the actions of
+The other seven hold on every trace that the attacker can reach with the actions of
 `Sake.Protocol`: it controls the network and the schedule, and it can compromise any identity
 key and what any peer keeps between its steps.
 
@@ -13,14 +13,17 @@ key and what any peer keeps between its steps.
   transcript.
 - `listener_authentication`: for the listener, the dialer started this opening.
 - `listener_key_confirmation`: for the listener, the dialer finished this exchange with this
-  transcript.
+  listener and this transcript.
+- `dialer_injective_agreement` and `listener_injective_agreement`: no event of a peer matches
+  two finishes.
 - `dialer_secrecy` and `listener_secrecy`: the attacker does not know the transcript.
 
-Each holds unless the identity key of the peer was compromised before the handshake finished.
-Key confirmation and secrecy also fail when what either peer keeps for the exchange is
-compromised: the dialer's ephemeral secret or the listener's secret transcript. Secrecy does not
-fail when an identity key is compromised after the handshake finished. Nothing here speaks about
-time, about V0 or about the record protocol. -/
+Authentication, key confirmation and secrecy each hold unless the identity key of the peer was
+compromised before the handshake finished. Key confirmation and secrecy also fail when what
+either peer keeps for the exchange is compromised: the dialer's ephemeral secret or the
+listener's secret transcript. Secrecy does not fail when an identity key is compromised after
+the handshake finished. The agreement statements hold without a condition. Nothing here speaks
+about time, about V0 or about the record protocol. -/
 
 namespace Sake
 open DY Aeneas Aeneas.Std CoreModels Commonware.Symbolic commonware_symbolic
@@ -102,7 +105,7 @@ theorem dialer_authentication
   intro tr inv logged
   have held := Trace.EventLoggedAt_imp_EventInv _ _ _ inv logged
   simp only [ProtocolEvent.EventInv.invariant] at held
-  rcases held.2 with ⟨answered, -⟩ | leaked
+  rcases held.2.2.2 with ⟨answered, -⟩ | leaked
   · left
     simpa using answered
   · right
@@ -130,7 +133,7 @@ theorem listener_authentication
   intro tr inv logged
   have held := Trace.EventLoggedAt_imp_EventInv _ _ _ inv logged
   simp only [ProtocolEvent.EventInv.invariant] at held
-  rcases held with ⟨started, -⟩ | leaked
+  rcases held.2 with ⟨started, -⟩ | leaked
   · left
     simpa using started
   · right
@@ -151,8 +154,8 @@ theorem listener_key_confirmation
       tr.Reachable reachability →
       tr.EventLoggedAt
         (Event.listenFinish listener dialer exchange secret) time →
-      (∃ expected, (tr.prefix time).EventLogged
-        (Event.dialFinish dialer expected exchange secret)) ∨
+      (tr.prefix time).EventLogged
+        (Event.dialFinish dialer listener exchange secret) ∨
       LongTermKeys.LongTermKeyCompromised "SAKE PKI" dialer
         exchange.dialer (tr.prefix time) ∨
       DialerCompromised dialer exchange.dialerKey (tr.prefix time) ∨
@@ -161,15 +164,65 @@ theorem listener_key_confirmation
   intro tr inv logged
   have held := Trace.EventLoggedAt_imp_EventInv _ _ _ inv logged
   simp only [ProtocolEvent.EventInv.invariant] at held
-  rcases held with ⟨-, -, -, ⟨expected, finished⟩ | known⟩ | leaked
+  rcases held.2 with ⟨-, -, -, finished | known⟩ | leaked
   · left
-    exact ⟨expected, by simpa using finished⟩
+    simpa using finished
   · right
     right
     simpa [exchangeSecrecy, dialerSecrecy, listenerSecrecy] using known
   · right
     left
     simpa [LongTermKeys.label] using leaked
+
+/-- Injective agreement for the dialer. On every reachable trace, two
+finishes of dialers that are matched by the same answer of a listener are
+the same finish. With `dialer_authentication`, each finish of a dialer has
+an answer of its listener that no other finish shares. -/
+theorem dialer_injective_agreement
+    (dialer₁ listener₁ : Participant) (exchange₁ : Exchange) (secret₁ : Bytes)
+    (dialer₂ listener₂ : Participant) (exchange₂ : Exchange) (secret₂ : Bytes)
+    (finished₁ finished₂ answered : Nat) :
+    ∀ tr : ExecTrace,
+      tr.Reachable reachability →
+      tr.EventLoggedAt
+        (Event.dialFinish dialer₁ listener₁ exchange₁ secret₁) finished₁ →
+      tr.EventLoggedAt
+        (Event.dialFinish dialer₂ listener₂ exchange₂ secret₂) finished₂ →
+      tr.EventLoggedAt
+        (Event.listenStart listener₁ exchange₁ secret₁) answered →
+      tr.EventLoggedAt
+        (Event.listenStart listener₂ exchange₂ secret₂) answered →
+      finished₁ = finished₂ := by
+  apply Trace.apply_Reachable_implies_Invariant
+  intro tr inv one other first second
+  obtain ⟨rfl, rfl, rfl⟩ := Event.listenStart.inj (same_event first second)
+  obtain rfl := starter_unique inv (finisher_started inv ⟨_, one⟩)
+    (finisher_started inv ⟨_, other⟩)
+  exact dial_finish_once inv one other
+
+/-- Injective agreement for the listener. On every reachable trace, two
+finishes of listeners that are matched by the same finish of a dialer are
+the same finish. With `listener_key_confirmation`, each finish of a listener
+has a finish of its dialer that no other finish shares. -/
+theorem listener_injective_agreement
+    (listener₁ dialer₁ : Participant) (exchange₁ : Exchange) (secret₁ : Bytes)
+    (listener₂ dialer₂ : Participant) (exchange₂ : Exchange) (secret₂ : Bytes)
+    (finished₁ finished₂ matched : Nat) :
+    ∀ tr : ExecTrace,
+      tr.Reachable reachability →
+      tr.EventLoggedAt
+        (Event.listenFinish listener₁ dialer₁ exchange₁ secret₁) finished₁ →
+      tr.EventLoggedAt
+        (Event.listenFinish listener₂ dialer₂ exchange₂ secret₂) finished₂ →
+      tr.EventLoggedAt
+        (Event.dialFinish dialer₁ listener₁ exchange₁ secret₁) matched →
+      tr.EventLoggedAt
+        (Event.dialFinish dialer₂ listener₂ exchange₂ secret₂) matched →
+      finished₁ = finished₂ := by
+  apply Trace.apply_Reachable_implies_Invariant
+  intro tr inv one other first second
+  obtain ⟨rfl, rfl, rfl, rfl⟩ := Event.dialFinish.inj (same_event first second)
+  exact listen_finish_once inv one other
 
 /-- Secrecy for the dialer. On every reachable trace, the attacker knows the
 secret transcript of a handshake that a dialer finished with a listener only
@@ -193,7 +246,7 @@ theorem dialer_secrecy
   intro tr inv logged known
   have held := Trace.EventLoggedAt_imp_EventInv _ _ _ inv logged
   simp only [ProtocolEvent.EventInv.invariant] at held
-  rcases held.2 with ⟨-, valid, sealed⟩ | leaked
+  rcases held.2.2.2 with ⟨-, valid, sealed⟩ | leaked
   · right
     simpa [exchangeSecrecy, dialerSecrecy, listenerSecrecy] using
       revealed_of_known inv known valid sealed
@@ -222,7 +275,7 @@ theorem listener_secrecy
   intro tr inv logged known
   have held := Trace.EventLoggedAt_imp_EventInv _ _ _ inv logged
   simp only [ProtocolEvent.EventInv.invariant] at held
-  rcases held with ⟨-, valid, sealed, -⟩ | leaked
+  rcases held.2 with ⟨-, valid, sealed, -⟩ | leaked
   · right
     simpa [exchangeSecrecy, dialerSecrecy, listenerSecrecy] using
       revealed_of_known inv known valid sealed

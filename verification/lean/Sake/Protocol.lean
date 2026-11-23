@@ -151,6 +151,15 @@ def ListenerCompromised
 
 noncomputable section
 
+/-- Continue only if `event` has not been logged yet. Production finishes a
+handshake at most once from what a peer kept, because finishing consumes it;
+this check stands for that. -/
+def firstTime (event : Event) : Traceful Unit :=
+  Traceful.mk fun tr =>
+    open Classical in
+    if tr.EventLogged event then (none, ⟨tr, Trace.le_refl tr⟩)
+    else (some (), ⟨tr, Trace.le_refl tr⟩)
+
 /-- A dialer starts a handshake with `listener` in the namespace `ns`. Its
 clock reads `now` and it will accept listener timestamps in `window`. -/
 def dial
@@ -213,7 +222,8 @@ def listen
   return (stHandle, secretHandle, msgHandle)
 
 /-- A dialer finishes the handshake it kept at `stHandle` on the `SynAck` at
-`msgHandle`, stamped `answered`, and sends its confirmation. -/
+`msgHandle`, stamped `answered`, and sends its confirmation. It finishes an
+exchange at most once. -/
 def finishDial
     (me : Participant) (stHandle msgHandle : Nat) (answered : Std.U64) :
     Traceful Nat := do
@@ -228,11 +238,12 @@ def finishDial
     | failure
   let exchange : Exchange :=
     { kept.opening with answered := answered, listenerKey := msg.epk }
+  firstTime (Event.dialFinish me kept.listener exchange secret)
   ProtocolEvent.logEvent (Event.dialFinish me kept.listener exchange secret)
   Network.sendMessage confirmation
 
 /-- A listener finishes the handshake it kept at `stHandle` on the
-confirmation at `msgHandle`. -/
+confirmation at `msgHandle`. It finishes an exchange at most once. -/
 def finishListen
     (me : Participant) (stHandle msgHandle : Nat) :
     Traceful Unit := do
@@ -241,6 +252,7 @@ def finishListen
   let .Some secret ←
     run (sake.listen_end sakeTerms () kept.transcript confirmation)
     | failure
+  firstTime (Event.listenFinish me kept.dialer kept.exchange secret)
   ProtocolEvent.logEvent
     (Event.listenFinish me kept.dialer kept.exchange secret)
 
