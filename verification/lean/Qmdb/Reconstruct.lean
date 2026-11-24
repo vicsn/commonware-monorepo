@@ -732,7 +732,7 @@ abbrev DigestVec := CoreModels.alloc.vec.Vec Bytes
 /-- The digests in a vector. -/
 def items (v : DigestVec) : List Bytes := Slice.val v
 
-theorem push_ok (v : DigestVec) (d : Bytes) (room : (items v).length < 64) :
+theorem push_ok (v : DigestVec) (d : Bytes) (room : (items v).length < 1000) :
     ∃ w : DigestVec, CoreModels.alloc.vec.Vec.push v d = RustM.ok w ∧ items w = items v ++ [d] := by
   have fits : (Slice.val v ++ [d]).length ≤ Usize.max := by
     simp [items] at room; simp; scalar_tac
@@ -815,7 +815,7 @@ theorem list_prefix (seg : List (Std.U64 × Std.U32)) :
     reconstruct.Layout.prefix_start l = RustM.ok start →
     l.fold.val ≤ index.val → index.val + seg.length ≤ l.before.val → l.before.val ≤ 64 →
     start.val + l.before.val - l.fold.val ≤ digests.val.length →
-    (items v).length + seg.length ≤ 64 → ls.val + span seg < 2 ^ 63 →
+    (items v).length + seg.length ≤ 200 → ls.val + span seg < 2 ^ 63 →
     ∃ (st' : P) (index' : Std.Usize) (ls' : Std.U64) (v' : DigestVec),
       Yields geo.PeaksInst.next st' rest ∧
       index'.val = index.val + seg.length ∧ ls'.val = ls.val + span seg ∧
@@ -883,7 +883,7 @@ theorem list_after (seg : List (Std.U64 × Std.U32)) :
     index.val - l.before.val - l.overlapping.val + seg.length ≤ l.individual_after.val →
     index.val + seg.length ≤ 64 →
     start.val + l.individual_after.val ≤ digests.val.length →
-    (items v).length + seg.length ≤ 64 → ls.val + span seg < 2 ^ 63 →
+    (items v).length + seg.length ≤ 200 → ls.val + span seg < 2 ^ 63 →
     ∃ (st' : P) (index' : Std.Usize) (ls' : Std.U64) (v' : DigestVec),
       Yields geo.PeaksInst.next st' rest ∧
       index'.val = index.val + seg.length ∧ ls'.val = ls.val + span seg ∧
@@ -1045,6 +1045,20 @@ theorem items_vecOf (L : List Bytes) (fits : L.length ≤ Usize.max) :
     items (vecOf L fits) = L := by
   simp [items, vecOf]
 
+theorem vec_new_eq : CoreModels.alloc.vec.Vec.new Bytes = RustM.ok (vecOf [] (by simp)) := by
+  simp [CoreModels.alloc.vec.Vec.new, rust_primitives.sequence.seq_empty, vecOf]
+  rfl
+
+theorem deref_eq (v : DigestVec) : ∃ S : Slice Bytes,
+    CoreModels.alloc.vec.Vec.Insts.CoreOpsDerefDerefSlice.deref v = RustM.ok S ∧
+      S.val = items v :=
+  ⟨v, by simp [CoreModels.alloc.vec.Vec.Insts.CoreOpsDerefDerefSlice.deref,
+    CoreModels.alloc.vec.Vec.as_slice, rust_primitives.sequence.seq_to_slice], rfl⟩
+
+theorem ends_new_eq (L : Slice Bytes) :
+    reconstruct.Ends.new L = RustM.ok ⟨L, 0#usize, Slice.len L⟩ := by
+  simp [reconstruct.Ends.new, len_ok]
+
 theorem vec_ext {v w : DigestVec} (h : items v = items w) : v = w :=
   Slice.ext _ _ h
 
@@ -1074,14 +1088,109 @@ theorem list_single (pre post : List (Std.U64 × Std.U32)) (pos : Std.U64) (h : 
         | .Ok d => RustM.ok (.Ok (), o₁, vecOf (items v ++
             (digests.val.drop prefixStart.val).take (l.before.val - l.fold.val) ++ [d] ++
             (digests.val.drop afterStart.val).take l.individual_after.val) (by
-              simp; scalar_tac))
+              simp only [List.length_append, List.length_take, List.length_drop,
+                List.length_singleton]; scalar_tac))
         | .Err err => do
           let x ← reconstruct.missing err
           RustM.ok (.Err x, o₁, vecOf (items v ++
             (digests.val.drop prefixStart.val).take (l.before.val - l.fold.val)) (by
-              simp; scalar_tac))) := by
-  -- TODO: unfinished; paused on request.
-  sorry
+              simp only [List.length_append, List.length_take, List.length_drop]; scalar_tac))) := by
+  have whole := fits
+  rw [span_append, span_cons] at whole
+  have split : pre ++ (pos, h) :: post =
+      pre.take l.fold.val ++ (pre.drop l.fold.val ++ (pos, h) :: post) := by
+    rw [← List.append_assoc, List.take_append_drop]
+  rw [split] at yields
+  have lowAll := low
+  have spanSplit : span pre = span (pre.take l.fold.val) + span (pre.drop l.fold.val) := by
+    rw [← span_append, List.take_append_drop]
+  obtain ⟨st₁, i₁, ls₁, yields₁, i₁v, ls₁v, run₁⟩ := list_fold geo nodes (pre.take l.fold.val)
+    (pre.drop l.fold.val ++ (pos, h) :: post) st l digests loc e o v 0#usize 0#u64 yields
+    (fun q hq => low q (by simp [List.mem_of_mem_take hq]))
+    (by simp only [List.length_take]; simp <;> omega) foldLe (by omega)
+    (by have : span (pre.take l.fold.val) ≤ span pre := by rw [spanSplit]; omega
+        simp <;> omega)
+  have takeLen : (pre.take l.fold.val).length = l.fold.val := by
+    rw [List.length_take]; omega
+  have i₁f : i₁.val = l.fold.val := by rw [i₁v, takeLen]; simp
+  have ls₁f : ls₁.val = span (pre.take l.fold.val) := by rw [ls₁v]; simp
+  have dropLen : (pre.drop l.fold.val).length = pre.length - l.fold.val := by simp
+  obtain ⟨st₂, i₂, ls₂, v₂, yields₂, i₂v, ls₂v, v₂v, run₂⟩ := list_prefix geo nodes
+    (pre.drop l.fold.val) ((pos, h) :: post) st₁ l prefixStart digests loc e o v i₁ ls₁ yields₁
+    (fun q hq => low q (by simp [List.mem_of_mem_drop hq])) hPrefix
+    (by omega) (by rw [dropLen]; omega) (by omega)
+    (by omega) (by simp only [items] at room ⊢; rw [dropLen]; omega)
+    (by rw [ls₁f]; rw [spanSplit] at whole; omega)
+  have i₂v' : i₂.val = l.before.val := by rw [i₂v, i₁f, dropLen]; omega
+  have ls₂v' : ls₂.val = span pre := by rw [ls₂v, ls₁f, spanSplit]
+  refine ⟨ls₂, ls₂v', ?_⟩
+  cases yields₂ with
+  | cons hnext tail =>
+    rename_i st₃
+    obtain ⟨le, i₃, lev, i₃v, run₃⟩ := list_target geo nodes st₂ st₃ pos h l digests loc e o v₂
+      i₂ ls₂ w hnext hw (by omega) i₂v' lo (by omega)
+    rw [run₁, run₂, run₃]
+    congr 1
+    funext x
+    obtain ⟨r, o₁⟩ := x
+    have v₂items : items v₂ = items v ++
+        (digests.val.drop prefixStart.val).take (l.before.val - l.fold.val) := by
+      rw [v₂v, i₁f, dropLen]
+      congr 3
+      · omega
+      · omega
+    cases r with
+    | Ok d =>
+      have v₂len : (items v₂).length ≤ 1 + pre.length := by
+        rw [v₂items, List.length_append]
+        have := List.length_take_le (l.before.val - l.fold.val) (digests.val.drop prefixStart.val)
+        omega
+      obtain ⟨v₃, hv₃, v₃v⟩ := push_ok v₂ d (by omega)
+      have i₃f : i₃.val = l.before.val + 1 := by rw [i₃v, i₂v']
+      have splitPost : post = post.take l.individual_after.val ++ post.drop l.individual_after.val :=
+        (List.take_append_drop _ _).symm
+      have tail' := tail
+      rw [splitPost] at tail'
+      obtain ⟨st₄, i₄, ls₄, v₄, yields₄, i₄v, ls₄v, v₄v, run₄⟩ := list_after geo nodes
+        (post.take l.individual_after.val) (post.drop l.individual_after.val) st₃ l afterStart
+        digests loc e o₁ v₃ i₃ le tail'
+        (fun q hq => low q (by simp [List.mem_of_mem_take hq]))
+        hAfter (by omega) (by rw [List.length_take]; omega)
+        (by rw [List.length_take]; omega) inside
+        (by rw [v₃v, List.length_append, List.length_take]; simp; omega)
+        (by
+          have : span (post.take l.individual_after.val) ≤ span post := by
+            conv => rhs; rw [splitPost]
+            rw [span_append]; omega
+          omega)
+      have suffix := list_suffix geo nodes (post.drop l.individual_after.val) st₄ l digests loc e
+        o₁ v₄ i₄ ls₄ yields₄ (fun q hq => low q (by simp [List.mem_of_mem_drop hq]))
+        (by rw [i₄v, List.length_take]; omega) (by rw [i₄v, List.length_take, List.length_drop]; omega)
+        (by
+          have : span (post.take l.individual_after.val) + span (post.drop l.individual_after.val)
+              = span post := by rw [← span_append, List.take_append_drop]
+          omega)
+      simp [hv₃, run₄, suffix]
+      apply vec_ext
+      rw [items_vecOf, v₄v, v₃v, v₂items]
+      have off : afterStart.val + (i₃.val - l.before.val - l.overlapping.val) = afterStart.val := by
+        omega
+      rw [off]
+      simp only [List.append_assoc, List.singleton_append]
+      have tl : (post.take l.individual_after.val).length = l.individual_after.val := by
+        rw [List.length_take]; omega
+      rw [tl]
+    | Err err =>
+      simp
+      congr 1
+      funext x
+      congr 2
+      have same : v₂ = vecOf (items v ++
+          (digests.val.drop prefixStart.val).take (l.before.val - l.fold.val)) (by
+            simp only [List.length_append, List.length_take, List.length_drop]; scalar_tac) :=
+        vec_ext (by rw [items_vecOf]; exact v₂items)
+      rw [same]
+
 end List
 
 /-! ## A proof of one location -/
@@ -1175,8 +1284,198 @@ theorem reconstruct_single (g : G) (n : N) (domain : Aeneas.Std.Array Std.U8 2#u
           ⟨n, .Some item, digests, first, ()⟩ pos w ls loc e
         RustM.ok (outcome domain backward leaves inactive pre.length post.length digests.val r o))
       := by
-  -- TODO: unfinished; paused on request.
-  sorry
+  have one : 1 ≤ 2 ^ h.val := Nat.one_le_two_pow
+  have whole := total
+  rw [span_append, span_cons] at whole
+  have hh : h.val ≤ 62 := low (pos, h) (by simp)
+  obtain ⟨stop, hstop, stopv⟩ := add_ok loc 1#u64 (by scalar_tac)
+  have stopv' : stop.val = loc.val + 1 := by simpa using stopv
+  obtain ⟨b, a, sib, hloop, bv, av, sibv⟩ := classify_single geo pre post pos h st loc stop yields
+    low stopv' inside (by omega) count
+  obtain ⟨l, hl, lb, lo, la, lf, li⟩ := layout_some b a inactive backward (by omega)
+    (by omega)
+  have foldLe : l.fold.val ≤ l.before.val := by
+    rw [lf, lb]; split <;> omega
+  have indLe : l.individual_after.val ≤ l.after.val := by
+    rw [li, la]; split <;> omega
+  obtain ⟨fd, sd, ⟨aStart, hAfter, aStartv⟩, ⟨sStart, hSuffix, sStartv⟩,
+    ⟨first, hFirst, firstv⟩⟩ := offsets_ok l (by rw [lb, la]; omega) foldLe indLe
+  have lbv : l.before.val = pre.length := by rw [lb, bv]
+  have lav : l.after.val = post.length := by rw [la, av]
+  have firstSmall : first.val ≤ 130 := by rw [firstv]; split <;> split <;> omega
+  obtain ⟨req, hreq, reqv⟩ := add_ok first sib (by scalar_tac)
+  obtain ⟨w, hw, wv⟩ := width_ok h hh
+  have lsFits : span pre < 2 ^ 64 := by omega
+  let lsW : Std.U64 := ⟨BitVec.ofNat 64 (span pre)⟩
+  have lsWv : lsW.val = span pre := by
+    change (BitVec.ofNat 64 (span pre)).toNat = span pre
+    simp; omega
+  have firstEq : first.val = siblingsStartOf backward inactive.val pre.length post.length := by
+    rw [firstv, lf, li, lb, la, bv, av]
+    cases backward <;> simp [siblingsStartOf, afterStartOf, foldOf, individualOf]
+  refine ⟨w, lsW, stop, first, wv, lsWv, stopv', firstEq, ?_⟩
+  have nz : ¬ (1#u64 = 0#u64) := by decide
+  have startOk : ¬ maxLeaves.val ≤ loc.val := by omega
+  obtain ⟨room, hroom, roomv⟩ := sub_ok maxLeaves loc (by omega)
+  have roomNz : ¬ room.val = 0 := by omega
+  have countOk : ¬ room.val < (1#u64 : Std.U64).val := by simp; omega
+  have endOk : ¬ leaves.val < stop.val := by omega
+  have sizeOk : ¬ maxLeaves.val < leaves.val := by omega
+  have reqh : req.val = first.val + h.val := by rw [reqv, sibv]
+  unfold reconstruct.reconstruct
+  simp [hmax, nz, startOk, hroom, countOk, hstop, endOk, sizeOk, hpeaks, hloop, hl, hFirst, hreq,
+    roomNz, len_ok, reqh]
+  by_cases short : digests.val.length < first.val + h.val
+  · simp [short]
+  by_cases long : first.val + h.val < digests.val.length
+  · simp [short, long]
+  simp only [short, long, ↓reduceIte]
+  have exact : digests.val.length = first.val + h.val := by omega
+  have aStartLe : aStart.val ≤ first.val := by rw [aStartv, firstv]; omega
+  rw [vec_new_eq, fd]
+  obtain ⟨v₁, v₁v, hv⟩ : ∃ v₁ : DigestVec,
+      items v₁ = digests.val.take (if l.fold.val = 0 then 0 else 1) ∧
+      (if (if l.fold.val = 0 then 0#usize else 1#usize) = 1#usize then do
+          let t ← Slice.index_usize digests 0#usize
+          CoreModels.alloc.vec.Vec.push (vecOf [] (by simp)) t
+        else RustM.ok (vecOf [] (by simp))) = RustM.ok v₁ := by
+    by_cases z : l.fold.val = 0
+    · have ne : ¬ ((0#usize : Std.Usize) = 1#usize) := by decide
+      exact ⟨vecOf [] (by simp), by simp [items_vecOf, z], by simp [z, ne]⟩
+    · have nonempty : 0 < digests.val.length := by
+        rw [aStartv] at aStartLe; simp [z] at aStartLe; omega
+      obtain ⟨v₁, hp, pv⟩ := push_ok (vecOf [] (by simp)) (digests.val[0]'nonempty)
+        (by simp [items_vecOf])
+      refine ⟨v₁, ?_, ?_⟩
+      · rw [pv, items_vecOf]; simp [z]
+        rw [List.take_one, List.head?_eq_getElem?, List.getElem?_eq_getElem nonempty]
+        rfl
+      · simp only [z, ↓reduceIte, index_ok digests 0#usize (by simpa using nonempty),
+          Std.bind_tc_ok, Std.bind_ok]
+        exact hp
+  simp only [Std.bind_tc_ok, Std.bind_ok]
+  rw [hv]
+  simp only [Std.bind_tc_ok, Std.bind_ok]
+  have psv : (if l.fold.val = 0 then 0#usize else 1#usize).val =
+      if l.fold.val = 0 then 0 else 1 := by split <;> simp
+  have lov : l.overlapping.val = 1 := by simp [lo]
+  have hPrefix : reconstruct.Layout.prefix_start l =
+      RustM.ok (if l.fold.val = 0 then 0#usize else 1#usize) := by
+    simp [reconstruct.Layout.prefix_start, fd]
+  obtain ⟨ls, lsv, run⟩ := list_single geo nodes pre post pos h st l digests loc stop w
+    (if l.fold.val = 0 then 0#usize else 1#usize) aStart ⟨n, .Some item, digests, first, ()⟩ v₁
+    yields low (by omega) count lbv lov lav foldLe indLe hPrefix hAfter (by rw [aStartv, psv])
+    (by rw [firstv] at exact; rw [aStartv]; omega) hw wv (by rw [v₁v]; simp; split <;> omega)
+  have lsEq : ls = lsW := UScalar.eq_of_val_eq (by rw [lsv, lsWv])
+  subst lsEq
+  have listEq : reconstruct.list_peaks geo nodes single element noCollect g l leaves digests loc
+      stop ⟨n, .Some item, digests, first, ()⟩ v₁ =
+      listLoop geo nodes st l digests loc stop ⟨n, .Some item, digests, first, ()⟩ v₁ 0#usize
+        0#u64 := by
+    simp [reconstruct.list_peaks, hpeaks]
+  simp only [traversal.Opening.new, Std.bind_tc_ok, Std.bind_ok]
+  rw [listEq, run]
+  simp
+  congr 1
+  funext x
+  obtain ⟨r, o₁⟩ := x
+  cases r with
+  | Err err =>
+    cases err <;> simp [reconstruct.missing, outcome]
+  | Ok d =>
+    obtain ⟨k, hk, kv⟩ := inactive_after_fold_ok l inactive (by omega)
+    have sStartLt : sStart.val ≤ first.val := by rw [sStartv, firstv]; omega
+    simp
+    generalize hV : (vecOf _ _ : DigestVec) = V
+    have Vitems : items V = items v₁ ++ ((digests.val.drop
+        (if l.fold.val = 0 then 0 else 1)).take (l.before.val - l.fold.val) ++
+          d :: (digests.val.drop aStart.val).take l.individual_after.val) := by
+      rw [← hV, items_vecOf, psv]
+    rw [sd]
+    have sfxv : ∀ c : Bool, ((if c then 1#usize else 0#usize) : Std.Usize).val =
+        if c then 1 else 0 := by intro c; split <;> simp
+    obtain ⟨W, hW, Witems⟩ : ∃ W : DigestVec,
+        (if (if l.individual_after.val < l.after.val then 1#usize else 0#usize) = 1#usize then do
+            let i4 ← reconstruct.Layout.suffix_start l
+            let t ← Slice.index_usize digests i4
+            CoreModels.alloc.vec.Vec.push V t
+          else RustM.ok V) = RustM.ok W ∧
+        items W = items V ++ (digests.val.drop sStart.val).take
+          (if l.individual_after.val < l.after.val then 1 else 0) := by
+      by_cases sfx : l.individual_after.val < l.after.val
+      · have firstS : first.val = sStart.val + 1 := by
+          rw [firstv, sStartv, if_pos sfx]
+        have sIn : sStart.val < digests.val.length := by omega
+        have vlen : (items V).length < 1000 := by
+          rw [Vitems, v₁v]
+          simp only [List.length_append, List.length_cons]
+          have a1 := List.length_take_le (if l.fold.val = 0 then 0 else 1) digests.val
+          have a2 := List.length_take_le (l.before.val - l.fold.val)
+            (digests.val.drop (if l.fold.val = 0 then 0 else 1))
+          have a3 := List.length_take_le l.individual_after.val (digests.val.drop aStart.val)
+          have one : (if l.fold.val = 0 then 0 else 1) ≤ 1 := by split <;> omega
+          omega
+        obtain ⟨v₃, hp, pv⟩ := push_ok V (digests.val[sStart.val]'sIn) vlen
+        refine ⟨v₃, by simp [sfx, hSuffix, index_ok digests sStart sIn, hp], ?_⟩
+        rw [pv]
+        simp [sfx, List.take_one, List.head?_drop, List.getElem?_eq_getElem sIn]
+      · refine ⟨V, by simp [sfx], by simp [sfx]⟩
+    simp only [Std.bind_ok, Std.bind_tc_ok]
+    rw [hW]
+    simp only [Std.bind_ok, Std.bind_tc_ok]
+    -- The digests the reconstruction bags are the listed ones.
+    have aStartEq : aStart.val = afterStartOf backward inactive.val pre.length := by
+      rw [aStartv, lf, lbv, bv]; cases backward <;> simp [afterStartOf, foldOf]
+    have Wlisted : items W = listed digests.val (afterStartOf backward inactive.val pre.length)
+        (siblingsStartOf backward inactive.val pre.length post.length) d := by
+      rw [← aStartEq, ← firstEq, Witems, Vitems, v₁v, listed]
+      have ps : (if l.fold.val = 0 then 0 else 1) ≤ digests.val.length := by
+        have := aStartLe
+        rw [aStartv] at this
+        by_cases z : l.fold.val = 0 <;> simp only [z, ↓reduceIte] at this ⊢ <;> omega
+      have pre' : digests.val.take (if l.fold.val = 0 then 0 else 1) ++
+          (digests.val.drop (if l.fold.val = 0 then 0 else 1)).take (l.before.val - l.fold.val) =
+          digests.val.take aStart.val := by
+        rw [aStartv, List.take_add]
+      have post' : (digests.val.drop aStart.val).take l.individual_after.val ++
+          (digests.val.drop sStart.val).take
+            (if l.individual_after.val < l.after.val then 1 else 0) =
+          (digests.val.drop aStart.val).take (first.val - aStart.val) := by
+        have : first.val - aStart.val = l.individual_after.val +
+            (if l.individual_after.val < l.after.val then 1 else 0) := by
+          rw [firstv, aStartv]; omega
+        rw [this, List.take_add, List.drop_drop, sStartv, aStartv]
+      rw [← pre', ← post']
+      simp only [List.append_assoc, List.cons_append]
+    have kEq : k.val = toFoldOf backward inactive.val pre.length := by
+      rw [kv, lf, bv]; cases backward <;> simp [toFoldOf, foldOf]
+    cases hel : o₁.elements with
+    | some x =>
+      simp [traversal.Opening.exhausted,
+        reconstruct.Single.Insts.CoreIterTraitsIteratorIteratorElement.next, hel, outcome,
+        CoreModels.core.option.Option.is_none, CoreModels.core.option.Option.is_some]
+    | none =>
+      simp [traversal.Opening.exhausted,
+        reconstruct.Single.Insts.CoreIterTraitsIteratorIteratorElement.next, hel, outcome,
+        CoreModels.core.option.Option.is_none, CoreModels.core.option.Option.is_some,
+        traversal.Opening.impl.cursor]
+      by_cases cur : o₁.cursor.val = digests.val.length
+      · simp only [cur, ↓reduceIte, not_true_eq_false]
+        obtain ⟨S, hS, Sv⟩ := deref_eq W
+        cases hWl : Slice.val S with
+        | nil => rw [Sv, Wlisted] at hWl; simp [listed] at hWl
+        | cons f rs =>
+          obtain ⟨e', hb⟩ := bagged_root_eq domain backward leaves k
+            (UScalar.cast UScalarTy.U64 inactive) S f rs hWl
+          rw [hk, hS]
+          simp only [Std.bind_ok, Std.bind_tc_ok, Std.lift]
+          rw [ends_new_eq]
+          simp only [Std.bind_ok, Std.bind_tc_ok]
+          rw [hb]
+          simp [bagRoot, ← Wlisted, ← Sv, hWl, kEq]
+          by_cases c : toFoldOf backward inactive.val pre.length ≤ rs.length + 1 <;> simp [c]
+      · simp [cur]
+
 end Single
 
 end
