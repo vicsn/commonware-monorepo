@@ -1,4 +1,5 @@
 module
+import all DY.EquationalTheory.Hash
 public import Qmdb.Reconstruct
 public import Qmdb.Mmb.Children
 public import Qmdb.Mmb.Raw
@@ -893,6 +894,16 @@ theorem assemble_count (leaves inactive loc i h off peaks : Nat) (g : Bool)
     Nat.min_def, Nat.max_def]
   split_ifs <;> omega
 
+/-- `Plan`'s peak groups start where production's listed digests do. -/
+theorem assemble_split (inactive i peaks : Nat) (bound : inactive ≤ peaks) (inside : i < peaks) :
+    (if min i inactive = 0 then 0 else 1) + (i - inactive) = afterStartOf true inactive i ∧
+    (if min i inactive = 0 then 0 else 1) + (i - inactive) +
+      ((inactive - (i + 1)) + (if max (i + 1) inactive < peaks then 1 else 0)) =
+      siblingsStartOf true inactive i (peaks - i - 1) := by
+  simp only [siblingsStartOf, afterStartOf, individualOf, foldOf, ↓reduceIte, Nat.min_def,
+    Nat.max_def]
+  constructor <;> split_ifs <;> omega
+
 theorem left_vals (raw : RawProof) (item : Bytes) (n : Nat) (fits : n ≤ raw.digests.length) :
     ((List.range n).map fun j => Shape.atom (.sibling j)).map
         (fun e => (e.fill (raw.get item)).value) = raw.digests.take n := by
@@ -978,6 +989,510 @@ theorem available_foldTarget (raw : RawProof) (i inactive : Nat) (left right : L
   | cons l ls =>
     exact fold _ l (ls ++ target :: right) (all l (by simp))
       (fun e he => all e (by simp at he ⊢; tauto))
+
+/-! ## The extracted verifier refines `RawProof.verify` -/
+
+/-- An optional extracted digest. -/
+def optionOf : CoreModels.core.option.Option Bytes → Option Bytes
+  | .Some d => some d
+  | .None => none
+
+/-- The fields of a current proof and its chunk as `Plan`'s raw proof. -/
+def rawOf (f : current.Fields Bytes) (chunk : Active.Chunk) : RawProof :=
+  ⟨f.digests.val, f.ops_root, optionOf f.pending, optionOf f.partial, chunk⟩
+
+/-- Every digest a production proof carries has the width of SHA-256, as production's digest type
+guarantees. -/
+structure Wide (f : current.Fields Bytes) : Prop where
+  /-- The ops root. -/
+  ops : f.ops_root.length = 32
+  /-- The range proof's digests. -/
+  digests : ∀ d ∈ f.digests.val, d.length = 32
+  /-- The pending chunk's digest. -/
+  pending : ∀ d, f.pending = .Some d → d.length = 32
+  /-- The partial chunk's digest. -/
+  trailing : ∀ d, f.partial = .Some d → d.length = 32
+
+/-- The canonical current root over a Merkle root. -/
+theorem canonical_ok (f : current.Fields Bytes) (m : Bytes) (nb : Std.U64) :
+    current.canonical dyTerms () f m nb = RustM.ok (CurrentRoot.term f.ops_root m
+      (optionOf f.pending) ((optionOf f.partial).map fun d => (part (.Bytes (Verifier.be nb)), d))) := by
+  cases hp : f.pending <;> cases ht : f.partial <;>
+    simp [current.canonical, hp, ht, optionOf, CurrentRoot.extracted]
+
+/-- `Plan`'s canonical root is the production one over the same Merkle root and suffix. -/
+theorem envelope_val (get : Field → Bytes) (ops : Bytes) (chunk : Active.Chunk)
+    (hops : get .ops = ops) (hw : ∀ n, get (.word n) = count (UInt64.ofNat n))
+    (hb : get .bitmap = Active.literal chunk) (leaves inactive loc : Nat) (folded : Shape)
+    (pending trailing : Option Bytes)
+    (hpend : match pending with
+      | none => ¬ graftedChunks leaves < leaves / 256
+      | some d => graftedChunks leaves < leaves / 256 ∧ get .pending = d ∧
+          (loc / 256 = graftedChunks leaves → d = Hash.hash (Active.literal chunk)))
+    (htail : match trailing with
+      | none => leaves % 256 = 0
+      | some d => leaves % 256 ≠ 0 ∧ get .trailing = d ∧
+          (loc / 256 = leaves / 256 → d = Hash.hash (Active.literal chunk))) :
+    val get (envelope leaves inactive loc folded) = CurrentRoot.term ops
+      (val get (merkleShape leaves inactive folded)) pending
+      (trailing.map fun d => (count (UInt64.ofNat (leaves % 256)), d)) := by
+  cases pending with
+  | none =>
+    cases trailing with
+    | none =>
+      simp only at hpend htail
+      simp [envelope, hpend, htail, CurrentRoot.term, val, Shape.fill, Expr.value, hops]
+    | some d =>
+      obtain ⟨nz, hd, cov⟩ := htail
+      simp only at hpend
+      by_cases at_end : loc / 256 = leaves / 256
+      · simp [envelope, hpend, nz, at_end, CurrentRoot.term, val, Shape.fill, Expr.value, hops,
+          hw, hb, cov at_end]
+      · simp [envelope, hpend, nz, at_end, CurrentRoot.term, val, Shape.fill, Expr.value, hops,
+          hw, hd]
+  | some p =>
+    obtain ⟨lt, hp, covp⟩ := hpend
+    have ne : graftedChunks leaves ≠ leaves / 256 := Nat.ne_of_lt lt
+    cases trailing with
+    | none =>
+      simp only at htail
+      by_cases at_g : loc / 256 = graftedChunks leaves
+      · simp [envelope, lt, htail, at_g, CurrentRoot.term, val, Shape.fill, Expr.value, hops, hb,
+          covp at_g]
+      · simp [envelope, lt, htail, at_g, CurrentRoot.term, val, Shape.fill, Expr.value, hops, hp]
+    | some d =>
+      obtain ⟨nz, hd, cov⟩ := htail
+      by_cases at_g : loc / 256 = graftedChunks leaves <;>
+        by_cases at_end : loc / 256 = leaves / 256 <;>
+        simp [envelope, lt, nz, ne, Ne.symm ne, at_g, at_end, CurrentRoot.term, val, Shape.fill,
+          Expr.value, hops, hw, hb, hp, hd, covp, cov]
+
+theorem available_ite (raw : RawProof) (c : Prop) [Decidable c] (a b : Shape) :
+    (if c then a else b).available raw = if c then a.available raw else b.available raw := by
+  split <;> rfl
+
+/-- `Plan`'s canonical root refers only to suffix digests the proof carries. -/
+theorem envelope_available (raw : RawProof) (leaves inactive loc : Nat) (folded : Shape)
+    (hf : folded.available raw = true)
+    (pend : graftedChunks leaves < leaves / 256 → raw.pending.isSome)
+    (tail : leaves % 256 ≠ 0 → raw.trailing.isSome) :
+    (envelope leaves inactive loc folded).available raw = true := by
+  unfold envelope merkleShape
+  have ne₁ : graftedChunks leaves < leaves / 256 → (graftedChunks leaves = leaves / 256 ↔ False) :=
+    fun lt => ⟨fun e => by omega, False.elim⟩
+  have ne₂ : graftedChunks leaves < leaves / 256 → (leaves / 256 = graftedChunks leaves ↔ False) :=
+    fun lt => ⟨fun e => by omega, False.elim⟩
+  by_cases A : graftedChunks leaves < leaves / 256 <;> by_cases B : leaves % 256 = 0 <;>
+    by_cases z : inactive = 0 <;> by_cases c₁ : loc / 256 = graftedChunks leaves <;>
+    by_cases c₂ : loc / 256 = leaves / 256 <;>
+    simp [Shape.available, available_ite, hf, A, B, z, c₁, c₂, pend, tail, ne₁, ne₂]
+
+/-- A check that passed before a computation that returned `some`. -/
+theorem check_some {α} (x : RustM Bool) (k : RustM (Option α)) (r : α)
+    (h : (do let b ← x; if b = true then k else RustM.ok none) = RustM.ok (some r)) :
+    ∃ b, x = RustM.ok b ∧ b = true ∧ k = RustM.ok (some r) := by
+  obtain ⟨b, hx, hk⟩ := bind_eq_ok h
+  cases b with
+  | false => simp at hk
+  | true => exact ⟨true, hx, rfl, by simpa using hk⟩
+
+/-- If the extracted reconstruction of a current operation proof over an MMB, with one chunk
+holding the operation's set activity bit, returns a root, `RawProof.verify` accepts that root. -/
+theorem reconstruct_refines (f : current.Fields Bytes) (loc : Std.U64) (chunk : Active.Chunk)
+    (chunks : Slice current.Chunk) (one : chunks.val = [chunkSlice chunk]) (item : Slice Std.U8)
+    (r : Bytes) (wide : Wide f) (bit : Active.activeBit chunk loc.val = true)
+    (hrec : current.reconstruct mmbGeometry dyTerms
+      reconstruct.Single.Insts.CoreIterTraitsIteratorIteratorElement
+      reconstruct.Element.Insts.CoreConvertAsRefSliceU8 current.Chunk.Insts.CoreConvertAsRefSliceU8
+      (Tuple.Insts.Commonware_symbolicTraversalCollect Bytes) () () qmdb.BACKWARD_FOLD true f loc
+      1#u64 (.Some item) chunks 32#usize () = RustM.ok (.Some r)) :
+    (rawOf f chunk).verify r f.leaves.val f.inactive.val loc.val (part (.Bytes item)) = true := by
+  have maxv : mmb_geometry.MAX_LEAVES.val = Peaks.maxLeaves := by
+    simp [mmb_geometry.MAX_LEAVES, Peaks.maxLeaves]
+  have hmax : geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks.max_leaves () =
+      RustM.ok mmb_geometry.MAX_LEAVES := by
+    simp [geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks.max_leaves]
+  have hb8 : geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks.birth_offset ()
+      8#u32 = RustM.ok 383#u64 := birth_eight
+  have ilog : CoreModels.core.num.U64.ilog2 256#u64 = RustM.ok 8#u32 :=
+    Verifier.ilog2_ok 256#u64 8 (by decide)
+  unfold current.reconstruct at hrec
+  simp only [chunk_bits_ok, hmax, covered_one chunk chunks one _ _ _ (by rw [maxv]; decide),
+    bind_ok] at hrec
+  by_cases cov : loc.val < mmb_geometry.MAX_LEAVES.val ∧ loc.val < f.leaves.val
+  case neg => simp [cov] at hrec
+  simp only [cov] at hrec
+  obtain ⟨sc, hsc, scv⟩ := UScalar.div_spec loc (y := 256#u64) (by decide)
+  obtain ⟨i₁, hi₁, i₁v⟩ := add_ok loc 1#u64 (by scalar_tac)
+  obtain ⟨i₂, hi₂, i₂v⟩ := sub_ok i₁ 1#u64 (by simp at i₁v ⊢; omega)
+  have i₂loc : loc = i₂ := UScalar.eq_of_val_eq (by simp at i₁v i₂v; omega)
+  subst i₂loc
+  obtain ⟨cp, hcp, cpv⟩ := UScalar.div_spec f.leaves (y := 256#u64) (by decide)
+  obtain ⟨nb, hnb, nbv⟩ := ok_of_partialSpec (U64.rem_spec f.leaves (y := 256#u64))
+    (by intro e; cases e <;> simp) (by simp)
+  obtain ⟨born, hborn, bornv⟩ := graftable_chunks_ok f.leaves
+  have bornLe : born.val ≤ cp.val := by
+    rw [bornv]; simp at cpv; rw [cpv]; exact graftedChunks_le _
+  have smaller : current.smaller born cp = RustM.ok born := by
+    rw [smaller_ok]
+    by_cases lt : born.val < cp.val
+    · simp [lt]
+    · have : born = cp := UScalar.eq_of_val_eq (by omega)
+      simp [this]
+  obtain ⟨gap, hgap, gapv⟩ := sub_ok cp born bornLe
+  simp only [hsc, hi₁, hi₂, hcp, hnb, ilog, hb8, hborn, smaller, hgap, bind_ok, and_self,
+    decide_true, ↓reduceIte] at hrec
+  by_cases far : 1 < gap.val
+  case pos =>
+    have : gap > 1#u64 := by simpa using far
+    simp [this] at hrec
+  have near : ¬ gap > 1#u64 := fun h => far (by simpa using h)
+  simp only [near, ↓reduceIte] at hrec
+  obtain ⟨b₁, hb₁, t₁, hrec⟩ := check_some _ _ _ hrec
+  subst t₁
+  have tailOk : (match f.partial with
+      | none => nb.val = 0
+      | some d => nb.val ≠ 0 ∧ (sc.val = cp.val → d = Hash.hash (Active.literal chunk))) := by
+    cases hp : f.partial with
+    | none => rw [hp, partial_none] at hb₁; simpa using hb₁
+    | some d =>
+      rw [hp, partial_ok chunk chunks one] at hb₁
+      simp only [RustM.ok.injEq, decide_eq_true_eq] at hb₁
+      exact hb₁
+  obtain ⟨b₂, hb₂, t₂, hrec⟩ := check_some _ _ _ hrec
+  subst t₂
+  have pendOk : (match f.pending with
+      | none => cp.val - born.val ≠ 1
+      | some d => cp.val - born.val = 1 ∧
+          (born.val = sc.val → d = Hash.hash (Active.literal chunk))) := by
+    cases hp : f.pending with
+    | none => rw [hp, pending_none chunks born cp sc bornLe] at hb₂; simpa using hb₂
+    | some d =>
+      rw [hp, pending_ok chunk chunks one d born cp sc bornLe] at hb₂
+      simp only [RustM.ok.injEq, decide_eq_true_eq] at hb₂
+      exact hb₂
+  simp only [reconstruct.StandardNodes.new, grafting.Grafted.new,
+    geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks.domain, bind_ok] at hrec
+  -- The tree's size and peaks.
+  have hmaxG : mmbGeometry.max_leaves () = RustM.ok mmb_geometry.MAX_LEAVES := hmax
+  by_cases big : mmb_geometry.MAX_LEAVES.val < f.leaves.val
+  case pos =>
+    obtain ⟨err, herr⟩ := reconstruct_oversized mmbGeometry grafted () _ _ true f.leaves f.inactive
+      f.digests loc item mmb_geometry.MAX_LEAVES hmaxG cov.2 big
+    rw [herr] at hrec
+    simp at hrec
+  have valid : f.leaves.val ≤ Peaks.maxLeaves := by omega
+  have covers : loc.val < ((heights f.leaves.val).map (2 ^ ·)).sum := by
+    rw [heights, heights_sum, width_all]; exact cov.2
+  obtain ⟨i, h, off, sel⟩ := containing_some _ 0 loc.val covers
+  obtain ⟨st, pre, post, pos, hh, new, yields, low, total, spanPre, offLt, preLen, hhv, posv,
+    nPeaks, count62⟩ := peaks_around f.leaves valid sel
+  have hpeaks : mmbGeometry.peaks () f.leaves = RustM.ok st := by
+    simpa [geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks.peaks] using new
+  have smallMax : mmb_geometry.MAX_LEAVES.val < 2 ^ 63 := by rw [maxv]; decide
+  by_cases over : pre.length + 1 + post.length < f.inactive.val
+  case pos =>
+    obtain ⟨err, herr⟩ := reconstruct_overinactive mmbGeometry grafted () _ _ true f.leaves
+      f.inactive f.digests loc item pre post pos hh st mmb_geometry.MAX_LEAVES hmaxG (by omega)
+      smallMax hpeaks yields low total (by rw [hhv]; omega) (by omega) over
+    rw [herr] at hrec
+    simp at hrec
+  obtain ⟨w, ls, e, first, wv, lsv, ev, firstv, run⟩ := reconstruct_single mmbGeometry grafted ()
+    _ _ true f.leaves f.inactive f.digests loc item pre post pos hh st mmb_geometry.MAX_LEAVES hmaxG
+    (by omega) smallMax hpeaks yields low total (by rw [hhv]; omega) (by omega) (by omega)
+  rw [run] at hrec
+  by_cases short : f.digests.val.length < first.val + hh.val
+  case pos => simp [short] at hrec
+  by_cases long : first.val + hh.val < f.digests.val.length
+  case pos => simp [short, long] at hrec
+  simp only [short, long, ↓reduceIte] at hrec
+  have exactLen : f.digests.val.length = first.val + h := by rw [← hhv]; omega
+  -- The traversal of the peak holding the operation.
+  have tree := Peaks.containing_subtree f.leaves valid sel
+  have scv' : sc.val = loc.val / 256 := by simpa using scv
+  let x : GraftedNodes := ⟨⟨(), ()⟩, (), 8#u32, sc, chunks, born⟩
+  obtain ⟨c, trav, cv⟩ := dfs grafted x (rawOf f chunk) item f.leaves.val
+    (decide (loc.val / 256 < born.val) && !decide (chunk = Vector.replicate 32 0)) loc
+    (fun s k p h t hp hh => grafted_children x f.leaves.val s k p h t hp hh)
+    (fun p a => grafted_leaf x p a)
+    (fun p h st l r lo hi low al => grafted_node chunk chunks one sc born loc scv' p h st l r lo
+      hi low al)
+    h (loc.val - off) pos w ls e ⟨x, .Some item, f.digests, first, ()⟩ rfl rfl tree
+    (by rw [posv]) (by rw [wv, hhv]) (by rw [lsv]; omega) (by omega) (by omega) ev rfl
+    (by simp [rawOf]; omega)
+  rw [trav] at hrec
+  simp only [bind_ok] at hrec
+  generalize hpv : (Shape.fill (fields (rawOf f chunk) item) (peakShape _ h (loc.val - off)
+    (loc.val - (loc.val - off)) first.val)).value = peakV at hrec
+  have atEnd : c.val = f.digests.val.length := by simp at cv; omega
+  simp [outcome, atEnd] at hrec
+  cases hb : bagRoot (Array.make 2#usize [mmb_geometry.DOMAIN, qmdb.BACKWARD_FOLD] (by rfl)) true
+      f.leaves (UScalar.cast .U64 f.inactive) (toFoldOf true f.inactive.val pre.length)
+      (listed f.digests.val (afterStartOf true f.inactive.val pre.length)
+        (siblingsStartOf true f.inactive.val pre.length post.length) peakV) with
+  | none => simp [hb] at hrec
+  | some merkle =>
+  simp [hb, canonical_ok] at hrec
+  subst hrec
+  -- `Plan` selects the same peak and layout.
+  have bitNz : chunk ≠ Vector.replicate 32 0 := by
+    intro z; subst z; simp [Active.activeBit] at bit
+  have hInactive : f.inactive.val ≤ (heights f.leaves.val).length := by omega
+  have iLt : i < (heights f.leaves.val).length := by omega
+  have postLen : post.length = (heights f.leaves.val).length - i - 1 := by omega
+  obtain ⟨beforeEq, countEq⟩ := assemble_split f.inactive.val i (heights f.leaves.val).length
+    hInactive iLt
+  have recipeEq : plan f.leaves.val f.inactive.val loc.val true =
+      some (assemble f.leaves.val f.inactive.val loc.val i h off (heights f.leaves.val).length
+        (true && decide (loc.val / 256 < graftedChunks f.leaves.val))) := by
+    have small : f.leaves.val ≤ 0x400000000000001e := by simpa [Peaks.maxLeaves] using valid
+    simp [plan, cov.2, small, hInactive, sel]
+  -- The facts the suffix checks established, in `Plan`'s terms.
+  have nbL : nb.val = f.leaves.val % 256 := by simpa using nbv
+  have cpL : cp.val = f.leaves.val / 256 := by simpa using cpv
+  have gapC : gap.val = cp.val - born.val := by simpa using gapv
+  have pendInfo : (match optionOf f.pending with
+      | none => ¬ graftedChunks f.leaves.val < f.leaves.val / 256
+      | some d => graftedChunks f.leaves.val < f.leaves.val / 256 ∧ d.length = 32 ∧
+          (loc.val / 256 = graftedChunks f.leaves.val → d = Hash.hash (Active.literal chunk))) := by
+    cases hp : f.pending with
+    | none =>
+      rw [hp] at pendOk
+      simp only [optionOf]
+      simp only at pendOk
+      omega
+    | some d =>
+      rw [hp] at pendOk
+      simp only [optionOf]
+      obtain ⟨g1, gc⟩ := pendOk
+      exact ⟨by omega, wide.pending d hp, fun e => gc (by omega)⟩
+  have tailInfo : (match optionOf f.partial with
+      | none => f.leaves.val % 256 = 0
+      | some d => f.leaves.val % 256 ≠ 0 ∧ d.length = 32 ∧
+          (loc.val / 256 = f.leaves.val / 256 → d = Hash.hash (Active.literal chunk))) := by
+    cases hp : f.partial with
+    | none =>
+      rw [hp] at tailOk
+      simp only [optionOf]
+      simp only at tailOk
+      omega
+    | some d =>
+      rw [hp] at tailOk
+      simp only [optionOf]
+      obtain ⟨n1, tc⟩ := tailOk
+      exact ⟨by omega, wide.trailing d hp, fun e => tc (by omega)⟩
+  -- The value of `Plan`'s tree.
+  have offLe : off ≤ loc.val := by omega
+  have firstEq : first.val = (if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val) +
+      ((f.inactive.val - (i + 1)) +
+        (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0)) := by
+    rw [countEq, firstv, preLen, postLen]
+  have targetVal : (Shape.fill (fields (rawOf f chunk) item)
+      (peakShape (true && decide (loc.val / 256 < graftedChunks f.leaves.val)) h (loc.val - off)
+        off ((if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val) +
+          ((f.inactive.val - (i + 1)) +
+            (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0))))).value
+      = peakV := by
+    rw [← hpv, ← firstEq, show loc.val - (loc.val - off) = off by omega]
+    simp [bitNz, bornv]
+  have lens : (if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val) +
+      ((f.inactive.val - (i + 1)) +
+        (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0)) ≤
+      f.digests.val.length := by rw [← firstEq]; omega
+  obtain ⟨first', rest', hlist, hfold⟩ := val_foldTarget (fields (rawOf f chunk) item) i
+    f.inactive.val
+    ((List.range ((if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val))).map
+      fun j => Shape.atom (.sibling j))
+    (peakShape (true && decide (loc.val / 256 < graftedChunks f.leaves.val)) h (loc.val - off)
+      off ((if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val) +
+        ((f.inactive.val - (i + 1)) +
+          (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0))))
+    ((List.range ((f.inactive.val - (i + 1)) +
+        (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0))).map
+      fun j => Shape.atom (.sibling ((if min i f.inactive.val = 0 then 0 else 1) +
+        (i - f.inactive.val) + j)))
+  have listEq : first' :: rest' = listed f.digests.val
+      (afterStartOf true f.inactive.val pre.length)
+      (siblingsStartOf true f.inactive.val pre.length post.length) peakV := by
+    rw [← hlist]
+    simp only [List.map_append, List.map_cons]
+    rw [left_vals (rawOf f chunk) _ _ (Nat.le_trans (Nat.le_add_right _ _) lens),
+      right_vals (rawOf f chunk) _ _ _ lens]
+    simp only [val] at targetVal ⊢
+    rw [targetVal]
+    simp only [listed, rawOf, preLen, ← beforeEq]
+    congr 3
+    rw [postLen]
+    omega
+  rw [← listEq] at hb
+  simp only [bagRoot] at hb
+  split at hb
+  case isFalse => simp at hb
+  have merkleEq : merkle = rootTerm (Aeneas.Std.Array.make 2#usize
+      [mmb_geometry.DOMAIN, qmdb.BACKWARD_FOLD] (by rfl)) f.leaves (UScalar.cast .U64 f.inactive)
+      (bagWith foldTerm true (toFoldOf true f.inactive.val pre.length - 1) first' rest') := by
+    simpa using hb.symm
+  -- The Merkle root of `Plan`'s tree is production's.
+  have merkleVal : val (fields (rawOf f chunk) item)
+      (merkleShape f.leaves.val f.inactive.val (foldTarget i f.inactive.val
+        ((List.range ((if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val))).map
+      fun j => Shape.atom (.sibling j)) (peakShape (true && decide (loc.val / 256 < graftedChunks f.leaves.val)) h (loc.val - off)
+      off ((if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val) +
+        ((f.inactive.val - (i + 1)) +
+          (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0)))) ((List.range ((f.inactive.val - (i + 1)) +
+        (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0))).map
+      fun j => Shape.atom (.sibling ((if min i f.inactive.val = 0 then 0 else 1) +
+        (i - f.inactive.val) + j))))) = merkle := by
+    rw [val_merkle (fields (rawOf f chunk) item) rfl (fun _ => rfl), hfold, merkleEq, preLen]
+  have pendArg : (match optionOf f.pending with
+      | none => ¬ graftedChunks f.leaves.val < f.leaves.val / 256
+      | some d => graftedChunks f.leaves.val < f.leaves.val / 256 ∧
+          fields (rawOf f chunk) item .pending = d ∧
+          (loc.val / 256 = graftedChunks f.leaves.val → d = Hash.hash (Active.literal chunk))) := by
+    cases hp : optionOf f.pending with
+    | none => rw [hp] at pendInfo; exact pendInfo
+    | some d =>
+      rw [hp] at pendInfo
+      exact ⟨pendInfo.1, by simp [fields, RawProof.get, rawOf, hp], pendInfo.2.2⟩
+  have tailArg : (match optionOf f.partial with
+      | none => f.leaves.val % 256 = 0
+      | some d => f.leaves.val % 256 ≠ 0 ∧ fields (rawOf f chunk) item .trailing = d ∧
+          (loc.val / 256 = f.leaves.val / 256 → d = Hash.hash (Active.literal chunk))) := by
+    cases hp : optionOf f.partial with
+    | none => rw [hp] at tailInfo; exact tailInfo
+    | some d =>
+      rw [hp] at tailInfo
+      exact ⟨tailInfo.1, by simp [fields, RawProof.get, rawOf, hp], tailInfo.2.2⟩
+  have ev := envelope_val (fields (rawOf f chunk) item) f.ops_root chunk rfl (fun _ => rfl) rfl
+    f.leaves.val f.inactive.val loc.val (foldTarget i f.inactive.val ((List.range ((if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val))).map
+      fun j => Shape.atom (.sibling j)) (peakShape (true && decide (loc.val / 256 < graftedChunks f.leaves.val)) h (loc.val - off)
+      off ((if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val) +
+        ((f.inactive.val - (i + 1)) +
+          (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0)))) ((List.range ((f.inactive.val - (i + 1)) +
+        (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0))).map
+      fun j => Shape.atom (.sibling ((if min i f.inactive.val = 0 then 0 else 1) +
+        (i - f.inactive.val) + j))))
+    (optionOf f.pending) (optionOf f.partial) pendArg tailArg
+  rw [merkleVal] at ev
+  have tailWord : count (UInt64.ofNat (f.leaves.val % 256)) = part (.Bytes (Verifier.be nb)) := by
+    rw [← nbL]; exact word_eq nb
+  rw [tailWord] at ev
+  -- The validity checks of `RawProof`.
+  have fieldsOk : (rawOf f chunk).fieldsValid (assemble f.leaves.val f.inactive.val loc.val i h
+      off (heights f.leaves.val).length
+      (true && decide (loc.val / 256 < graftedChunks f.leaves.val))) f.leaves.val loc.val =
+      true := by
+    have pendSome : graftedChunks f.leaves.val < f.leaves.val / 256 →
+        (optionOf f.pending).isSome := by
+      intro lt
+      cases hp : optionOf f.pending with
+      | none => rw [hp] at pendInfo; exact absurd lt pendInfo
+      | some d => rfl
+    have tailSome : f.leaves.val % 256 ≠ 0 → (optionOf f.partial).isSome := by
+      intro nz
+      cases hp : optionOf f.partial with
+      | none => rw [hp] at tailInfo; exact absurd tailInfo nz
+      | some d => rfl
+    have leftA : ∀ e ∈ ((List.range ((if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val))).map
+      fun j => Shape.atom (.sibling j)), e.available (rawOf f chunk) = true := by
+      intro e he
+      simp only [List.mem_map, List.mem_range] at he
+      obtain ⟨j, hj, rfl⟩ := he
+      simp only [Shape.available, rawOf]
+      exact decide_eq_true (Nat.lt_of_lt_of_le hj (Nat.le_trans (Nat.le_add_right _ _) lens))
+    have rightA : ∀ e ∈ ((List.range ((f.inactive.val - (i + 1)) +
+        (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0))).map
+      fun j => Shape.atom (.sibling ((if min i f.inactive.val = 0 then 0 else 1) +
+        (i - f.inactive.val) + j))), e.available (rawOf f chunk) = true := by
+      intro e he
+      simp only [List.mem_map, List.mem_range] at he
+      obtain ⟨j, hj, rfl⟩ := he
+      simp only [Shape.available, rawOf]
+      exact decide_eq_true (Nat.lt_of_lt_of_le (Nat.add_lt_add_left hj _) lens)
+    have targetA := available_peak (rawOf f chunk)
+      (true && decide (loc.val / 256 < graftedChunks f.leaves.val)) h (loc.val - off) off
+      ((if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val) +
+        ((f.inactive.val - (i + 1)) +
+          (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0)))
+      (by simp only [rawOf]; omega)
+    have foldA := available_foldTarget (rawOf f chunk) i f.inactive.val ((List.range ((if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val))).map
+      fun j => Shape.atom (.sibling j)) ((List.range ((f.inactive.val - (i + 1)) +
+        (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0))).map
+      fun j => Shape.atom (.sibling ((if min i f.inactive.val = 0 then 0 else 1) +
+        (i - f.inactive.val) + j))) (peakShape (true && decide (loc.val / 256 < graftedChunks f.leaves.val)) h (loc.val - off)
+      off ((if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val) +
+        ((f.inactive.val - (i + 1)) +
+          (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0)))) (by
+      intro e he
+      simp only [List.mem_append, List.mem_cons] at he
+      rcases he with h₁ | rfl | h₂
+      · exact leftA e h₁
+      · exact targetA
+      · exact rightA e h₂)
+    simp only [RawProof.fieldsValid, Bool.and_eq_true, beq_iff_eq, List.all_eq_true]
+    refine ⟨⟨⟨⟨⟨⟨bit, ?_⟩, wide.ops⟩, ?_⟩, ?_⟩, ?_⟩, ?_⟩
+    · simp only [assemble, rawOf]; omega
+    · intro d hd; simpa using wide.digests d hd
+    · exact envelope_available (rawOf f chunk) f.leaves.val f.inactive.val loc.val _ foldA
+        pendSome tailSome
+    · cases hp : optionOf f.pending with
+      | none =>
+        rw [hp] at pendInfo
+        simp [suffixMatches, rawOf, hp, pendInfo]
+      | some d =>
+        rw [hp] at pendInfo
+        obtain ⟨lt, len, cv⟩ := pendInfo
+        by_cases at_g : loc.val / 256 = graftedChunks f.leaves.val
+        · simp [suffixMatches, rawOf, hp, lt, at_g, cv at_g, Hash.hashLength]
+        · simp [suffixMatches, rawOf, hp, lt, len, at_g]
+    · cases hp : optionOf f.partial with
+      | none =>
+        rw [hp] at tailInfo
+        simp [suffixMatches, rawOf, hp, tailInfo]
+      | some d =>
+        rw [hp] at tailInfo
+        obtain ⟨nz, len, cv⟩ := tailInfo
+        by_cases at_end : loc.val / 256 = f.leaves.val / 256
+        · simp [suffixMatches, rawOf, hp, nz, at_end, cv at_end, Hash.hashLength]
+        · simp [suffixMatches, rawOf, hp, nz, len, at_end]
+  simp only [val] at ev
+  have valOk : ((assemble f.leaves.val f.inactive.val loc.val i h off (heights f.leaves.val).length
+      (true && decide (loc.val / 256 < graftedChunks f.leaves.val))).tree.fill
+        (fields (rawOf f chunk) item)).value = CurrentRoot.term f.ops_root merkle
+      (optionOf f.pending)
+      ((optionOf f.partial).map fun d => (part (.Bytes (Verifier.be nb)), d)) := ev
+  generalize assemble f.leaves.val f.inactive.val loc.val i h off (heights f.leaves.val).length
+    (true && decide (loc.val / 256 < graftedChunks f.leaves.val)) = R at recipeEq fieldsOk valOk
+  simp [RawProof.verify, RawProof.reconstruct, recipeEq, fieldsOk, valOk]
+
+
+/-- If the extracted verifier of a current operation proof over an MMB accepts, so does
+`RawProof.verify` on the same fields. -/
+theorem verify_operation_refines (f : current.Fields Bytes) (loc : Std.U64)
+    (chunk : Active.Chunk) (item : Slice Std.U8) (root : Bytes) (wide : Wide f)
+    (acc : current.verify_operation mmbGeometry dyTerms () () qmdb.BACKWARD_FOLD true f loc
+      (chunkSlice chunk) item root = RustM.ok true) :
+    (rawOf f chunk).verify root f.leaves.val f.inactive.val loc.val (part (.Bytes item)) =
+      true := by
+  have active := Active.rustActive_eq chunk loc
+  simp only [Active.rustActive] at active
+  unfold current.verify_operation at acc
+  simp only [len_ok, chunk_len, chunk_bits_ok, bind_ok, active] at acc
+  by_cases bit : Active.activeBit chunk loc.val = true
+  case neg => simp [bit] at acc
+  simp only [bit, ↓reduceIte, reconstruct.Single.new, bind_ok] at acc
+  obtain ⟨chunks, hs, rest⟩ := bind_eq_ok acc
+  have one : chunks.val = [chunkSlice chunk] := by
+    simp [CoreModels.core.array.Array.as_slice,
+      CoreModels.rust_primitives.slice.array_as_slice] at hs
+    rw [← hs]; rfl
+  obtain ⟨o, hrec, k⟩ := bind_eq_ok rest
+  cases o with
+  | none => simp at k
+  | some r =>
+    have same : r = root := by simpa [dyTerms] using k
+    subst same
+    exact reconstruct_refines f loc chunk chunks one item r wide bit hrec
 
 end
 end Qmdb.Mmb.Extracted
