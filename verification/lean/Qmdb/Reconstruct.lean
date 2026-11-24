@@ -1476,6 +1476,22 @@ theorem reconstruct_single (g : G) (n : N) (domain : Aeneas.Std.Array Std.U8 2#u
           by_cases c : toFoldOf backward inactive.val pre.length ≤ rs.length + 1 <;> simp [c]
       · simp [cur]
 
+/-- A proof of one item at or past the last leaf fails. -/
+theorem reconstruct_outside (g : G) (n : N) (domain : Aeneas.Std.Array Std.U8 2#usize)
+    (backward : Bool) (leaves : Std.U64) (inactive : Std.Usize) (digests : Slice Bytes)
+    (loc : Std.U64) (item : Slice Std.U8) (maxLeaves : Std.U64)
+    (hmax : geo.max_leaves g = RustM.ok maxLeaves) (bound : leaves.val ≤ maxLeaves.val)
+    (out : leaves.val ≤ loc.val) :
+    ∃ err, reconstruct.reconstruct geo dyTerms nodes single element noCollect g () n domain
+      backward leaves inactive digests loc 1#u64 (.Some item) () = RustM.ok (.Err err) := by
+  unfold reconstruct.reconstruct
+  have nz : ¬ (1#u64 = 0#u64) := by decide
+  by_cases late : maxLeaves.val ≤ loc.val
+  · exact ⟨.InvalidStartLoc, by simp [hmax, nz, late]⟩
+  · obtain ⟨room, hroom, roomv⟩ := sub_ok maxLeaves loc (by omega)
+    obtain ⟨stop, hstop, stopv⟩ := add_ok loc 1#u64 (by scalar_tac)
+    have past : leaves.val < stop.val := by simp at stopv; omega
+    exact ⟨.InvalidEndLoc, by by_cases z : room.val = 0 <;> simp [hmax, nz, late, hroom, z, hstop, past]⟩
 end Single
 
 end

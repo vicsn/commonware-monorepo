@@ -1,5 +1,6 @@
 module
 public import Qmdb.Assumptions
+public import Qmdb.MmrPeaks
 public import Commonware.Symbolic.RustM
 
 /-! The extracted verifier on DyLean terms. Uniqueness: two openings that it accepts at the same
@@ -101,14 +102,18 @@ theorem maxLeaves_fits : 2 * maxLeaves ≤ 2 ^ 64 := by
 
 /-! ## The production backend -/
 
+/-- The production MMR geometry. -/
+abbrev mmrGeometry := geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks
+/-- The nodes of the production MMR geometry, with the production encodings. -/
+abbrev Nodes := reconstruct.StandardNodes geometry.Mmr Unit
 /-- The client's opening: MMR nodes, one claimed item, siblings as terms and no collector. -/
-abbrev Opening := traversal.Opening (qmdb.Mmr Unit) qmdb.Single Unit Bytes
-/-- The extracted MMR geometry and encodings, hashing with `dyTerms`. -/
-abbrev mmr := qmdb.Mmr.Insts.Commonware_symbolicTraversalNodes dyTerms
-/-- The extracted element source that yields the one claimed item. -/
-abbrev single := qmdb.Single.Insts.CoreIterTraitsIteratorIteratorElement
-/-- The extracted reading of that element as bytes. -/
-abbrev element := qmdb.Element.Insts.CoreConvertAsRefSliceU8
+abbrev Opening := traversal.Opening Nodes reconstruct.Single Unit Bytes
+/-- The production MMR geometry and encodings, hashing with `dyTerms`. -/
+abbrev mmr := reconstruct.StandardNodes.Insts.Commonware_symbolicTraversalNodes mmrGeometry dyTerms
+/-- The production element source that yields the one claimed item. -/
+abbrev single := reconstruct.Single.Insts.CoreIterTraitsIteratorIteratorElement
+/-- The production reading of that element as bytes. -/
+abbrev element := reconstruct.Element.Insts.CoreConvertAsRefSliceU8
 /-- The extracted collector that records nothing. -/
 abbrev noCollect := Tuple.Insts.Commonware_symbolicTraversalCollect Bytes
 /-- The extracted production backend of the traversal, over those four. -/
@@ -170,9 +175,9 @@ theorem leaf_some (o : Opening) (a : Slice Std.U8) (h : o.elements = some a)
     traversal.Opening.Insts.Commonware_symbolicTraversalBackend.leaf mmr single element noCollect
       o p = RustM.ok (.Ok (leafTerm p a), { o with elements := none }) := by
   simp [traversal.Opening.Insts.Commonware_symbolicTraversalBackend.leaf, h,
-    qmdb.Single.Insts.CoreIterTraitsIteratorIteratorElement.next,
-    qmdb.Element.Insts.CoreConvertAsRefSliceU8.as_ref,
-    qmdb.Mmr.Insts.Commonware_symbolicTraversalNodes.leaf_digest, leaf_eq]
+    reconstruct.Single.Insts.CoreIterTraitsIteratorIteratorElement.next,
+    reconstruct.Element.Insts.CoreConvertAsRefSliceU8.as_ref,
+    reconstruct.StandardNodes.Insts.Commonware_symbolicTraversalNodes.leaf_digest, leaf_eq]
 
 theorem ilog2_ok (w : Std.U64) (n : Nat) (hw : w.val = 2 ^ n) :
     CoreModels.core.num.U64.ilog2 w = RustM.ok (⟨BitVec.ofNat 32 n⟩ : Std.U32) := by
@@ -196,7 +201,9 @@ theorem children_ok (p w : Std.U64) (n : Nat) (hw : w.val = 2 ^ n) (hn : n ≤ m
   obtain ⟨rp, hrp, rpv⟩ := sub_ok p 1#u64 (by scalar_tac)
   refine ⟨lp, rp, fun o => ?_, by omega, by simpa using rpv⟩
   simp [traversal.Opening.Insts.Commonware_symbolicTraversalBackend.children, ilog2_ok w n hw,
-    qmdb.Mmr.Insts.Commonware_symbolicTraversalNodes.children, hz, hlp, hrp]
+    reconstruct.StandardNodes.Insts.Commonware_symbolicTraversalNodes.children,
+    geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks.children,
+    mmr_geometry.children, hz, hlp, hrp]
 
 theorem collect_ok (o : Opening) (lp : Std.U64) (l : Bytes) (rp : Std.U64)
     (r : Bytes) :
@@ -205,11 +212,11 @@ theorem collect_ok (o : Opening) (lp : Std.U64) (l : Bytes) (rp : Std.U64)
   simp [traversal.Opening.Insts.Commonware_symbolicTraversalBackend.collect,
     Tuple.Insts.Commonware_symbolicTraversalCollect.collect]
 
-theorem node_ok (o : Opening) (p : Std.U64) (l r : Bytes) :
+theorem node_ok (o : Opening) (p w s : Std.U64) {n : Nat} (hw : w.val = 2 ^ n) (l r : Bytes) :
     traversal.Opening.Insts.Commonware_symbolicTraversalBackend.node mmr single element noCollect
-      o p l r = RustM.ok (nodeTerm p l r) := by
-  simp [traversal.Opening.Insts.Commonware_symbolicTraversalBackend.node,
-    qmdb.Mmr.Insts.Commonware_symbolicTraversalNodes.node_digest, node_eq]
+      o p w s l r = RustM.ok (nodeTerm p l r) := by
+  simp [traversal.Opening.Insts.Commonware_symbolicTraversalBackend.node, ilog2_ok w n hw,
+    reconstruct.StandardNodes.Insts.Commonware_symbolicTraversalNodes.node_digest, node_eq]
 
 /-- A subtree outside the queried range is read as one sibling. -/
 theorem outside (o : Opening) (p w s loc e : Std.U64)
@@ -358,7 +365,7 @@ theorem reconstruct_rebuild (H : Nat) : ∀ (p w s loc e : Std.U64)
       cases res' with
       | Err _ => simp at k'
       | Ok rr =>
-        simp [collect_ok, node_ok] at k'
+        simp [collect_ok, node_ok _ _ _ _ width] at k'
         obtain ⟨rfl, rfl⟩ := k'
         by_cases side : loc.val < mid.val
         · obtain ⟨below, xs⟩ := ih lp half s loc e o x item l halfv' (by omega)
@@ -410,11 +417,106 @@ theorem rebuild_inj (a b : Slice Std.U8) (loc : Nat) (n : Nat) : ∀ (p s : Nat)
 
 /-- The two domain bytes of the client's root, read from the extraction. -/
 abbrev domain : Aeneas.Std.Array Std.U8 2#usize :=
-  Array.make 2#usize [qmdb.MMR_DOMAIN, qmdb.FORWARD_FOLD]
+  Array.make 2#usize [mmr_geometry.DOMAIN, qmdb.BACKWARD_FOLD]
 
 theorem eq_ok (a b : Bytes) :
     dyTerms.corecmpPartialEqInst.eq a b = RustM.ok (decide (a = b)) :=
   rfl
+
+/-- The opening the client's traversal starts from. -/
+abbrev start (item : Slice Std.U8) (ws : Slice Bytes) : Opening :=
+  { nodes := ⟨(), ()⟩, elements := .Some item, siblings := ws, cursor := 0#usize,
+    collected := () }
+
+/-- The client's verdict once the traversal of its one peak has returned `r` and left `o`. -/
+def verdict (w : Std.U64) (root : Bytes) (ws : Slice Bytes)
+    (r : CoreModels.core.result.Result Bytes traversal.Error) (o : Opening) : Bool :=
+  match r with
+  | .Ok peak => decide (o.elements = .None ∧ o.cursor.val = ws.val.length ∧
+      rootTerm domain w peak = root)
+  | .Err _ => false
+
+/-- Inside the bound on the height and the tree, the client runs the production traversal of its
+one peak from the first sibling, provided it was given exactly `h` siblings. -/
+theorem verify_eq (h : Std.U32) (bound : h.val ≤ maxHeight) (loc : Std.U64) (root : Bytes)
+    (item : Slice Std.U8) (ws : Slice Bytes) (inside : loc.val < 2 ^ h.val) :
+    ∃ (w p e : Std.U64), w.val = 2 ^ h.val ∧ p.val = 2 * (2 ^ h.val - 1) ∧
+      e.val = loc.val + 1 ∧
+      qmdb.verify dyTerms () h loc root item ws =
+        if ws.val.length = h.val then (do
+          let (r, o) ← traversal.reconstruct backend (start item ws) p w 0#u64 loc e
+          RustM.ok (verdict w root ws r o))
+        else RustM.ok false := by
+  have top := maxHeight_eq
+  have short : ¬ h > qmdb.MAX_HEIGHT := mt (above_maxHeight h).mp (by omega)
+  obtain ⟨leaves, hl, lv⟩ := Reconstruct.width_ok h (by omega)
+  obtain ⟨st, p, hh, hpeaks, pv, hhv, yields⟩ := MmrPeaks.single_peak h.val (by omega) leaves lv
+  have same : hh = h := UScalar.eq_of_val_eq hhv
+  subst same
+  have pow : 2 ^ hh.val ≤ 2 ^ 62 := Nat.pow_le_pow_right (by decide) (by omega)
+  obtain ⟨w, ls, e, first, wv, lsv, ev, firstv, run⟩ := Reconstruct.reconstruct_single
+    mmrGeometry mmr () ⟨(), ()⟩ domain true leaves 0#usize ws loc item [] [] p hh st
+    mmr_geometry.MAX_LEAVES
+    (by simp [geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks.max_leaves])
+    (by simp [mmr_geometry.MAX_LEAVES]; omega) (by simp [mmr_geometry.MAX_LEAVES])
+    (by simp [geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks.peaks, hpeaks])
+    yields (by simp [Reconstruct.Low]; omega) (by simp [Reconstruct.span, lv])
+    (by simp [Reconstruct.span]; omega) (by simp) (by simp)
+  have first0 : first = 0#usize := UScalar.eq_of_val_eq (by
+    rw [firstv]
+    simp [Reconstruct.siblingsStartOf, Reconstruct.afterStartOf, Reconstruct.foldOf,
+      Reconstruct.individualOf])
+  have ls0 : ls = 0#u64 := UScalar.eq_of_val_eq (by rw [lsv]; simp [Reconstruct.span])
+  subst first0 ls0
+  refine ⟨w, p, e, wv, by omega, ev, ?_⟩
+  unfold qmdb.verify
+  simp only [short, ↓reduceIte, hl, bind_ok, reconstruct.StandardNodes.new,
+    reconstruct.Single.new]
+  have wl : w = leaves := UScalar.eq_of_val_eq (by omega)
+  subst wl
+  have zero : (0#usize).val = 0 := rfl
+  simp only [zero, Nat.zero_add] at run ⊢
+  rw [run]
+  by_cases len : ws.val.length = hh.val
+  · simp only [len, Nat.lt_irrefl, ↓reduceIte]
+    generalize traversal.reconstruct _ _ p w 0#u64 loc e = T
+    simp
+    have bag (peak : Bytes) : Reconstruct.bagRoot domain true w (UScalar.cast .U64 0#usize)
+        (Reconstruct.toFoldOf true 0 0) (Reconstruct.listed ws.val (Reconstruct.afterStartOf true 0 0)
+          (Reconstruct.siblingsStartOf true 0 0 0) peak) = some (rootTerm domain w peak) := by
+      simp [Reconstruct.bagRoot, Reconstruct.toFoldOf, Reconstruct.foldOf, Reconstruct.listed,
+        Reconstruct.afterStartOf, Reconstruct.siblingsStartOf, Reconstruct.individualOf,
+        Reconstruct.bagWith, Reconstruct.rootTerm, rootTerm, Reconstruct.be, be]
+    congr 1
+    funext x
+    obtain ⟨r, o⟩ := x
+    cases r with
+    | Err err => cases err <;> simp [Reconstruct.outcome, verdict]
+    | Ok peak =>
+      cases helem : o.elements <;> simp [Reconstruct.outcome, verdict, helem, bag, eq_ok]
+      by_cases cur : o.cursor.val = ws.val.length <;> simp [cur]
+  · rcases Nat.lt_or_gt_of_ne len with lt | gt
+    · simp [lt, len]
+    · have c1 : ¬ ws.val.length < hh.val := by omega
+      simp [c1, gt, len]
+
+/-- Outside the tree the client rejects. -/
+theorem verify_outside (h : Std.U32) (bound : h.val ≤ maxHeight) (loc : Std.U64) (root : Bytes)
+    (item : Slice Std.U8) (ws : Slice Bytes) (out : 2 ^ h.val ≤ loc.val) :
+    qmdb.verify dyTerms () h loc root item ws = RustM.ok false := by
+  have top := maxHeight_eq
+  have short : ¬ h > qmdb.MAX_HEIGHT := mt (above_maxHeight h).mp (by omega)
+  obtain ⟨leaves, hl, lv⟩ := Reconstruct.width_ok h (by omega)
+  have pow : 2 ^ h.val ≤ 2 ^ 62 := Nat.pow_le_pow_right (by decide) (by omega)
+  obtain ⟨err, run⟩ := Reconstruct.reconstruct_outside mmrGeometry mmr () ⟨(), ()⟩ domain true
+    leaves 0#usize ws loc item mmr_geometry.MAX_LEAVES
+    (by simp [geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks.max_leaves])
+    (by simp [mmr_geometry.MAX_LEAVES]; omega) (by omega)
+  unfold qmdb.verify
+  simp only [short, ↓reduceIte, hl, bind_ok, reconstruct.StandardNodes.new,
+    reconstruct.Single.new]
+  rw [run]
+  simp
 
 /-- What an accepting `verify` has checked. -/
 theorem verify_true {h : Std.U32} {loc : Std.U64} {root : Bytes}
@@ -422,43 +524,26 @@ theorem verify_true {h : Std.U32} {loc : Std.U64} {root : Bytes}
     (acc : qmdb.verify dyTerms () h loc root item ws = RustM.ok true) :
     h.val ≤ maxHeight ∧ loc.val < 2 ^ h.val ∧ ∃ (w p e : Std.U64) (peak : Bytes) (r : Opening),
       w.val = 2 ^ h.val ∧ p.val = 2 * (2 ^ h.val - 1) ∧ e.val = loc.val + 1 ∧
-      traversal.reconstruct backend
-        { nodes := (), elements := some item, siblings := ws, cursor := 0#usize, collected := () }
-        p w 0#u64 loc e = RustM.ok (.Ok peak, r) ∧ rootTerm domain w peak = root ∧
-      r.cursor.val = ws.val.length := by
-  unfold qmdb.verify at acc
+      traversal.reconstruct backend (start item ws) p w 0#u64 loc e = RustM.ok (.Ok peak, r) ∧
+      rootTerm domain w peak = root ∧ r.cursor.val = ws.val.length := by
   have top := maxHeight_eq
-  have fits := maxLeaves_fits
   by_cases tall : h.val > maxHeight
   · have : h > qmdb.MAX_HEIGHT := (above_maxHeight h).mpr tall
+    unfold qmdb.verify at acc
     simp [this] at acc
-  · have short : ¬ h > qmdb.MAX_HEIGHT := mt (above_maxHeight h).mp tall
-    have small : 2 ^ h.val ≤ maxLeaves := leaves_le_maxLeaves (by omega)
-    have one : 1 ≤ 2 ^ h.val := Nat.one_le_two_pow
-    obtain ⟨w, hw, wv⟩ := pow_ok h (by omega)
-    by_cases out : loc.val ≥ 2 ^ h.val
-    · have : w.val ≤ loc.val := by omega
-      simp [short, hw, this] at acc
-    · have inside : ¬ loc ≥ w := by scalar_tac
-      obtain ⟨i, hi, iv⟩ := sub_ok w 1#u64 (by scalar_tac)
-      obtain ⟨p, hp, pv⟩ := mul_ok 2#u64 i (by scalar_tac)
-      obtain ⟨e, he, ev⟩ := add_ok loc 1#u64 (by scalar_tac)
-      simp only [short, ↓reduceIte, hw, bind_ok, inside, hi, hp, he, traversal.Opening.new] at acc
-      obtain ⟨⟨res, r⟩, hrun, k⟩ := bind_eq_ok acc
-      cases res with
-      | Err _ => simp at k
-      | Ok peak =>
-        simp [traversal.Opening.impl.cursor, len_ok, root_eq, eq_ok] at k
-        split at k
-        · rename_i full
-          have matched := ok_inj k
-          simp at matched
-          have used : r.cursor.val = ws.val.length := by
-            have := congrArg UScalar.val full
-            simpa using this
-          exact ⟨by omega, by omega, w, p, e, peak, r, wv, by scalar_tac, by scalar_tac, hrun,
-            matched, used⟩
-        · simp at k
+  by_cases out : 2 ^ h.val ≤ loc.val
+  · rw [verify_outside h (by omega) loc root item ws out] at acc
+    simp at acc
+  obtain ⟨w, p, e, wv, pv, ev, run⟩ := verify_eq h (by omega) loc root item ws (by omega)
+  rw [run] at acc
+  split at acc
+  · obtain ⟨⟨res, r⟩, hrun, k⟩ := bind_eq_ok acc
+    cases res with
+    | Err _ => simp [verdict] at k
+    | Ok peak =>
+      simp [verdict] at k
+      exact ⟨by omega, by omega, w, p, e, peak, r, wv, pv, ev, hrun, k.2.2, k.2.1⟩
+  · simp at acc
 
 /-- The extracted verifier accepts only heights up to the bound and locations
 inside the tree. -/
@@ -597,8 +682,8 @@ theorem honest_rec (items : Std.U64 → Slice Std.U8) (H : Nat) :
       rw [traversal.reconstruct.eq_def]
       simp only [hstop, bind_ok]
       simp [c1, c2, c3, kids, hhalf, hmid, hl,
-        outside x rp half mid loc e (by omega) (Or.inr (by omega)), hc, collect_ok, node_ok,
-        value]
+        outside x rp half mid loc e (by omega) (Or.inr (by omega)), hc, collect_ok,
+        node_ok _ _ _ _ width, value]
     · simp only [side, ↓reduceIte] at sib
       obtain ⟨room, value, next⟩ := drop_cons sib
       obtain ⟨c, hc, cv⟩ := sibling_ok o room
@@ -608,7 +693,7 @@ theorem honest_rec (items : Std.U64 → Slice Std.U8) (H : Nat) :
       refine ⟨y, ?_, ye, ys, by simp [yc, cv]; omega⟩
       rw [traversal.reconstruct.eq_def]
       simp only [hstop, bind_ok]
-      simp [c1, c2, c3, kids, hhalf, hmid, hr, hc, collect_ok, node_ok, value,
+      simp [c1, c2, c3, kids, hhalf, hmid, hr, hc, collect_ok, node_ok _ _ _ _ width, value,
         outside o lp half s loc e (by omega) (Or.inl (by omega))]
 
 /-- The honest root of a snapshot of height `h` holding `items`. -/
@@ -635,40 +720,24 @@ theorem honest_verify (items : Std.U64 → Slice Std.U8) (h : Std.U32)
   have fits := maxLeaves_fits
   have small : 2 ^ h.val ≤ maxLeaves := leaves_le_maxLeaves bound
   have one : 1 ≤ 2 ^ h.val := Nat.one_le_two_pow
-  obtain ⟨w, hw, wv⟩ := pow_ok h (by omega)
-  have short : ¬ h > qmdb.MAX_HEIGHT := mt (above_maxHeight h).mp (by omega)
-  have inside' : ¬ loc ≥ w := by scalar_tac
-  obtain ⟨i, hi, iv⟩ := sub_ok w 1#u64 (by scalar_tac)
-  obtain ⟨p, hp, pv⟩ := mul_ok 2#u64 i (by scalar_tac)
-  obtain ⟨e, he, ev⟩ := add_ok loc 1#u64 (by scalar_tac)
-  have pv' : p.val = 2 * (2 ^ h.val - 1) := by simp at iv pv; omega
-  obtain ⟨r, run, -, -, rc⟩ := honest_rec items h.val p w 0#u64 loc e
-    { nodes := (), elements := some (items loc), siblings := ws, cursor := 0#usize,
-      collected := () } rest wv bound (by omega) (by simp; omega) (by simp) (by simp; omega)
-    (by scalar_tac) rfl (by simp [siblings, pv'])
-  have counted : r.cursor = Slice.len ws ↔ rest = [] := by
-    have len : (Slice.len ws).val = h.val + rest.length := by simp [siblings, path_length]
-    simp at rc
-    constructor
-    · intro same
-      have := congrArg UScalar.val same
-      rw [rc, len] at this
-      exact List.eq_nil_of_length_eq_zero (by omega)
-    · intro empty
-      apply UScalar.eq_of_val_eq
-      rw [rc, len, empty]
-      rfl
-  have rooted : rootTerm domain w (tree items h.val p.val 0) = honestRoot items h.val := by
-    have : w = pos (2 ^ h.val) := by rw [← wv, pos_val]
-    simp [honestRoot, this, pv']
-  unfold qmdb.verify
-  simp only [short, ↓reduceIte, hw, bind_ok, inside', hi, hp, he, traversal.Opening.new]
+  obtain ⟨w, p, e, wv, pv, ev, run⟩ :=
+    verify_eq h bound loc (honestRoot items h.val) (items loc) ws inside
   rw [run]
-  simp [traversal.Opening.impl.cursor, len_ok, root_eq, eq_ok]
+  have len : ws.val.length = h.val + rest.length := by simp [siblings, path_length]
   by_cases empty : rest = []
-  · simp [counted.mpr empty, empty]
-    exact rooted
-  · simp [mt counted.mp empty, empty]
+  · subst empty
+    obtain ⟨r, hrun, re, -, rc⟩ := honest_rec items h.val p w 0#u64 loc e (start (items loc) ws)
+      [] wv bound (by omega) (by simp; omega) (by simp) (by simp; omega) ev rfl
+      (by simp [siblings, pv])
+    have rooted : rootTerm domain w (tree items h.val p.val 0) = honestRoot items h.val := by
+      have : w = pos (2 ^ h.val) := by rw [← wv, pos_val]
+      simp [honestRoot, this, pv]
+    simp only [len, List.length_nil, Nat.add_zero, ↓reduceIte, hrun, bind_ok]
+    simp [verdict, re, rc, len, rooted]
+  · have : ¬ ws.val.length = h.val := by
+      have := List.length_pos_iff.mpr empty
+      omega
+    simp [this, empty]
 
 /-- The extracted verifier accepts every honest opening of an honest snapshot.
 -/
@@ -714,7 +783,7 @@ theorem leaf_total (o : Opening) (p : Std.U64) : ∃ res r,
   | none =>
     refine ⟨.Err .MissingElements, { o with elements := none }, ?_⟩
     simp [traversal.Opening.Insts.Commonware_symbolicTraversalBackend.leaf, h,
-      qmdb.Single.Insts.CoreIterTraitsIteratorIteratorElement.next]
+      reconstruct.Single.Insts.CoreIterTraitsIteratorIteratorElement.next]
 
 /-- The production traversal returns, without panicking or diverging, on every subtree of an
 MMR within the production size limit, whatever the siblings, elements and queried range. -/
@@ -755,7 +824,7 @@ theorem reconstruct_total (H : Nat) : ∀ (p w s loc e : Std.U64) (o : Opening),
       obtain ⟨res', y, hr⟩ := ih rp half mid loc e x halfv' (by omega) (by omega) (by omega)
       cases res' with
       | Err _ => simp [c1, c2, c3, kids, hhalf, hmid, hl, hr]
-      | Ok r => simp [c1, c2, c3, kids, hhalf, hmid, hl, hr, collect_ok, node_ok]
+      | Ok r => simp [c1, c2, c3, kids, hhalf, hmid, hl, hr, collect_ok, node_ok _ _ _ _ width]
 
 /-- The extracted verifier returns a verdict, without panicking or diverging, on
 every input. -/
@@ -763,34 +832,23 @@ theorem verify_total
     (h : Std.U32) (loc : Std.U64) (root : Bytes)
     (item : Slice Std.U8) (ws : Slice Bytes) :
     ∃ b, qmdb.verify dyTerms () h loc root item ws = RustM.ok b := by
-  unfold qmdb.verify
   have top := maxHeight_eq
   have fits := maxLeaves_fits
   by_cases tall : h.val > maxHeight
   · have : h > qmdb.MAX_HEIGHT := (above_maxHeight h).mpr tall
+    unfold qmdb.verify
     simp [this]
-  · have short : ¬ h > qmdb.MAX_HEIGHT := mt (above_maxHeight h).mp tall
-    have small : 2 ^ h.val ≤ maxLeaves := leaves_le_maxLeaves (by omega)
-    have one : 1 ≤ 2 ^ h.val := Nat.one_le_two_pow
-    obtain ⟨w, hw, wv⟩ := pow_ok h (by omega)
-    by_cases out : loc.val ≥ 2 ^ h.val
-    · have : w.val ≤ loc.val := by omega
-      simp [short, hw, this]
-    · have inside : ¬ loc ≥ w := by scalar_tac
-      obtain ⟨i, hi, iv⟩ := sub_ok w 1#u64 (by scalar_tac)
-      obtain ⟨p, hp, pv⟩ := mul_ok 2#u64 i (by scalar_tac)
-      obtain ⟨e, he, -⟩ := add_ok loc 1#u64 (by scalar_tac)
-      obtain ⟨res, r, run⟩ := reconstruct_total h.val p w 0#u64 loc e
-        { nodes := (), elements := some item, siblings := ws, cursor := 0#usize, collected := () }
-        wv (by omega) (by simp at iv pv; omega) (by simp; omega)
-      simp only [short, ↓reduceIte, hw, bind_ok, inside, hi, hp, he, traversal.Opening.new, run]
-      cases res with
-      | Err _ => exact ⟨_, rfl⟩
-      | Ok peak =>
-        by_cases cur : r.cursor = Slice.len ws
-        · exact ⟨decide (rootTerm domain w peak = root),
-            by simp [traversal.Opening.impl.cursor, len_ok, root_eq, eq_ok, cur]⟩
-        · exact ⟨false, by simp [traversal.Opening.impl.cursor, len_ok, root_eq, eq_ok, cur]⟩
+  by_cases out : 2 ^ h.val ≤ loc.val
+  · exact ⟨false, verify_outside h (by omega) loc root item ws out⟩
+  have small : 2 ^ h.val ≤ maxLeaves := leaves_le_maxLeaves (by omega)
+  have one : 1 ≤ 2 ^ h.val := Nat.one_le_two_pow
+  obtain ⟨w, p, e, wv, pv, ev, run⟩ := verify_eq h (by omega) loc root item ws (by omega)
+  rw [run]
+  split
+  · obtain ⟨res, r, hr⟩ := reconstruct_total h.val p w 0#u64 loc e (start item ws) wv (by omega)
+      (by omega) (by simp; omega)
+    exact ⟨verdict w root ws res r, by rw [hr]; simp⟩
+  · exact ⟨false, rfl⟩
 
 end
 end Qmdb.Verifier
