@@ -1,8 +1,11 @@
 //! Differential tests of the reads client against production: current ordered databases over an
 //! MMB with 32-byte keys and values, whose key-value and exclusion proofs production's
-//! `KeyValueProof::verify` and `ExclusionProof::verify` check. On every honest proof and on
-//! altered ones (another value, another successor, another root, another key) the client must
-//! return production's verdict, and every honest proof must be accepted.
+//! `KeyValueProof::verify` and `ExclusionProof::verify` check. The databases are built at once or
+//! through a history of updates and deletes, which yields proofs with pending and partial chunks
+//! and inactive peaks. On every honest proof, on altered claims (another value, another
+//! successor, another root, another key) and on proofs with one field altered, the client must
+//! return production's verdict. Every honest proof must be accepted and every altered proof
+//! rejected.
 
 use super::{
     Digest, ExclusionProof, Key, OperationProof, Payload, Proof, Update, ValueEncoding,
@@ -30,7 +33,9 @@ use commonware_storage::{
     },
     translator::TwoCap,
 };
-use commonware_utils::{NZU16, NZU64, NZUsize, sequence::FixedBytes};
+use commonware_utils::{NZU16, NZU64, NZUsize, sequence::FixedBytes, test_rng};
+use rand::RngExt as _;
+use std::collections::BTreeMap;
 
 type Key32 = FixedBytes<32>;
 type Value32 = FixedBytes<32>;
@@ -264,17 +269,136 @@ fn exclusion(
     (expected, actual)
 }
 
+/// Every proof with one field altered: the location, the ops root, the leaf and inactive-peak
+/// counts, each range-proof digest, the pending and partial chunk digests, and the chunk.
+fn tamperings(proof: &Operation) -> Vec<(String, Operation)> {
+    let mut out = Vec::new();
+    let mut push = |name: String, f: &dyn Fn(&mut Operation)| {
+        let mut altered = proof.clone();
+        f(&mut altered);
+        out.push((name, altered));
+    };
+    let loc = *proof.loc;
+    for (name, to) in [
+        ("loc+1", loc + 1),
+        ("loc-1", loc.wrapping_sub(1)),
+        ("loc+256", loc + 256),
+    ] {
+        if to != loc && to < 1 << 40 {
+            push(name.into(), &|p| p.loc = mmb::Location::new(to));
+        }
+    }
+    push("ops root".into(), &|p| {
+        p.range_proof.ops_root = other_root(&p.range_proof.ops_root)
+    });
+    let leaves = *proof.range_proof.proof.leaves;
+    for (name, to) in [
+        ("leaves+1", leaves + 1),
+        ("leaves-1", leaves.wrapping_sub(1)),
+        ("leaves*2", leaves * 2),
+    ] {
+        if to != leaves && to < 1 << 40 {
+            push(name.into(), &|p| {
+                p.range_proof.proof.leaves = mmb::Location::new(to)
+            });
+        }
+    }
+    let inactive = proof.range_proof.proof.inactive_peaks;
+    push("inactive+1".into(), &|p| {
+        p.range_proof.proof.inactive_peaks = inactive + 1
+    });
+    if inactive > 0 {
+        push("inactive-1".into(), &|p| {
+            p.range_proof.proof.inactive_peaks = inactive - 1
+        });
+    }
+    let digests = proof.range_proof.proof.digests.len();
+    for i in 0..digests {
+        push(format!("digest {i}"), &|p| {
+            p.range_proof.proof.digests[i] = other_root(&p.range_proof.proof.digests[i])
+        });
+    }
+    if digests > 0 {
+        push("digest dropped".into(), &|p| {
+            p.range_proof.proof.digests.pop();
+        });
+    }
+    if digests > 1 {
+        push("digests swapped".into(), &|p| {
+            p.range_proof.proof.digests.swap(0, 1)
+        });
+    }
+    push("digest added".into(), &|p| {
+        p.range_proof
+            .proof
+            .digests
+            .push(sha256::Digest::from([7; 32]))
+    });
+    match proof.range_proof.pending_chunk_digest {
+        Some(d) => {
+            push("pending altered".into(), &|p| {
+                p.range_proof.pending_chunk_digest = Some(other_root(&d))
+            });
+            push("pending dropped".into(), &|p| {
+                p.range_proof.pending_chunk_digest = None
+            });
+        }
+        None => push("pending added".into(), &|p| {
+            p.range_proof.pending_chunk_digest = Some(sha256::Digest::from([7; 32]))
+        }),
+    }
+    match proof.range_proof.partial_chunk_digest {
+        Some(d) => {
+            push("partial altered".into(), &|p| {
+                p.range_proof.partial_chunk_digest = Some(other_root(&d))
+            });
+            push("partial dropped".into(), &|p| {
+                p.range_proof.partial_chunk_digest = None
+            });
+        }
+        None => push("partial added".into(), &|p| {
+            p.range_proof.partial_chunk_digest = Some(sha256::Digest::from([7; 32]))
+        }),
+    }
+    for bit in 0..256 {
+        push(format!("chunk bit {bit}"), &|p| {
+            p.chunk[bit / 8] ^= 1 << (bit % 8)
+        });
+    }
+    out
+}
+
+/// Counts of the claims checked and of the proof shapes they covered.
+#[derive(Default)]
+struct Tally {
+    claims: usize,
+    tampered: usize,
+    pending: usize,
+    partial: usize,
+    inactive: usize,
+    commit: usize,
+}
+
+impl Tally {
+    fn shape(&mut self, proof: &Operation) {
+        let range = &proof.range_proof;
+        self.pending += range.pending_chunk_digest.is_some() as usize;
+        self.partial += range.partial_chunk_digest.is_some() as usize;
+        self.inactive += (range.proof.inactive_peaks > 0) as usize;
+    }
+}
+
 /// Check every live key, and the keys between and beyond them, of `db`, whose live keys are
-/// `live` in order.
-async fn check(db: &Database, live: &[u64], probes: &[u64]) -> usize {
+/// `live` in order. Every `tamper`th proof is also checked with each field altered.
+async fn check(db: &Database, live: &[u64], probes: &[u64], tamper: usize, tally: &mut Tally) {
     let root = db.root();
     let wrong = other_root(&root);
-    let mut checked = 0;
     for (i, &seed) in live.iter().enumerate() {
         let k = key(seed);
         let (proof, v) = db.key_value_proof(&k).await.unwrap();
         let next = key(live[(i + 1) % live.len()]);
         assert_eq!(proof.next_key, next);
+        tally.shape(&proof.proof);
         let cases = [
             (k.clone(), v.clone(), next.clone(), root, true),
             (
@@ -292,45 +416,158 @@ async fn check(db: &Database, live: &[u64], probes: &[u64]) -> usize {
             let (expected, actual) = member(&proof, &k, &v, &next, &r);
             assert_eq!(expected, honest, "production, key {seed}");
             assert_eq!(actual, expected, "client, key {seed}");
-            checked += 1;
+            tally.claims += 1;
+        }
+        if i % tamper == 0 {
+            for (name, altered) in tamperings(&proof.proof) {
+                let altered = production::proof::constant::KeyValueProof {
+                    proof: altered,
+                    next_key: next.clone(),
+                };
+                let (expected, actual) = member(&altered, &k, &v, &next, &root);
+                assert!(!expected, "production, key {seed}, {name}");
+                assert_eq!(actual, expected, "client, key {seed}, {name}");
+                tally.tampered += 1;
+            }
         }
     }
-    for &seed in probes {
+    for (j, &seed) in probes.iter().enumerate() {
         let k = key(seed);
         if live.contains(&seed) {
             continue;
         }
         let proof = db.exclusion_proof(&k).await.unwrap();
+        let operation = match &proof {
+            production::proof::ExclusionProof::KeyValue(operation, _) => operation,
+            production::proof::ExclusionProof::Commit(operation, _) => {
+                tally.commit += 1;
+                operation
+            }
+        };
+        tally.shape(operation);
         for (r, honest) in [(root, true), (wrong, false)] {
             let (expected, actual) = exclusion(&proof, &k, &r);
             assert_eq!(expected, honest, "production, absent key {seed}");
             assert_eq!(actual, expected, "client, absent key {seed}");
-            checked += 1;
+            tally.claims += 1;
         }
         // The same proof for each live key, which no exclusion proof may cover.
         for &other in live.iter().take(3) {
             let (expected, actual) = exclusion(&proof, &key(other), &root);
             assert!(!expected, "production, live key {other}");
             assert_eq!(actual, expected, "client, live key {other}");
-            checked += 1;
+            tally.claims += 1;
+        }
+        if j % tamper != 0 {
+            continue;
+        }
+        let mut altered: Vec<(String, _)> = tamperings(operation)
+            .into_iter()
+            .map(|(name, op)| {
+                let proof = match &proof {
+                    production::proof::ExclusionProof::KeyValue(_, update) => {
+                        production::proof::ExclusionProof::KeyValue(op, update.clone())
+                    }
+                    production::proof::ExclusionProof::Commit(_, metadata) => {
+                        production::proof::ExclusionProof::Commit(op, metadata.clone())
+                    }
+                };
+                (name, proof)
+            })
+            .collect();
+        match &proof {
+            production::proof::ExclusionProof::KeyValue(op, update) => {
+                for (name, field) in [
+                    ("update key", 0),
+                    ("update value", 1),
+                    ("update next key", 2),
+                ] {
+                    let mut update = update.clone();
+                    match field {
+                        0 => update.key = key(seed + 1_000_000),
+                        1 => update.value = value(seed + 1_000_000),
+                        _ => update.next_key = key(seed + 1_000_001),
+                    }
+                    altered.push((
+                        name.into(),
+                        production::proof::ExclusionProof::KeyValue(op.clone(), update),
+                    ));
+                }
+            }
+            production::proof::ExclusionProof::Commit(op, metadata) => {
+                let other = match metadata {
+                    Some(_) => None,
+                    None => Some(value(1_000_000)),
+                };
+                altered.push((
+                    "commit metadata".into(),
+                    production::proof::ExclusionProof::Commit(op.clone(), other),
+                ));
+            }
+        }
+        for (name, altered) in altered {
+            let (expected, actual) = exclusion(&altered, &k, &root);
+            assert!(!expected, "production, absent key {seed}, {name}");
+            assert_eq!(actual, expected, "client, absent key {seed}, {name}");
+            tally.tampered += 1;
         }
     }
-    checked
 }
 
 #[test]
 fn reads_agree_with_production() {
     deterministic::Runner::default().start(|context| async move {
-        let mut checked = 0;
+        let mut tally = Tally::default();
         for size in [1u64, 9, 300, 450] {
             let db = open(context.child("db"), &format!("size-{size}")).await;
             let live: Vec<u64> = (0..size).map(|i| 2 * i + 2).collect();
             let db = apply(db, live.iter().map(|&s| (key(s), Some(value(s)))).collect()).await;
             let probes: Vec<u64> = (0..12).map(|i| i * (2 * size + 4) / 11).collect();
-            checked += check(&db, &live, &probes).await;
+            check(&db, &live, &probes, 37, &mut tally).await;
             db.destroy().await.unwrap();
         }
-        assert!(checked > 1000, "only {checked} claims checked");
+        assert!(tally.claims > 1000, "only {} claims checked", tally.claims);
+        assert!(tally.tampered > 1000, "only {} tamperings", tally.tampered);
+    });
+}
+
+#[test]
+fn reads_agree_with_production_across_histories() {
+    deterministic::Runner::default().start(|context| async move {
+        let mut rng = test_rng();
+        let mut tally = Tally::default();
+        let mut db = open(context.child("db"), "history").await;
+        let mut live = BTreeMap::new();
+        for round in 0..12u64 {
+            let mut writes = BTreeMap::new();
+            for _ in 0..rng.random_range(1..80) {
+                let seed = 2 * rng.random_range(1..200u64);
+                let write = if live.contains_key(&seed) && rng.random_bool(0.4) {
+                    None
+                } else {
+                    Some(value(1_000 * round + seed))
+                };
+                writes.insert(seed, write);
+            }
+            for (&seed, write) in &writes {
+                match write {
+                    Some(v) => live.insert(seed, v.clone()),
+                    None => live.remove(&seed),
+                };
+            }
+            db = apply(db, writes.into_iter().map(|(s, w)| (key(s), w)).collect()).await;
+            let seeds: Vec<u64> = live.keys().copied().collect();
+            for &seed in &seeds {
+                assert_eq!(db.get(&key(seed)).await.unwrap(), live.get(&seed).cloned());
+            }
+            let probes: Vec<u64> = (0..40).map(|i| 2 * i + 1).chain([0, 1_000]).collect();
+            check(&db, &seeds, &probes, 11, &mut tally).await;
+        }
+        db.destroy().await.unwrap();
+        assert!(tally.tampered > 1000, "only {} tamperings", tally.tampered);
+        assert!(tally.pending > 0, "no proof had a pending chunk");
+        assert!(tally.partial > 0, "no proof had a partial chunk");
+        assert!(tally.inactive > 0, "no proof had inactive peaks");
     });
 }
 
@@ -345,8 +582,10 @@ fn empty_reads_agree_with_production() {
         )
         .await;
         let db = apply(db, seeds.iter().map(|&s| (key(s), None)).collect()).await;
-        let checked = check(&db, &[], &[0, 1, 2, 3, 7, 100]).await;
-        assert!(checked > 0);
+        let mut tally = Tally::default();
+        check(&db, &[], &[0, 1, 2, 3, 7, 100], 1, &mut tally).await;
+        assert!(tally.claims > 0);
+        assert!(tally.commit > 0, "no exclusion proof was a commit");
         db.destroy().await.unwrap();
     });
 }
