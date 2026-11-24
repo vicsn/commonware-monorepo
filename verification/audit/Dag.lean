@@ -2,19 +2,17 @@ import Qmdb.SecurityTheorems
 import Qmdb.SanityChecks
 import Commonware.Symbolic.RootPair
 import Qmdb.Bitmap
-import Qmdb.Mmb.Blueprint
-import Qmdb.Mmb.Bagging
-import Qmdb.Mmb.Grafting
-import Qmdb.Mmb.Dfs
 import Qmdb.Mmb.Children
 import Qmdb.Mmb.RawHeader
+import Qmdb.Mmb.Extracted
 import Qmdb.Ordered.Encoding
+import Qmdb.Ordered.Verified
 import Qmdb.Ordered.Examples
 import Lean
 
 /-! Every Lean declaration of the QMDB target with what it depends on, as JSON for the audit guide.
 The target has two parts: single-item inclusion, and ordered reads under a checkpoint root in the
-format of Tempo's pinned fork. The imports after the first two are those of
+format of Commonware `v2026.11.0`. The imports after the first two are those of
 `Qmdb.CheckpointAudit`.
 
 A node is one declaration of the handwritten Lean, one generated definition that the handwritten
@@ -26,9 +24,9 @@ only the proof of a theorem does.
 
 The trust type of a node follows from the edges. The statements that the guide cites are listed
 below. Whatever they reach through meaning edges is what they say, so a person must read it: it
-is `trusted` when handwritten, `generated` when hax produced it from the crate or from the
-projections of the pinned fork, and `assumed` when it is a library. Every other handwritten declaration is `checked`: Lean accepts it, and no statement
-depends on what it says. This file is not a module, so it sees the bodies of every imported
+is `trusted` when handwritten, `generated` when hax produced it from the crate, and `assumed`
+when it is a library. Every other handwritten declaration is `checked`: Lean accepts it, and no
+statement depends on what it says. This file is not a module, so it sees the bodies of every imported
 definition. `python3 verification/audit/build.py --dag` runs it and stores what it prints. -/
 
 open Lean Elab Command
@@ -46,16 +44,16 @@ def cited : Array Name := #[
   ``Qmdb.Mmb.plan_coverage, ``Qmdb.Mmb.accepted, ``Qmdb.Mmb.honest,
   ``Qmdb.Mmb.RawProof.header_of_verify, ``Qmdb.Mmb.Header.binding,
   ``Qmdb.Ordered.accepted_read, ``Qmdb.Ordered.honest_member, ``Qmdb.Ordered.honest_gap,
-  ``Qmdb.Ordered.honest_empty, ``Qmdb.Ordered.operationTerm_inj,
+  ``Qmdb.Ordered.honest_empty, ``Qmdb.Ordered.Layout.encode_ok,
+  ``Qmdb.Ordered.Layout.bytes_inj, ``Qmdb.Ordered.Verified.verify_selected_sound,
   ``Commonware.Symbolic.rootPair_binding, ``Qmdb.Ordered.Examples.empty_claim,
   ``Qmdb.Ordered.Examples.singleton_claims,
   -- The model against extracted Rust.
   ``Qmdb.Ordered.Extraction.accepts_iff, ``Qmdb.Active.rustActive_eq,
-  ``Qmdb.CurrentRoot.extracted_wire, ``Qmdb.Mmb.Blueprint.rust_classifies,
-  ``Qmdb.Mmb.Blueprint.split_spec, ``Qmdb.Mmb.Blueprint.split_plan,
-  ``Qmdb.Mmb.Peaks.all_peaks, ``Qmdb.Mmb.Peaks.physical_children,
-  ``Qmdb.Mmb.Dfs.reconstruct_peak, ``Qmdb.Mmb.pinned_placement,
-  ``Qmdb.Mmb.pinned_graft_chunk, ``Qmdb.Mmb.Bagging.compressed_eq]
+  ``Qmdb.CurrentRoot.extracted_wire, ``Qmdb.Mmb.Extracted.verify_operation_refines,
+  ``Qmdb.Mmb.Extracted.verify_operation_sound, ``Qmdb.Mmb.Extracted.verify_operation_header,
+  ``Qmdb.Mmb.Extracted.dfs, ``Qmdb.Mmb.Extracted.grafted_node,
+  ``Qmdb.Mmb.Peaks.all_peaks, ``Qmdb.Mmb.Peaks.physical_children]
 
 /-- Where a constant is drawn: a source line of a file of this repository, or a library. -/
 inductive Place where
@@ -72,17 +70,10 @@ def Place.key : Place → String
 def fileOf (env : Environment) (decl : Name) : Option Name :=
   (env.getModuleIdxFor? decl).map fun index => env.header.moduleNames[index.toNat]!
 
-/-- A module that hax produced from a projection of the pinned fork, such as
-`Qmdb.Mmb.PinnedPeaks`. -/
-def pinned (file : Name) : Bool :=
-  match file with
-  | .str parent last => parent == `Qmdb.Mmb && last.startsWith "Pinned"
-  | _ => false
-
 def handwritten (file : Name) : Bool :=
-  ((`Qmdb).isPrefixOf file || (`Commonware).isPrefixOf file) && !pinned file
+  (`Qmdb).isPrefixOf file || (`Commonware).isPrefixOf file
 
-def generated (file : Name) : Bool := (`CommonwareSymbolic).isPrefixOf file || pinned file
+def generated (file : Name) : Bool := (`CommonwareSymbolic).isPrefixOf file
 
 /-- The declaration that a person or hax wrote and that produced `decl`: the type of a constructor
 or of a field, the declaration that a helper constant was derived from, or `decl` itself. -/

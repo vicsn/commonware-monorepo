@@ -34,9 +34,8 @@ def source(file):
 
 
 def generated(file):
-    """Whether hax produced module `file`: the extraction of the crate, or a projection of the
-    pinned fork."""
-    return file.startswith(('CommonwareSymbolic.', 'Qmdb.Mmb.Pinned'))
+    """Whether hax produced module `file`: the extraction of the crate."""
+    return file.startswith('CommonwareSymbolic.')
 
 
 def shorten(name):
