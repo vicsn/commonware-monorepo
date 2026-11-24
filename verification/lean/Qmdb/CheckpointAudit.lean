@@ -6,6 +6,7 @@ import Qmdb.Mmb.Children
 import Qmdb.Mmb.RawHeader
 import Qmdb.Mmb.Extracted
 import Qmdb.Ordered.Encoding
+import Qmdb.Ordered.Verified
 import Qmdb.Ordered.Examples
 
 /-! Audit the checkpoint reader's operation proofs, journal semantics, examples and hash model. -/
