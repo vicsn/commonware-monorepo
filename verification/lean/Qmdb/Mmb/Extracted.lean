@@ -810,5 +810,77 @@ theorem pending_none (chunks : Slice current.Chunk) (graftable complete start : 
       have := congrArg UScalar.val e; simp at this gapv; omega)
     simp [current.pending_matches, hgap, notOne, one']
 
+/-! ## When the production reconstruction fails -/
+
+section Fails
+variable {G P N : Type} (geo : reconstruct.Geometry G P) (nodes : traversal.Nodes N Bytes)
+
+/-- A tree larger than the bound fails. -/
+theorem reconstruct_oversized (g : G) (n : N) (domain : Aeneas.Std.Array Std.U8 2#usize)
+    (backward : Bool) (leaves : Std.U64) (inactive : Std.Usize) (digests : Slice Bytes)
+    (loc : Std.U64) (item : Slice Std.U8) (maxLeaves : Std.U64)
+    (hmax : geo.max_leaves g = RustM.ok maxLeaves) (inside : loc.val < leaves.val)
+    (over : maxLeaves.val < leaves.val) :
+    ∃ err, reconstruct.reconstruct geo dyTerms nodes single element noCollect g () n domain
+      backward leaves inactive digests loc 1#u64 (.Some item) () = RustM.ok (.Err err) := by
+  unfold reconstruct.reconstruct
+  have nz : ¬ (1#u64 = 0#u64) := by decide
+  by_cases late : maxLeaves.val ≤ loc.val
+  · exact ⟨.InvalidStartLoc, by simp [hmax, nz, late]⟩
+  obtain ⟨room, hroom, roomv⟩ := sub_ok maxLeaves loc (by omega)
+  have roomNz : ¬ room.val = 0 := by omega
+  have countOk : ¬ room.val < (1#u64 : Std.U64).val := by simp; omega
+  obtain ⟨stop, hstop, stopv⟩ := add_ok loc 1#u64 (by scalar_tac)
+  have endOk : ¬ leaves.val < stop.val := by simp at stopv; omega
+  exact ⟨.InvalidSize, by simp [hmax, nz, late, hroom, hstop, endOk, over, roomNz]⟩
+
+/-- More inactive peaks than peaks fail. -/
+theorem reconstruct_overinactive (g : G) (n : N) (domain : Aeneas.Std.Array Std.U8 2#usize)
+    (backward : Bool) (leaves : Std.U64) (inactive : Std.Usize) (digests : Slice Bytes)
+    (loc : Std.U64) (item : Slice Std.U8) (pre post : List (Std.U64 × Std.U32)) (pos : Std.U64)
+    (h : Std.U32) (st : P) (maxLeaves : Std.U64)
+    (hmax : geo.max_leaves g = RustM.ok maxLeaves) (bound : leaves.val ≤ maxLeaves.val)
+    (small : maxLeaves.val < 2 ^ 63)
+    (hpeaks : geo.peaks g leaves = RustM.ok st)
+    (yields : Yields geo.PeaksInst.next st (pre ++ (pos, h) :: post))
+    (low : Low (pre ++ (pos, h) :: post)) (total : span (pre ++ (pos, h) :: post) = leaves.val)
+    (inside : span pre ≤ loc.val ∧ loc.val < span pre + 2 ^ h.val)
+    (count : pre.length + 1 + post.length ≤ 64)
+    (over : pre.length + 1 + post.length < inactive.val) :
+    ∃ err, reconstruct.reconstruct geo dyTerms nodes single element noCollect g () n domain
+      backward leaves inactive digests loc 1#u64 (.Some item) () = RustM.ok (.Err err) := by
+  have one : 1 ≤ 2 ^ h.val := Nat.one_le_two_pow
+  have whole := total
+  rw [span_append, span_cons] at whole
+  obtain ⟨stop, hstop, stopv⟩ := add_ok loc 1#u64 (by scalar_tac)
+  have stopv' : stop.val = loc.val + 1 := by simpa using stopv
+  obtain ⟨b, a, sib, hloop, bv, av, sibv⟩ := classify_single geo pre post pos h st loc stop yields
+    low stopv' inside (by omega) count
+  have hl := layout_none b a inactive backward (by omega) (by omega)
+  have nz : ¬ (1#u64 = 0#u64) := by decide
+  have startOk : ¬ maxLeaves.val ≤ loc.val := by omega
+  obtain ⟨room, hroom, roomv⟩ := sub_ok maxLeaves loc (by omega)
+  have roomNz : ¬ room.val = 0 := by omega
+  have countOk : ¬ room.val < (1#u64 : Std.U64).val := by simp; omega
+  have endOk : ¬ leaves.val < stop.val := by omega
+  unfold reconstruct.reconstruct
+  exact ⟨.InvalidSize, by
+    simp [hmax, nz, startOk, hroom, hstop, endOk, bound, hpeaks, hloop, hl, roomNz]⟩
+
+end Fails
+
+/-- `containing` finds the peak of every location the peaks cover. -/
+theorem containing_some (hs : List Nat) : ∀ (i0 loc : Nat), loc < (hs.map (2 ^ ·)).sum →
+    ∃ i h off, containing hs i0 loc = some (i, h, off) := by
+  induction hs with
+  | nil => intro i0 loc h; simp at h
+  | cons h rest ih =>
+    intro i0 loc inside
+    simp only [containing]
+    split
+    · exact ⟨_, _, _, rfl⟩
+    · simp only [List.map_cons, List.sum_cons] at inside
+      exact ih _ _ (by omega)
+
 end
 end Qmdb.Mmb.Extracted
