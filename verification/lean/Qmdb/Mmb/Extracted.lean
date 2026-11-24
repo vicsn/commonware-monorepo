@@ -575,7 +575,10 @@ theorem val_merkle (get : Field → Bytes) (hd : get .domain = domainBytes)
   have castv : (UScalar.cast .U64 inactive).val = inactive.val := by
     simp [UScalar.cast_val_eq]
     have b := UScalar.hBounds inactive
-    cases System.Platform.numBits_eq <;> simp_all [UScalarTy.numBits]
+    have wide : 2 ^ System.Platform.numBits ≤ 2 ^ 64 :=
+      Nat.pow_le_pow_right (by decide) (by cases System.Platform.numBits_eq <;> simp [*])
+    simp only [UScalarTy.numBits] at b
+    omega
   by_cases z : inactive.val = 0
   · have zc : UScalar.cast .U64 inactive = 0#u64 := UScalar.eq_of_val_eq (by simp [castv, z])
     simp [merkleShape, z, zc, rootTerm, val, Shape.fill, Expr.value, hd, hw, chain, domain_eq,
