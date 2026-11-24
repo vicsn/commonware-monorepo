@@ -40,7 +40,7 @@ private theorem outside_eq (s : Std.U64) (h : Std.U32) (r : CoreModels.core.ops.
 
 private theorem outside (g : Bool) (s : Std.U64) (h : Std.U32)
     (r : CoreModels.core.ops.range.Range Std.U64)
-    (es : qmdb.Single) (ds : Slice Shape) (c : Std.Usize) (room : c.val < ds.length)
+    (es : reconstruct.Single) (ds : Slice Shape) (c : Std.Usize) (room : c.val < ds.length)
     (height : h.val ≤ 63) (fits : s.val + 2 ^ h.val ≤ UScalar.max .U64)
     (out : s.val + 2 ^ h.val ≤ r.start.val ∨ r.end.val ≤ s.val) :
     ∃ next : Std.Usize, run (tree s h) g r es ds c =
@@ -66,8 +66,8 @@ private theorem leaf (g : Bool) (s : Std.U64) (r : CoreModels.core.ops.range.Ran
     CoreModels.core.option.Option.ok_or,
     core.result.Result.Insts.CoreOpsTry_traitTry.branch,
     core.result.Result.Insts.CoreOpsTry_traitTryTResultInfallibleE.branch, tree,
-    qmdb.Single.Insts.CoreIterTraitsIteratorIteratorElement.next,
-    qmdb.Element.Insts.CoreConvertAsRefSliceU8.as_ref, hasher, peakShape]
+    reconstruct.Single.Insts.CoreIterTraitsIteratorIteratorElement.next,
+    reconstruct.Element.Insts.CoreConvertAsRefSliceU8.as_ref, hasher, peakShape]
 
 private theorem children_ok (s : Std.U64) (h : Std.U32) (n : Nat) (hv : h.val = n + 1)
     (bound : h.val ≤ 63) (fits : s.val + 2 ^ h.val ≤ UScalar.max .U64) :
