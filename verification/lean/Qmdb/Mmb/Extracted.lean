@@ -691,5 +691,124 @@ theorem birth_eight : mmbGeometry.birth_offset () 8#u32 = RustM.ok 383#u64 := by
     mmb_geometry.birth_offset, z, hi, seven, hh, mul, CoreModels.core.option.Option.expect, hr,
     massert, core.num.U64.BITS]
 
+/-- The production count of graftable chunks after `leaves` leaves of an MMB is `Plan`'s. -/
+theorem graftable_chunks_ok (leaves : Std.U64) :
+    ∃ born : Std.U64, grafting.graftable_chunks leaves 8#u32 383#u64 = RustM.ok born ∧
+      born.val = graftedChunks leaves.val := by
+  by_cases early : leaves.val < 383
+  · refine ⟨0#u64, ?_, by simp [graftedChunks, early]⟩
+    have : leaves < 383#u64 := by scalar_tac
+    simp [grafting.graftable_chunks, this]
+  · have notEarly : ¬ leaves < 383#u64 := by scalar_tac
+    obtain ⟨d, hd, dv⟩ := sub_ok leaves 383#u64 (by simp; omega)
+    obtain ⟨w, hw, wv⟩ := pow_ok (8#u32 : Std.U32) (by decide)
+    have w256 : w.val = 256 := by rw [wv]; rfl
+    obtain ⟨q, hq, qv⟩ := UScalar.div_spec d (y := w) (by intro h; simp [h] at w256)
+    obtain ⟨b, hb, bv⟩ := add_ok q 1#u64 (by simp at qv dv ⊢; rw [qv, w256]; scalar_tac)
+    refine ⟨b, by simp [grafting.graftable_chunks, notEarly, hd, hw, hq, hb], ?_⟩
+    simp at bv qv dv
+    simp [graftedChunks, early, bv, qv, dv, w256]
+
+/-- The graftable chunks never outnumber the complete ones. -/
+theorem graftedChunks_le (leaves : Nat) : graftedChunks leaves ≤ leaves / 256 := by
+  unfold graftedChunks; split <;> omega
+
+theorem smaller_ok (a b : Std.U64) :
+    current.smaller a b = RustM.ok (if a.val < b.val then a else b) := by
+  unfold current.smaller
+  by_cases h : a.val < b.val
+  · have : a < b := by scalar_tac
+    simp [this, h]
+  · have : ¬ a < b := by scalar_tac
+    simp [this, h]
+
+theorem chunk_digest_ok (chunk : Active.Chunk) :
+    grafting.chunk_digest dyTerms () (chunkSlice chunk) =
+      RustM.ok (Hash.hash (Active.literal chunk)) := by
+  simp [grafting.chunk_digest, CoreModels.core.array.Array.as_slice,
+    CoreModels.rust_primitives.slice.array_as_slice, dyTerms, chain, part_chunk]
+
+/-- The partial-chunk check over one chunk. -/
+theorem partial_ok (chunk : Active.Chunk) (chunks : Slice current.Chunk)
+    (one : chunks.val = [chunkSlice chunk]) (d : Bytes) (nextBit endChunk complete : Std.U64) :
+    current.partial_matches dyTerms current.Chunk.Insts.CoreConvertAsRefSliceU8 () (.Some d)
+        nextBit endChunk complete chunks =
+      RustM.ok (decide (nextBit.val ≠ 0 ∧
+        (endChunk.val = complete.val → d = Hash.hash (Active.literal chunk)))) := by
+  have lenOne : Slice.len chunks = 1#usize := UScalar.eq_of_val_eq (by simp [one])
+  obtain ⟨z, hz, zv⟩ := sub_ok (1#usize : Std.Usize) 1#usize (le_refl _)
+  have z0 : z = 0#usize := UScalar.eq_of_val_eq (by simpa using zv)
+  subst z0
+  have get := Verifier.index_ok chunks 0#usize (by simp [Slice.length, one])
+  by_cases nb : nextBit.val = 0
+  · have : nextBit = 0#u64 := UScalar.eq_of_val_eq (by simp [nb])
+    simp [current.partial_matches, this]
+  have nb' : ¬ nextBit = 0#u64 := fun e => nb (by simp [e])
+  by_cases ec : endChunk.val = complete.val
+  · have : endChunk = complete := UScalar.eq_of_val_eq ec
+    simp [current.partial_matches, nb', nb, this, len_ok, lenOne, hz, get, one,
+      current.Chunk.Insts.CoreConvertAsRefSliceU8.as_ref, chunk_digest_ok, eq_comm]
+    rfl
+  · have : ¬ endChunk = complete := fun e => ec (by simp [e])
+    simp [current.partial_matches, nb', nb, this, ec]
+
+theorem partial_none (chunks : Slice current.Chunk) (nextBit endChunk complete : Std.U64) :
+    current.partial_matches dyTerms current.Chunk.Insts.CoreConvertAsRefSliceU8 () .None
+        nextBit endChunk complete chunks = RustM.ok (decide (nextBit.val = 0)) := by
+  simp [current.partial_matches]
+  constructor
+  · intro h; simp [h]
+  · intro h; exact UScalar.eq_of_val_eq (by simp [h])
+
+/-- The pending-chunk check over one chunk, for a range of one chunk. -/
+theorem pending_ok (chunk : Active.Chunk) (chunks : Slice current.Chunk)
+    (one : chunks.val = [chunkSlice chunk]) (d : Bytes) (graftable complete start : Std.U64)
+    (le : graftable.val ≤ complete.val) :
+    current.pending_matches dyTerms current.Chunk.Insts.CoreConvertAsRefSliceU8 () (.Some d)
+        graftable complete start start chunks =
+      RustM.ok (decide (complete.val - graftable.val = 1 ∧
+        (graftable.val = start.val → d = Hash.hash (Active.literal chunk)))) := by
+  obtain ⟨gap, hgap, gapv⟩ := sub_ok complete graftable le
+  have lenOne : Slice.len chunks = 1#usize := UScalar.eq_of_val_eq (by simp [one])
+  by_cases one' : complete.val - graftable.val = 1
+  case neg =>
+    have gv : ¬ gap.val = 1 := by omega
+    simp [current.pending_matches, hgap, gv, one']
+  have gv : gap.val = 1 := by omega
+  by_cases at_start : graftable.val = start.val
+  case neg =>
+    by_cases below : graftable.val < start.val
+    · simp [current.pending_matches, hgap, gv, one', below, at_start]
+    · have above : start.val < graftable.val := by omega
+      simp [current.pending_matches, hgap, gv, one', below, above, at_start]
+  obtain ⟨z, hz, zv⟩ := sub_ok graftable start (by omega)
+  have zc : (UScalar.cast .Usize z).val = 0 := by simp [zv, at_start]
+  have get := Verifier.index_ok chunks (UScalar.cast .Usize z) (by simp [Slice.length, one, zc])
+  have first : chunks.val[(UScalar.cast .Usize z).val]'(by simp [one, zc]) = chunkSlice chunk := by
+    simp [one, zc]
+  have notBelow : ¬ graftable.val < start.val := by omega
+  have notAbove : ¬ start.val < graftable.val := by omega
+  simp only [current.pending_matches, hgap, bind_ok]
+  have zz : z.val = 0 := by omega
+  have head : ∀ h : 0 < chunks.val.length, chunks.val[0]'h = chunkSlice chunk := by
+    intro h; simp [one]
+  have gap₁ : complete.val - start.val = 1 := by omega
+  simp [gv, hz, lift, len_ok, lenOne, zc, get, zz, head,
+    current.Chunk.Insts.CoreConvertAsRefSliceU8.as_ref, chunk_digest_ok, at_start, gap₁]
+  rfl
+
+theorem pending_none (chunks : Slice current.Chunk) (graftable complete start : Std.U64)
+    (le : graftable.val ≤ complete.val) :
+    current.pending_matches dyTerms current.Chunk.Insts.CoreConvertAsRefSliceU8 () .None
+        graftable complete start start chunks =
+      RustM.ok (decide (complete.val - graftable.val ≠ 1)) := by
+  obtain ⟨gap, hgap, gapv⟩ := sub_ok complete graftable le
+  by_cases one' : complete.val - graftable.val = 1
+  · have isOne : gap = 1#u64 := UScalar.eq_of_val_eq (by simp at gapv ⊢; omega)
+    simp [current.pending_matches, hgap, isOne, one']
+  · have notOne : gap ≠ 1#u64 := fun e => one' (by
+      have := congrArg UScalar.val e; simp at this gapv; omega)
+    simp [current.pending_matches, hgap, notOne, one']
+
 end
 end Qmdb.Mmb.Extracted
