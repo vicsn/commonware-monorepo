@@ -17,7 +17,8 @@ terms and clients.
 - [toolchain.sh](toolchain.sh): the pins (Lean 4.35.0, DyLean `2254f7d19`, the managed hax CLI)
   and the shared setup: one DyLean build in `.lake/dylean`, patched by
   [lean435.patch](lean435.patch), and optional reuse of dependency builds.
-- [check.sh](check.sh): checks every target. Logs go to `.lake/logs`.
+- [check.sh](check.sh): checks every target. Logs go to `.lake/logs`. Mutation testing takes
+  about 20 minutes, so it runs only with `--mutation-testing`.
 - [mutate.py](mutate.py): re-extracts mutated Rust and requires the named proof modules to fail.
   Each target lists its mutations in a table: [qmdb/mutations.toml](qmdb/mutations.toml),
   [bls/mutations.toml](bls/mutations.toml) and [sake/mutations.toml](sake/mutations.toml).
@@ -128,7 +129,7 @@ is the first target of this kind.
    `accept` and the event invariant, a `SecurityTheorems` module with the statements, and an
    `Audit` module that runs `#audit_axioms` over the target's namespace. Add a `lean_lib` to
    [lakefile.toml](lean/lakefile.toml).
-4. Add `<target>/mutations.toml` and run it from `check.sh`.
+4. Add `<target>/mutations.toml` and run it from the mutation-testing step of `check.sh`.
 
 ## Lean style
 
@@ -170,8 +171,12 @@ Lean has no formatter, so the linters and the check are what keeps this in place
 ## Running
 
 ```bash
-bash verification/check.sh
+bash verification/check.sh                     # proofs, extraction, audit guide
+bash verification/check.sh --mutation-testing  # also every mutation table, about 20 minutes
 ```
+
+Run the mutation tests after changing the extracted Rust, the proofs' theorem statements or a
+mutation table, and before merging.
 
 Keep the DyLean checkout beside the canonical monorepo at the pin (override with `DYLEAN`), the
 managed hax CLI in `.verification-tools/qmdb/qmdb-hax-tools` (override with `HAX`), and Lean
