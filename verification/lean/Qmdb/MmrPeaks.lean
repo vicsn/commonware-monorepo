@@ -22,7 +22,7 @@ theorem bit_ok (leaves : Std.U64) (i : Std.U32) (small : i.val < 64) :
   · intro one
     have v := congrArg UScalar.val one
     rw [UScalar.val_and, zv] at v
-    simp only [Nat.testBit, Nat.and_comm] at v ⊢
+    simp only [Nat.testBit] at v ⊢
     simp at v ⊢
     omega
   · intro set

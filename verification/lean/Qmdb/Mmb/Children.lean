@@ -67,7 +67,8 @@ theorem physical_children {n s k : Nat} (tree : Subtree n s (k + 1)) (p : Std.U6
     have := rt.born; omega)
   have hn : h > 0#u32 := by scalar_tac
   refine ⟨lp, rp, ?_, ?_, ?_, lt, rt⟩
-  · simp [commonware_symbolic.mmb_geometry.children, hn, found, CoreModels.core.option.Option.expect,
+  · simp [commonware_symbolic.mmb_geometry.children, hn, found,
+      CoreModels.core.option.Option.expect,
       child, left, right]
   · simpa [pos_eq, Inverse.position, zero, vl] using pl
   · simpa [pos_eq, Inverse.position, zero, vr] using pr

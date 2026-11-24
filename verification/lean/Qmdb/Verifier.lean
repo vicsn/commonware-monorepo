@@ -482,7 +482,8 @@ theorem verify_eq (h : Std.U32) (bound : h.val ≤ maxHeight) (loc : Std.U64) (r
     generalize traversal.reconstruct _ _ p w 0#u64 loc e = T
     simp
     have bag (peak : Bytes) : Reconstruct.bagRoot domain true w (UScalar.cast .U64 0#usize)
-        (Reconstruct.toFoldOf true 0 0) (Reconstruct.listed ws.val (Reconstruct.afterStartOf true 0 0)
+        (Reconstruct.toFoldOf true 0 0)
+        (Reconstruct.listed ws.val (Reconstruct.afterStartOf true 0 0)
           (Reconstruct.siblingsStartOf true 0 0 0) peak) = some (rootTerm domain w peak) := by
       simp [Reconstruct.bagRoot, Reconstruct.toFoldOf, Reconstruct.foldOf, Reconstruct.listed,
         Reconstruct.afterStartOf, Reconstruct.siblingsStartOf, Reconstruct.individualOf,
@@ -511,7 +512,7 @@ theorem verify_outside (h : Std.U32) (bound : h.val ≤ maxHeight) (loc : Std.U6
   obtain ⟨err, run⟩ := Reconstruct.reconstruct_outside mmrGeometry mmr () ⟨(), ()⟩ domain true
     leaves 0#usize ws loc item mmr_geometry.MAX_LEAVES
     (by simp [geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks.max_leaves])
-    (by simp [mmr_geometry.MAX_LEAVES]; omega) (by omega)
+    (by omega)
   unfold qmdb.verify
   simp only [short, ↓reduceIte, hl, bind_ok, reconstruct.StandardNodes.new,
     reconstruct.Single.new]

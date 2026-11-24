@@ -68,7 +68,8 @@ and the result folds into the accumulator. -/
 theorem bagWith_backward {α : Type} (f : α → α → α) (k : Nat) (first : α) (rest : List α)
     (h : rest.drop k ≠ []) :
     bagWith f true k first rest =
-      f ((rest.take k).foldl f first) ((rest.drop k).dropLast.foldr f ((rest.drop k).getLast h)) := by
+      f ((rest.take k).foldl f first)
+        ((rest.drop k).dropLast.foldr f ((rest.drop k).getLast h)) := by
   unfold bagWith
   simp only [↓reduceIte]
   conv => lhs; rw [← List.dropLast_append_getLast h]
@@ -339,14 +340,14 @@ theorem bagged_root_eq (domain : Aeneas.Std.Array Std.U8 2#usize) (backward : Bo
         rw [tailEq, lastEq] at run
         simp only [List.getLast_drop] at run
         rw [bagWith_backward foldTerm (to_fold.val - 1) first rest nonempty]
-        rw [if_pos (by omega), if_pos fits]
+        rw [ite_eq_left (by omega), ite_eq_left fits]
         simp only [hbk, bind_ok]
         rw [lastEq]
         simp [run, fold_eq, root_eq, onev', drop1]
       · have empty : rest.drop (to_fold.val - 1) = [] := by
           rw [← List.length_eq_zero_iff, remLen]; omega
         refine ⟨e₁, ?_⟩
-        rw [bagWith_empty foldTerm _ first rest empty, if_pos (by omega), if_pos fits]
+        rw [bagWith_empty foldTerm _ first rest empty, ite_eq_left (by omega), ite_eq_left fits]
         simp [next_back_none e₁ more, root_eq, onev', drop1]
     | false =>
       obtain ⟨e₂, run⟩ := forward_eq e₁ (List.foldl foldTerm first (rest.take (to_fold.val - 1)))
@@ -356,11 +357,11 @@ theorem bagged_root_eq (domain : Aeneas.Std.Array Std.U8 2#usize) (backward : Bo
         rw [List.take_of_length_le (by rw [remEq, remLen]), remEq]
       refine ⟨e₂, ?_⟩
       rw [whole] at run
-      rw [bagWith_forward, if_pos (by omega), if_pos fits]
+      rw [bagWith_forward, ite_eq_left (by omega), ite_eq_left fits]
       simp [run, root_eq, onev', drop1]
   · have fits' : ¬ to_fold.val ≤ L.val.length - 1 + 1 := by omega
     refine ⟨e₁, ?_⟩
-    rw [if_neg (by omega), if_neg fits]
+    rw [ite_eq_right (by omega), ite_eq_right fits]
 
 /-! ## Sibling counts and the layout -/
 
@@ -402,7 +403,7 @@ theorem siblings_single (n : Nat) : ∀ (w s loc e : Std.U64), w.val = 2 ^ n →
     obtain ⟨stop, hstop, stopv⟩ := add_ok s w (by scalar_tac)
     have c1 : ¬ stop.val ≤ loc.val := by omega
     have c2 : ¬ e.val ≤ s.val := by omega
-    have c3 : ¬ w = 1#u64 := by intro h; subst h; simp at width <;> omega
+    have c3 : ¬ w = 1#u64 := by intro h; subst h; simp at width
     obtain ⟨half, hhalf, halfv⟩ := UScalar.div_spec w (y := 2#u64) (by decide)
     have halfv' : half.val = 2 ^ n := by simp at halfv; omega
     obtain ⟨mid, hmid, midv⟩ := add_ok s half (by scalar_tac)
@@ -478,7 +479,9 @@ structure Offsets (l : reconstruct.Layout) where
   fold : Nat
   /-- One if a suffix accumulator is listed. -/
   suffix : Nat
+  /-- The prefix accumulator takes one slot when any peak folds into it. -/
   fold_eq : fold = if l.fold.val = 0 then 0 else 1
+  /-- The suffix accumulator takes one slot when any peak after the range collapses into it. -/
   suffix_eq : suffix = if l.individual_after.val < l.after.val then 1 else 0
 
 /-- The extracted offset functions, on a layout of at most 64 peaks whose fold and individual
@@ -502,7 +505,7 @@ theorem offsets_ok (l : reconstruct.Layout) (small : l.before.val + l.after.val 
     unfold reconstruct.Layout.fold_digests
     by_cases z : l.fold.val = 0
     · have : l.fold = 0#usize := by scalar_tac
-      simp [this, z]
+      simp [this]
     · have : ¬ l.fold = 0#usize := by scalar_tac
       simp [this, z]
   have sd : reconstruct.Layout.suffix_digests l =
@@ -763,7 +766,8 @@ abbrev listLoop (st : P) (l : reconstruct.Layout) (digests : Slice Bytes) (loc e
 /-- Peaks before the range that fold into the prefix accumulator list nothing. -/
 theorem list_fold (seg : List (Std.U64 × Std.U32)) :
     ∀ (rest : List (Std.U64 × Std.U32)) (st : P) (l : reconstruct.Layout)
-      (digests : Slice Bytes) (loc e : Std.U64) (o : traversal.Opening N reconstruct.Single Unit Bytes)
+      (digests : Slice Bytes) (loc e : Std.U64)
+      (o : traversal.Opening N reconstruct.Single Unit Bytes)
       (v : DigestVec) (index : Std.Usize) (ls : Std.U64),
     Yields geo.PeaksInst.next st (seg ++ rest) → Low seg →
     index.val + seg.length ≤ l.fold.val → l.fold.val ≤ l.before.val → l.before.val ≤ 64 →
@@ -1029,8 +1033,8 @@ theorem list_target (st st₁ : P) (pos : Std.U64) (h : Std.U32) (l : reconstruc
   have overlaps' : index < bo := overlaps
   unfold listLoop reconstruct.list_peaks_loop
   rw [loop.eq_def]
-  simp [reconstruct.list_peaks_loop.body, hnext, hw, notBefore, notBefore', hbo, overlaps,
-    overlaps', opening_eta]
+  simp [reconstruct.list_peaks_loop.body, hnext, hw, notBefore', hbo, overlaps,
+    opening_eta]
   congr 1
   funext x
   obtain ⟨r, o₁⟩ := x
@@ -1094,7 +1098,8 @@ theorem list_single (pre post : List (Std.U64 × Std.U32)) (pos : Std.U64) (h : 
           let x ← reconstruct.missing err
           RustM.ok (.Err x, o₁, vecOf (items v ++
             (digests.val.drop prefixStart.val).take (l.before.val - l.fold.val)) (by
-              simp only [List.length_append, List.length_take, List.length_drop]; scalar_tac))) := by
+              simp only [List.length_append, List.length_take, List.length_drop]
+              scalar_tac))) := by
   have whole := fits
   rw [span_append, span_cons] at whole
   have split : pre ++ (pos, h) :: post =
@@ -1107,9 +1112,9 @@ theorem list_single (pre post : List (Std.U64 × Std.U32)) (pos : Std.U64) (h : 
   obtain ⟨st₁, i₁, ls₁, yields₁, i₁v, ls₁v, run₁⟩ := list_fold geo nodes (pre.take l.fold.val)
     (pre.drop l.fold.val ++ (pos, h) :: post) st l digests loc e o v 0#usize 0#u64 yields
     (fun q hq => low q (by simp [List.mem_of_mem_take hq]))
-    (by simp only [List.length_take]; simp <;> omega) foldLe (by omega)
+    (by simp only [List.length_take]; simp) foldLe (by omega)
     (by have : span (pre.take l.fold.val) ≤ span pre := by rw [spanSplit]; omega
-        simp <;> omega)
+        simp; omega)
   have takeLen : (pre.take l.fold.val).length = l.fold.val := by
     rw [List.length_take]; omega
   have i₁f : i₁.val = l.fold.val := by rw [i₁v, takeLen]; simp
@@ -1147,7 +1152,8 @@ theorem list_single (pre post : List (Std.U64 × Std.U32)) (pos : Std.U64) (h : 
         omega
       obtain ⟨v₃, hv₃, v₃v⟩ := push_ok v₂ d (by omega)
       have i₃f : i₃.val = l.before.val + 1 := by rw [i₃v, i₂v']
-      have splitPost : post = post.take l.individual_after.val ++ post.drop l.individual_after.val :=
+      have splitPost :
+          post = post.take l.individual_after.val ++ post.drop l.individual_after.val :=
         (List.take_append_drop _ _).symm
       have tail' := tail
       rw [splitPost] at tail'
@@ -1165,7 +1171,8 @@ theorem list_single (pre post : List (Std.U64 × Std.U32)) (pos : Std.U64) (h : 
           omega)
       have suffix := list_suffix geo nodes (post.drop l.individual_after.val) st₄ l digests loc e
         o₁ v₄ i₄ ls₄ yields₄ (fun q hq => low q (by simp [List.mem_of_mem_drop hq]))
-        (by rw [i₄v, List.length_take]; omega) (by rw [i₄v, List.length_take, List.length_drop]; omega)
+        (by rw [i₄v, List.length_take]; omega)
+        (by rw [i₄v, List.length_take, List.length_drop]; omega)
         (by
           have : span (post.take l.individual_after.val) + span (post.drop l.individual_after.val)
               = span post := by rw [← span_append, List.take_append_drop]
@@ -1205,7 +1212,8 @@ def individualOf (backward : Bool) (inactive before after : Nat) : Nat :=
 
 /-- Index of the first individually listed peak after the range. -/
 def afterStartOf (backward : Bool) (inactive before : Nat) : Nat :=
-  (if foldOf backward inactive before = 0 then 0 else 1) + (before - foldOf backward inactive before)
+  (if foldOf backward inactive before = 0 then 0 else 1) +
+    (before - foldOf backward inactive before)
 
 /-- Index of the first path sibling. -/
 def siblingsStartOf (backward : Bool) (inactive before after : Nat) : Nat :=
@@ -1323,7 +1331,7 @@ theorem reconstruct_single (g : G) (n : N) (domain : Aeneas.Std.Array Std.U8 2#u
   have sizeOk : ¬ maxLeaves.val < leaves.val := by omega
   have reqh : req.val = first.val + h.val := by rw [reqv, sibv]
   unfold reconstruct.reconstruct
-  simp [hmax, nz, startOk, hroom, countOk, hstop, endOk, sizeOk, hpeaks, hloop, hl, hFirst, hreq,
+  simp [hmax, nz, startOk, hroom, hstop, endOk, sizeOk, hpeaks, hloop, hl, hFirst, hreq,
     roomNz, len_ok, reqh]
   by_cases short : digests.val.length < first.val + h.val
   · simp [short]
@@ -1351,11 +1359,11 @@ theorem reconstruct_single (g : G) (n : N) (domain : Aeneas.Std.Array Std.U8 2#u
         rw [List.take_one, List.head?_eq_getElem?, List.getElem?_eq_getElem nonempty]
         rfl
       · simp only [z, ↓reduceIte, index_ok digests 0#usize (by simpa using nonempty),
-          Std.bind_tc_ok, Std.bind_ok]
+          Std.bind_ok]
         exact hp
-  simp only [Std.bind_tc_ok, Std.bind_ok]
+  simp only [Std.bind_ok]
   rw [hv]
-  simp only [Std.bind_tc_ok, Std.bind_ok]
+  simp only [Std.bind_ok]
   have psv : (if l.fold.val = 0 then 0#usize else 1#usize).val =
       if l.fold.val = 0 then 0 else 1 := by split <;> simp
   have lov : l.overlapping.val = 1 := by simp [lo]
@@ -1373,7 +1381,7 @@ theorem reconstruct_single (g : G) (n : N) (domain : Aeneas.Std.Array Std.U8 2#u
       listLoop geo nodes st l digests loc stop ⟨n, .Some item, digests, first, ()⟩ v₁ 0#usize
         0#u64 := by
     simp [reconstruct.list_peaks, hpeaks]
-  simp only [traversal.Opening.new, Std.bind_tc_ok, Std.bind_ok]
+  simp only [traversal.Opening.new, Std.bind_ok]
   rw [listEq, run]
   simp
   congr 1
@@ -1404,7 +1412,7 @@ theorem reconstruct_single (g : G) (n : N) (domain : Aeneas.Std.Array Std.U8 2#u
           (if l.individual_after.val < l.after.val then 1 else 0) := by
       by_cases sfx : l.individual_after.val < l.after.val
       · have firstS : first.val = sStart.val + 1 := by
-          rw [firstv, sStartv, if_pos sfx]
+          rw [firstv, sStartv, ite_eq_left sfx]
         have sIn : sStart.val < digests.val.length := by omega
         have vlen : (items V).length < 1000 := by
           rw [Vitems, v₁v]
@@ -1420,9 +1428,9 @@ theorem reconstruct_single (g : G) (n : N) (domain : Aeneas.Std.Array Std.U8 2#u
         rw [pv]
         simp [sfx, List.take_one, List.head?_drop, List.getElem?_eq_getElem sIn]
       · refine ⟨V, by simp [sfx], by simp [sfx]⟩
-    simp only [Std.bind_ok, Std.bind_tc_ok]
+    simp only [Std.bind_ok]
     rw [hW]
-    simp only [Std.bind_ok, Std.bind_tc_ok]
+    simp only [Std.bind_ok]
     -- The digests the reconstruction bags are the listed ones.
     have aStartEq : aStart.val = afterStartOf backward inactive.val pre.length := by
       rw [aStartv, lf, lbv, bv]; cases backward <;> simp [afterStartOf, foldOf]
@@ -1460,7 +1468,7 @@ theorem reconstruct_single (g : G) (n : N) (domain : Aeneas.Std.Array Std.U8 2#u
         CoreModels.core.option.Option.is_none, CoreModels.core.option.Option.is_some,
         traversal.Opening.impl.cursor]
       by_cases cur : o₁.cursor.val = digests.val.length
-      · simp only [cur, ↓reduceIte, not_true_eq_false]
+      · simp only [cur, ↓reduceIte]
         obtain ⟨S, hS, Sv⟩ := deref_eq W
         cases hWl : Slice.val S with
         | nil => rw [Sv, Wlisted] at hWl; simp [listed] at hWl
@@ -1468,9 +1476,9 @@ theorem reconstruct_single (g : G) (n : N) (domain : Aeneas.Std.Array Std.U8 2#u
           obtain ⟨e', hb⟩ := bagged_root_eq domain backward leaves k
             (UScalar.cast UScalarTy.U64 inactive) S f rs hWl
           rw [hk, hS]
-          simp only [Std.bind_ok, Std.bind_tc_ok, Std.lift]
+          simp only [Std.bind_ok, Std.lift]
           rw [ends_new_eq]
-          simp only [Std.bind_ok, Std.bind_tc_ok]
+          simp only [Std.bind_ok]
           rw [hb]
           simp [bagRoot, ← Wlisted, ← Sv, hWl, kEq]
           by_cases c : toFoldOf backward inactive.val pre.length ≤ rs.length + 1 <;> simp [c]
@@ -1480,7 +1488,7 @@ theorem reconstruct_single (g : G) (n : N) (domain : Aeneas.Std.Array Std.U8 2#u
 theorem reconstruct_outside (g : G) (n : N) (domain : Aeneas.Std.Array Std.U8 2#usize)
     (backward : Bool) (leaves : Std.U64) (inactive : Std.Usize) (digests : Slice Bytes)
     (loc : Std.U64) (item : Slice Std.U8) (maxLeaves : Std.U64)
-    (hmax : geo.max_leaves g = RustM.ok maxLeaves) (bound : leaves.val ≤ maxLeaves.val)
+    (hmax : geo.max_leaves g = RustM.ok maxLeaves)
     (out : leaves.val ≤ loc.val) :
     ∃ err, reconstruct.reconstruct geo dyTerms nodes single element noCollect g () n domain
       backward leaves inactive digests loc 1#u64 (.Some item) () = RustM.ok (.Err err) := by
@@ -1491,7 +1499,8 @@ theorem reconstruct_outside (g : G) (n : N) (domain : Aeneas.Std.Array Std.U8 2#
   · obtain ⟨room, hroom, roomv⟩ := sub_ok maxLeaves loc (by omega)
     obtain ⟨stop, hstop, stopv⟩ := add_ok loc 1#u64 (by scalar_tac)
     have past : leaves.val < stop.val := by simp at stopv; omega
-    exact ⟨.InvalidEndLoc, by by_cases z : room.val = 0 <;> simp [hmax, nz, late, hroom, z, hstop, past]⟩
+    exact ⟨.InvalidEndLoc, by
+      by_cases z : room.val = 0 <;> simp [hmax, nz, late, hroom, hstop, past]⟩
 end Single
 
 end
