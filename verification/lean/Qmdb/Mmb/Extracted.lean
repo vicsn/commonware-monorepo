@@ -865,7 +865,7 @@ theorem reconstruct_overinactive (g : G) (n : N) (domain : Aeneas.Std.Array Std.
   have endOk : ¬ leaves.val < stop.val := by omega
   unfold reconstruct.reconstruct
   exact ⟨.InvalidSize, by
-    simp [hmax, nz, startOk, hroom, hstop, endOk, bound, hpeaks, hloop, hl, roomNz]⟩
+    simp [hmax, nz, startOk, hroom, hstop, endOk, hpeaks, hloop, hl, roomNz]⟩
 
 end Fails
 
@@ -881,6 +881,103 @@ theorem containing_some (hs : List Nat) : ∀ (i0 loc : Nat), loc < (hs.map (2 ^
     · exact ⟨_, _, _, rfl⟩
     · simp only [List.map_cons, List.sum_cons] at inside
       exact ih _ _ (by omega)
+
+/-! ## The digests `Plan` refers to -/
+
+/-- The digest count of `Plan` is production's: the listed peaks and the path siblings. -/
+theorem assemble_count (leaves inactive loc i h off peaks : Nat) (g : Bool)
+    (bound : inactive ≤ peaks) (inside : i < peaks) :
+    (assemble leaves inactive loc i h off peaks g).count =
+      siblingsStartOf true inactive i (peaks - i - 1) + h := by
+  simp only [assemble, siblingsStartOf, afterStartOf, individualOf, foldOf, ↓reduceIte,
+    Nat.min_def, Nat.max_def]
+  split_ifs <;> omega
+
+theorem left_vals (raw : RawProof) (item : Bytes) (n : Nat) (fits : n ≤ raw.digests.length) :
+    ((List.range n).map fun j => Shape.atom (.sibling j)).map
+        (fun e => (e.fill (raw.get item)).value) = raw.digests.take n := by
+  apply List.ext_getElem
+  · simp; omega
+  · intro j h₁ h₂
+    simp at h₁
+    have hj : j < raw.digests.length := by omega
+    simp [Shape.fill, Expr.value, RawProof.get, List.getElem?_eq_getElem hj]
+
+theorem right_vals (raw : RawProof) (item : Bytes) (b n : Nat)
+    (fits : b + n ≤ raw.digests.length) :
+    ((List.range n).map fun j => Shape.atom (.sibling (b + j))).map
+        (fun e => (e.fill (raw.get item)).value) = (raw.digests.drop b).take n := by
+  apply List.ext_getElem
+  · simp; omega
+  · intro j h₁ h₂
+    simp at h₁
+    have hj : b + j < raw.digests.length := by omega
+    simp [Shape.fill, Expr.value, RawProof.get, List.getElem?_eq_getElem hj]
+
+/-- Every digest the planned peak refers to is in the proof. -/
+theorem available_peak (raw : RawProof) (g : Bool) (k : Nat) :
+    ∀ s off c, c + k ≤ raw.digests.length → (peakShape g k s off c).available raw := by
+  induction k with
+  | zero => intro s off c _; simp [peakShape, Shape.available]
+  | succ k ih =>
+    intro s off c room
+    have left := ih s off c (by omega)
+    have right := ih (s + 2 ^ k) (off - 2 ^ k) (c + 1) (by omega)
+    have last : c + k < raw.digests.length := by omega
+    have first : c < raw.digests.length := by omega
+    simp only [peakShape]
+    split <;> split <;> simp [Shape.available, left, right, last, first]
+
+theorem available_foldl (raw : RawProof) (L : List Shape) (all : ∀ e ∈ L, e.available raw) :
+    ∀ a, a.available raw → (L.foldl bag a).available raw := by
+  induction L with
+  | nil => intro a ha; exact ha
+  | cons x L ih =>
+    intro a ha
+    exact ih (fun e he => all e (by simp [he])) _ (by
+      simp [bag, Shape.available, ha, all x (by simp)])
+
+theorem available_foldr (raw : RawProof) (L : List Shape) (all : ∀ e ∈ L, e.available raw)
+    (last : Shape) (hl : last.available raw) : (L.foldr bag last).available raw := by
+  induction L with
+  | nil => exact hl
+  | cons x L ih =>
+    simp only [List.foldr_cons, bag, Shape.available, all x (by simp), Bool.true_and]
+    exact ih (fun e he => all e (by simp [he]))
+
+theorem available_foldTarget (raw : RawProof) (i inactive : Nat) (left right : List Shape)
+    (target : Shape) (all : ∀ e ∈ left ++ target :: right, e.available raw) :
+    (foldTarget i inactive left target right).available raw := by
+  have fold (k : Nat) (first : Shape) (rest : List Shape)
+      (hf : first.available raw) (hr : ∀ e ∈ rest, e.available raw) :
+      (foldFrom k first rest).available raw := by
+    unfold foldFrom
+    have acc := available_foldl raw (rest.take k)
+      (fun e he => hr e (List.mem_of_mem_take he)) first hf
+    cases h : (rest.drop k).reverse with
+    | nil => exact acc
+    | cons last rev =>
+      have inRest : ∀ e ∈ rev, e ∈ rest := by
+        intro e he
+        have : e ∈ (rest.drop k).reverse := by rw [h]; simp [he]
+        exact List.mem_of_mem_drop (List.mem_reverse.mp this)
+      have lastIn : last ∈ rest := by
+        have : last ∈ (rest.drop k).reverse := by rw [h]; simp
+        exact List.mem_of_mem_drop (List.mem_reverse.mp this)
+      simp only
+      apply available_foldr raw
+      · intro e he
+        simp only [List.mem_cons, List.mem_reverse] at he
+        rcases he with rfl | he
+        · exact acc
+        · exact hr e (inRest e he)
+      · exact hr last lastIn
+  cases left with
+  | nil =>
+    exact fold _ target right (all target (by simp)) (fun e he => all e (by simp [he]))
+  | cons l ls =>
+    exact fold _ l (ls ++ target :: right) (all l (by simp))
+      (fun e he => all e (by simp at he ⊢; tauto))
 
 end
 end Qmdb.Mmb.Extracted
