@@ -1,9 +1,19 @@
 #!/usr/bin/env bash
 # Check the symbolic verification: the extracted Rust against production, reproducible extraction,
 # the audit guide against the sources, the Lean proofs of every target with their axiom audits and
-# executed checks, and the mutations.
+# executed checks, and the pinned Tempo replay. With --mutation-testing, also require each mutation
+# of the extracted Rust to break its named proof modules; this takes about 20 minutes.
 # Logs go to verification/.lake/logs.
+#
+# Usage: check.sh [--mutation-testing]
 set -euo pipefail
+mutation_testing=false
+for arg in "$@"; do
+    case "$arg" in
+        --mutation-testing) mutation_testing=true ;;
+        *) echo "usage: $0 [--mutation-testing]" >&2; exit 2 ;;
+    esac
+done
 source "$(dirname "$0")/toolchain.sh"
 cd "$verification"
 
@@ -51,6 +61,10 @@ python3 audit/build.py --dag --check
 bash qmdb/mmb/check.sh | tee "$logs/tempo-mmb.log"
 
 # Each mutation of the extracted Rust must break the named proof modules.
-python3 mutate.py qmdb/mutations.toml | tee "$logs/mutations.log"
-python3 mutate.py bls/mutations.toml | tee -a "$logs/mutations.log"
-python3 mutate.py sake/mutations.toml | tee -a "$logs/mutations.log"
+if [[ "$mutation_testing" == true ]]; then
+    python3 mutate.py qmdb/mutations.toml | tee "$logs/mutations.log"
+    python3 mutate.py bls/mutations.toml | tee -a "$logs/mutations.log"
+    python3 mutate.py sake/mutations.toml | tee -a "$logs/mutations.log"
+else
+    echo 'Skipped mutation testing; run with --mutation-testing to include it.'
+fi
