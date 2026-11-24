@@ -17,11 +17,17 @@ terms and clients.
 - [toolchain.sh](toolchain.sh): the pins (Lean 4.35.0, DyLean `2254f7d19`, the managed hax CLI)
   and the shared setup: one DyLean build in `.lake/dylean`, patched by
   [lean435.patch](lean435.patch), and optional reuse of dependency builds.
-- [check.sh](check.sh): checks every target. Logs go to `.lake/logs`. Mutation testing takes
-  about 20 minutes, so it runs only with `--mutation-testing`.
+- [check.sh](check.sh): checks every target. Logs go to `.lake/logs`, and the wall time of each
+  stage to `.lake/logs/timings.log`. Mutation testing runs only with `--mutation-testing`.
 - [mutate.py](mutate.py): re-extracts mutated Rust and requires the named proof modules to fail.
-  Each target lists its mutations in a table: [qmdb/mutations.toml](qmdb/mutations.toml),
-  [bls/mutations.toml](bls/mutations.toml) and [sake/mutations.toml](sake/mutations.toml).
+  Each target lists its mutations in a table, [qmdb/mutations.toml](qmdb/mutations.toml),
+  [bls/mutations.toml](bls/mutations.toml) and [sake/mutations.toml](sake/mutations.toml), which
+  names the target's library: a mutation builds only that library and what it imports. A mutation
+  that leaves the extraction unchanged fails without a Lean build. Builds share Lake's artifact
+  cache in `.verification-tools/qmdb/lake-cache` (about 2 GB; delete it to reclaim the space).
+- [profile.sh](profile.sh) and [profile.py](profile.py): elaborate every module alone with Lean's
+  profiler and summarise the slowest modules, declarations and import chain in
+  `.lake/logs/profile/summary.md`.
 - [symbolic/](symbolic): the crate that hax extracts, outside the Commonware workspace.
   - `lib.rs` includes production modules unchanged through `#[path]`:
     `storage/src/merkle/hasher/terms.rs`, `storage/src/merkle/proof/traversal.rs`,
@@ -129,7 +135,8 @@ is the first target of this kind.
    `accept` and the event invariant, a `SecurityTheorems` module with the statements, and an
    `Audit` module that runs `#audit_axioms` over the target's namespace. Add a `lean_lib` to
    [lakefile.toml](lean/lakefile.toml).
-4. Add `<target>/mutations.toml` and run it from the mutation-testing step of `check.sh`.
+4. Add `<target>/mutations.toml`, with `library` set to the target's Lean library, and add it to
+   the mutation-testing step of `check.sh`.
 
 ## Lean style
 
@@ -172,8 +179,14 @@ Lean has no formatter, so the linters and the check are what keeps this in place
 
 ```bash
 bash verification/check.sh                     # proofs, extraction, audit guide
-bash verification/check.sh --mutation-testing  # also every mutation table, about 20 minutes
+bash verification/check.sh --mutation-testing  # also every mutation table
 ```
+
+On an M5 Pro with warm builds, `check.sh` takes about 35 seconds. Mutation testing adds about 10
+minutes with a cold artifact cache and about 4 minutes with a warm one. `--mutation-jobs=2`
+checks two mutations at once, which brings a warm run to about 3 minutes and needs about 18 GB
+with a cold cache; `--mutation-jobs=auto` picks the number from the memory available (see
+[mutate.py](mutate.py)).
 
 Run the mutation tests after changing the extracted Rust, the proofs' theorem statements or a
 mutation table, and before merging.

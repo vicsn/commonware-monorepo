@@ -4,6 +4,9 @@
 # changes what a step computes, so the lemma in `Sake.Steps` that states what the step computes
 # fails first.
 
+# The library that each mutation builds; every module in `fails` belongs to it.
+library = "Sake"
+
 [[mutation]]
 name = "listener skips the dialer's signature"
 file = "cryptography/src/handshake/sake/rules.rs"

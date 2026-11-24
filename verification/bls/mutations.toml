@@ -2,6 +2,9 @@
 # must occur once in `file` (relative to the repository), with `mutated`; `mutate.py` re-extracts
 # the crate and requires the proof module `fails` to stop compiling.
 
+# The library that each mutation builds; every module in `fails` belongs to it.
+library = "Bls"
+
 [[mutation]]
 name = "certificate skips the length check"
 file = "cryptography/src/bls12381/certificate/rules.rs"

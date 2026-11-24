@@ -2,6 +2,9 @@
 # in `file` (relative to the repository), with `mutated`; `mutate.py` re-extracts the crate and
 # requires exactly the proof modules in `fails` to stop compiling.
 
+# The library that each mutation builds; every module in `fails` belongs to it.
+library = "Qmdb"
+
 [[mutation]]
 name = "leaf hash drops the element"
 file = "storage/src/merkle/hasher/terms.rs"
