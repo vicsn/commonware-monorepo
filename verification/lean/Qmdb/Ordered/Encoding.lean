@@ -79,7 +79,7 @@ theorem literal_inj {a b : List Std.U8} (h : literal a = literal b) : a = b := b
   omega
 
 theorem word_inj {x y : Std.U64} (h : word x = word y) : x = y := by
-  have s : Verifier.be x = Verifier.be y := Slice.ext _ _ h
+  have s : Inclusion.be x = Inclusion.be y := Slice.ext _ _ h
   have w := congrArg (fun s => part (.Bytes s)) s
   simp only [CurrentRoot.be_wire] at w
   have bv := congrArg (readBE 8) (wireLiteral_injective w)
@@ -144,7 +144,7 @@ def encoding : Encoding K V :=
 
 /-- A writer that appends to a byte list: one byte, zeros, a big-endian word, or a key's or a
 value's codec bytes. This is how production's fixed codec fills its buffer. -/
-def baseWriter : layout.Writer (List Std.U8) K V (ordered.Update K V V) where
+def baseWriter : layout.Writer (List Std.U8) K V (reads.Update K V V) where
   byte w b := RustM.ok (w ++ [b])
   zeros w n := RustM.ok (w ++ zeros n.val)
   word w x := RustM.ok (w ++ word x)
@@ -154,7 +154,7 @@ def baseWriter : layout.Writer (List Std.U8) K V (ordered.Update K V V) where
 
 /-- The byte-list writer whose update payload is laid out by production's
 `write_ordered_update`. -/
-def writer : layout.Writer (List Std.U8) K V (ordered.Update K V V) :=
+def writer : layout.Writer (List Std.U8) K V (reads.Update K V V) :=
   { baseWriter c with
     update := fun w u => layout.write_ordered_update (baseWriter c) w u.key u.value u.next_key }
 
@@ -207,14 +207,14 @@ theorem total_ok : ∃ t : Std.Usize, layout.Widths.total (widths c) = RustM.ok 
   split_ifs <;> exact ⟨_, rfl, by omega⟩
 
 /-- The journal operation an extracted ordered operation stands for. -/
-def readOp : ordered.Operation Std.U64 K V V → Operation K V
+def readOp : reads.Operation Std.U64 K V V → Operation K V
   | .Update u => .update u.key u.value u.next_key
   | .Commit m f => .commit m ⟨f.bv⟩
 
 /-- Production's fixed encoding of an ordered operation writes exactly its bytes. -/
-theorem encode_ok (keyInst : ordered.Key K) (valueInst : ordered.ValueEncoding V V)
-    (op : ordered.Operation Std.U64 K V V) :
-    ordered.encode keyInst valueInst (writer c) [] (widths c) op =
+theorem encode_ok (keyInst : reads.Key K) (valueInst : reads.ValueEncoding V V)
+    (op : reads.Operation Std.U64 K V V) :
+    reads.encode keyInst valueInst (writer c) [] (widths c) op =
       RustM.ok (bytes c (readOp op)) := by
   have small := c.small
   obtain ⟨t, ht, tv⟩ := total_ok c
@@ -226,7 +226,7 @@ theorem encode_ok (keyInst : ordered.Key K) (valueInst : ordered.ValueEncoding V
     obtain ⟨w, hw, wv⟩ := add_ok 1#usize (widths c).update (by rw [widths_update]; scalar_tac)
     simp only [widths_update] at wv
     obtain ⟨z, hz, zv⟩ := sub_ok t w (by simp at wv; omega)
-    simp [ordered.encode, layout.write_fixed, ht, writer, baseWriter, layout.write_ordered_update,
+    simp [reads.encode, layout.write_fixed, ht, writer, baseWriter, layout.write_ordered_update,
       layout.Widths.update_operation, hw, hz, bytes, readOp]
     simp at zv wv
     rw [zv, tv, wv]
@@ -244,10 +244,10 @@ theorem encode_ok (keyInst : ordered.Key K) (valueInst : ordered.ValueEncoding V
     simp at ov zv
     cases m with
     | none =>
-      simp [ordered.encode, layout.write_fixed, ht, writer, baseWriter, layout.Widths.commit, ht₁,
+      simp [reads.encode, layout.write_fixed, ht, writer, baseWriter, layout.Widths.commit, ht₁,
         ht₂, hcm, hz, ho, bytes, readOp, ov, zv, tv, t₂v, t₁v, cmv]
     | some v =>
-      simp [ordered.encode, layout.write_fixed, ht, writer, baseWriter, layout.Widths.commit, ht₁,
+      simp [reads.encode, layout.write_fixed, ht, writer, baseWriter, layout.Widths.commit, ht₁,
         ht₂, hcm, hz, bytes, readOp, zv, tv, t₂v, t₁v, cmv]
 
 end

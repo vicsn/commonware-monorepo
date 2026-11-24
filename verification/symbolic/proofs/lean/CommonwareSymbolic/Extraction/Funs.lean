@@ -2107,26 +2107,26 @@ def grafting.Grafted.Insts.Commonware_symbolicTraversalNodes {N : Type _} {T :
     traversalNodesInst termsTermsInst coreconvertAsRefCSliceU8Inst
 }
 
-/-- [commonware_symbolic::ordered::claim::membership]:
+/-- [commonware_symbolic::reads::claim::membership]:
     Source: 'src/../../../storage/src/qmdb/current/ordered/proof/claim.rs', lines 9:0-19:1 -/
-def ordered.claim.membership
+def reads.claim.membership
   {F : Type _} {K : Type _} {V : Type _} {Clause2_Value : Type _}
-  (GraftableInst : ordered.Graftable F) (KeyInst : ordered.Key K)
-  (ValueEncodingInst : ordered.ValueEncoding V Clause2_Value) (key : K)
+  (GraftableInst : reads.Graftable F) (KeyInst : reads.Key K)
+  (ValueEncodingInst : reads.ValueEncoding V Clause2_Value) (key : K)
   (value : Clause2_Value) (next : K) :
-  RustM (ordered.Operation F K V Clause2_Value)
+  RustM (reads.Operation F K V Clause2_Value)
   := do
   let t ← KeyInst.corecloneCloneInst.clone next
-  ok (ordered.Operation.Update { key, value, next_key := t })
+  ok (reads.Operation.Update { key, value, next_key := t })
 
-/-- [commonware_symbolic::ordered::{impl core::clone::Clone for commonware_symbolic::ordered::Update<K, V, Clause1_Value>}::clone]:
-    Source: 'src/ordered.rs', lines 43:4-49:5
+/-- [commonware_symbolic::reads::{impl core::clone::Clone for commonware_symbolic::reads::Update<K, V, Clause1_Value>}::clone]:
+    Source: 'src/reads.rs', lines 43:4-49:5
     Visibility: public -/
-def ordered.Update.Insts.CoreCloneClone.clone
-  {K : Type _} {V : Type _} {Clause1_Value : Type _} (KeyInst : ordered.Key K)
-  (ValueEncodingInst : ordered.ValueEncoding V Clause1_Value)
-  (self : ordered.Update K V Clause1_Value) :
-  RustM (ordered.Update K V Clause1_Value)
+def reads.Update.Insts.CoreCloneClone.clone
+  {K : Type _} {V : Type _} {Clause1_Value : Type _} (KeyInst : reads.Key K)
+  (ValueEncodingInst : reads.ValueEncoding V Clause1_Value)
+  (self : reads.Update K V Clause1_Value) :
+  RustM (reads.Update K V Clause1_Value)
   := do
   let t ← KeyInst.corecloneCloneInst.clone self.key
   let t1 ← ValueEncodingInst.corecloneCloneInst.clone self.value
@@ -2145,10 +2145,10 @@ def cyclic.contains
        then ok before_end
        else ok false
 
-/-- [commonware_symbolic::ordered::contains_cyclic]:
-    Source: 'src/ordered.rs', lines 28:0-34:1 -/
-def ordered.contains_cyclic
-  {K : Type _} (KeyInst : ordered.Key K) (span : core.ops.range.Range K)
+/-- [commonware_symbolic::reads::contains_cyclic]:
+    Source: 'src/reads.rs', lines 28:0-34:1 -/
+def reads.contains_cyclic
+  {K : Type _} (KeyInst : reads.Key K) (span : core.ops.range.Range K)
   (key : K) :
   RustM Bool
   := do
@@ -2157,38 +2157,38 @@ def ordered.contains_cyclic
   let b2 ← KeyInst.less key span.end
   cyclic.contains (¬ b) (¬ b1) b2
 
-/-- [commonware_symbolic::ordered::claim::exclusion]:
+/-- [commonware_symbolic::reads::claim::exclusion]:
     Source: 'src/../../../storage/src/qmdb/current/ordered/proof/claim.rs', lines 25:0-40:1 -/
-def ordered.claim.exclusion
+def reads.claim.exclusion
   {F : Type _} {K : Type _} {V : Type _} {D : Type _} {C : Type _}
-  {Clause2_Value : Type _} (GraftableInst : ordered.Graftable F) (KeyInst :
-  ordered.Key K) (ValueEncodingInst : ordered.ValueEncoding V Clause2_Value)
-  (DigestInst : ordered.Digest D) (key : K)
-  (proof : ordered.ExclusionProof F K V D C Clause2_Value) :
-  RustM (core.option.Option ((ordered.OperationProof F D C) ×
-    (ordered.Operation F K V Clause2_Value)))
+  {Clause2_Value : Type _} (GraftableInst : reads.Graftable F) (KeyInst :
+  reads.Key K) (ValueEncodingInst : reads.ValueEncoding V Clause2_Value)
+  (DigestInst : reads.Digest D) (key : K)
+  (proof : reads.ExclusionProof F K V D C Clause2_Value) :
+  RustM (core.option.Option ((reads.OperationProof F D C) × (reads.Operation F
+    K V Clause2_Value)))
   := do
   match proof with
-  | ordered.ExclusionProof.KeyValue op_proof data =>
+  | reads.ExclusionProof.KeyValue op_proof data =>
     let b ← KeyInst.corecmpPartialEqInst.eq data.key key
     if b
     then ok core.option.Option.None
     else
       let b1 ←
-        ordered.contains_cyclic KeyInst
+        reads.contains_cyclic KeyInst
           { start := data.key, «end» := data.next_key } key
       if b1
       then
         let u ←
-          ordered.Update.Insts.CoreCloneClone.clone KeyInst ValueEncodingInst
+          reads.Update.Insts.CoreCloneClone.clone KeyInst ValueEncodingInst
             data
-        ok (core.option.Option.Some (op_proof, ordered.Operation.Update u))
+        ok (core.option.Option.Some (op_proof, reads.Operation.Update u))
       else ok core.option.Option.None
-  | ordered.ExclusionProof.Commit op_proof metadata =>
+  | reads.ExclusionProof.Commit op_proof metadata =>
     let o ←
       core.option.Option.Insts.CoreCloneClone.clone
         ValueEncodingInst.corecloneCloneInst metadata
-    ok (core.option.Option.Some (op_proof, ordered.Operation.Commit o
+    ok (core.option.Option.Some (op_proof, reads.Operation.Commit o
       op_proof.loc))
 
 /-- [commonware_symbolic::activity::offset]:
@@ -2759,143 +2759,24 @@ def geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks :
     geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks.birth_offset
 }
 
-/-- Trait implementation: [commonware_symbolic::ordered::{impl core::clone::Clone for commonware_symbolic::ordered::Update<K, V, Clause1_Value>}]
-    Source: 'src/ordered.rs', lines 42:0-50:1 -/
-@[reducible]
-impl_def ordered.Update.Insts.CoreCloneClone {K : Type _} {V : Type _}
-  {Clause1_Value : Type _} (KeyInst : ordered.Key K) (ValueEncodingInst :
-  ordered.ValueEncoding V Clause1_Value) : core.clone.Clone (ordered.Update K V
-  Clause1_Value) := {
-  clone := ordered.Update.Insts.CoreCloneClone.clone KeyInst ValueEncodingInst
-  clone_from := core.clone.Clone.clone_from.default
-    (ordered.Update.Insts.CoreCloneClone KeyInst ValueEncodingInst)
-}
+/-- [commonware_symbolic::inclusion::MAX_HEIGHT]
+    Source: 'src/inclusion.rs', lines 19:0-19:38 -/
+@[global_simps, irreducible] def inclusion.MAX_HEIGHT : Std.U32 := 62#u32
 
-/-- Trait implementation: [commonware_symbolic::ordered::{impl commonware_symbolic::ordered::Graftable for u64}]
-    Source: 'src/ordered.rs', lines 90:0-90:25 -/
-@[reducible]
-def U64.Insts.Commonware_symbolicOrderedGraftable : ordered.Graftable Std.U64
-  := {
-  coremarkerCopyInst := core.U64.Insts.CoreMarkerCopy
-}
+/-- [commonware_symbolic::BACKWARD_FOLD]
+    Source: 'src/lib.rs', lines 61:0-61:39 -/
+@[global_simps, irreducible] def BACKWARD_FOLD : Std.U8 := 1#u8
 
-/-- [commonware_symbolic::ordered::encode]:
-    Source: 'src/ordered.rs', lines 93:0-111:1 -/
-def ordered.encode
-  {K : Type _} {V : Type _} {W : Type _} {Clause1_Value : Type _} (KeyInst :
-  ordered.Key K) (ValueEncodingInst : ordered.ValueEncoding V Clause1_Value)
-  (layoutWriterWKClause1_ValueUpdateInst : layout.Writer W K Clause1_Value
-  (ordered.Update K V Clause1_Value)) (writer : W) (widths : layout.Widths)
-  (operation : ordered.Operation Std.U64 K V Clause1_Value) :
-  RustM W
-  := do
-  match operation with
-  | ordered.Operation.Update update =>
-    layout.write_fixed layoutWriterWKClause1_ValueUpdateInst writer widths
-      (layout.Operation.Update update)
-  | ordered.Operation.Commit metadata floor =>
-    layout.write_fixed layoutWriterWKClause1_ValueUpdateInst writer widths
-      (layout.Operation.Commit metadata floor)
-
-/-- [commonware_symbolic::qmdb::BACKWARD_FOLD]
-    Source: 'src/qmdb.rs', lines 18:0-18:39 -/
-@[global_simps, irreducible] def qmdb.BACKWARD_FOLD : Std.U8 := 1#u8
-
-/-- [commonware_symbolic::ordered::verify_selected]:
-    Source: 'src/ordered.rs', lines 114:0-150:1 -/
-def ordered.verify_selected
-  {K : Type _} {V : Type _} {T : Type _} {W : Type _} {Clause1_Value : Type _}
-  {Clause2_Digest : Type _} (KeyInst : ordered.Key K) (ValueEncodingInst :
-  ordered.ValueEncoding V Clause1_Value) (termsTermsInst : terms.Terms T
-  Clause2_Digest) (DigestInst : ordered.Digest Clause2_Digest)
-  (layoutWriterWKClause1_ValueUpdateInst : layout.Writer W K Clause1_Value
-  (ordered.Update K V Clause1_Value)) (coreconvertAsRefWSliceU8Inst :
-  core.convert.AsRef W (Slice Std.U8)) (terms1 : T) (widths : layout.Widths)
-  (writer : W)
-  (proof : ordered.OperationProof Std.U64 Clause2_Digest (ordered.Payload
-  Clause2_Digest)) (operation : ordered.Operation Std.U64 K V Clause1_Value)
-  (root : Clause2_Digest) :
-  RustM Bool
-  := do
-  let (t, p) := proof.payload
-  let writer1 ←
-    ordered.encode KeyInst ValueEncodingInst
-      layoutWriterWKClause1_ValueUpdateInst writer widths operation
-  let s ← coreconvertAsRefWSliceU8Inst.as_ref writer1
-  current.verify_operation
-    geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks
-    termsTermsInst () terms1 qmdb.BACKWARD_FOLD true
-    {
-      leaves := p.leaves,
-      inactive := p.inactive,
-      digests := p.digests,
-      ops_root := t,
-      pending := p.pending,
-      «partial» := p.partial
-    } proof.loc p.chunk s root
-
-/-- [commonware_symbolic::ordered::verify_member]:
-    Source: 'src/ordered.rs', lines 155:0-174:1 -/
-def ordered.verify_member
-  {K : Type _} {V : Type _} {T : Type _} {W : Type _} {Clause1_Value : Type _}
-  {Clause2_Digest : Type _} (KeyInst : ordered.Key K) (ValueEncodingInst :
-  ordered.ValueEncoding V Clause1_Value) (termsTermsInst : terms.Terms T
-  Clause2_Digest) (DigestInst : ordered.Digest Clause2_Digest)
-  (layoutWriterWKClause1_ValueUpdateInst : layout.Writer W K Clause1_Value
-  (ordered.Update K V Clause1_Value)) (coreconvertAsRefWSliceU8Inst :
-  core.convert.AsRef W (Slice Std.U8)) (terms1 : T) (widths : layout.Widths)
-  (writer : W) (key : K) (value : Clause1_Value) (next : K)
-  (proof : ordered.OperationProof Std.U64 Clause2_Digest (ordered.Payload
-  Clause2_Digest)) (root : Clause2_Digest) :
-  RustM Bool
-  := do
-  let operation ←
-    ordered.claim.membership U64.Insts.Commonware_symbolicOrderedGraftable
-      KeyInst ValueEncodingInst key value next
-  ordered.verify_selected KeyInst ValueEncodingInst termsTermsInst DigestInst
-    layoutWriterWKClause1_ValueUpdateInst coreconvertAsRefWSliceU8Inst terms1
-    widths writer proof operation root
-
-/-- [commonware_symbolic::ordered::verify_exclusion]:
-    Source: 'src/ordered.rs', lines 178:0-199:1 -/
-def ordered.verify_exclusion
-  {K : Type _} {V : Type _} {T : Type _} {W : Type _} {Clause1_Value : Type _}
-  {Clause2_Digest : Type _} (KeyInst : ordered.Key K) (ValueEncodingInst :
-  ordered.ValueEncoding V Clause1_Value) (termsTermsInst : terms.Terms T
-  Clause2_Digest) (DigestInst : ordered.Digest Clause2_Digest)
-  (layoutWriterWKClause1_ValueUpdateInst : layout.Writer W K Clause1_Value
-  (ordered.Update K V Clause1_Value)) (coreconvertAsRefWSliceU8Inst :
-  core.convert.AsRef W (Slice Std.U8)) (terms1 : T) (widths : layout.Widths)
-  (writer : W) (key : K)
-  (proof : ordered.ExclusionProof Std.U64 K V Clause2_Digest (ordered.Payload
-  Clause2_Digest) Clause1_Value) (root : Clause2_Digest) :
-  RustM Bool
-  := do
-  let o ←
-    ordered.claim.exclusion U64.Insts.Commonware_symbolicOrderedGraftable
-      KeyInst ValueEncodingInst DigestInst key proof
-  match o with
-  | core.option.Option.None => ok false
-  | core.option.Option.Some p =>
-    let (op, operation) := p
-    ordered.verify_selected KeyInst ValueEncodingInst termsTermsInst DigestInst
-      layoutWriterWKClause1_ValueUpdateInst coreconvertAsRefWSliceU8Inst terms1
-      widths writer op operation root
-
-/-- [commonware_symbolic::qmdb::MAX_HEIGHT]
-    Source: 'src/qmdb.rs', lines 21:0-21:38 -/
-@[global_simps, irreducible] def qmdb.MAX_HEIGHT : Std.U32 := 62#u32
-
-/-- [commonware_symbolic::qmdb::verify]:
-    Source: 'src/qmdb.rs', lines 26:0-54:1 -/
-def qmdb.verify
+/-- [commonware_symbolic::inclusion::verify_element_inclusion]:
+    Source: 'src/inclusion.rs', lines 24:0-52:1 -/
+def inclusion.verify_element_inclusion
   {T : Type _} {Clause0_Digest : Type _} (termsTermsInst : terms.Terms T
   Clause0_Digest) (terms1 : T) (height : Std.U32) (location : Std.U64)
   (root : Clause0_Digest) (item : Slice Std.U8)
   (siblings : Slice Clause0_Digest) :
   RustM Bool
   := do
-  if height > qmdb.MAX_HEIGHT
+  if height > inclusion.MAX_HEIGHT
   then ok false
   else
     let sn ← reconstruct.StandardNodes.new () terms1
@@ -2911,32 +2792,150 @@ def qmdb.verify
         reconstruct.Single.Insts.CoreIterTraitsIteratorIteratorElement
         reconstruct.Element.Insts.CoreConvertAsRefSliceU8
         (Tuple.Insts.Commonware_symbolicTraversalCollect Clause0_Digest) ()
-        terms1 sn
-        (Array.make 2#usize [ mmr_geometry.DOMAIN, qmdb.BACKWARD_FOLD ]) true i
-        0#usize siblings location 1#u64 s ()
+        terms1 sn (Array.make 2#usize [ mmr_geometry.DOMAIN, BACKWARD_FOLD ])
+        true i 0#usize siblings location 1#u64 s ()
     match r with
     | core.result.Result.Ok rebuilt =>
       termsTermsInst.corecmpPartialEqInst.eq rebuilt root
     | core.result.Result.Err _ => ok false
 
-/-- [commonware_symbolic::qmdb::client_step]:
-    Source: 'src/qmdb.rs', lines 68:0-90:1 -/
-def qmdb.client_step
+/-- [commonware_symbolic::inclusion::accept_inclusion]:
+    Source: 'src/inclusion.rs', lines 66:0-88:1 -/
+def inclusion.accept_inclusion
   {T : Type _} {Clause0_Digest : Type _} {Clause1_Message : Type _}
   (termsTermsInst : terms.Terms T Clause0_Digest) (clientMessagesInst :
   client.Messages T Clause1_Message) (terms1 : T) (root : Clause0_Digest)
   (height : Std.U32) (message : Clause1_Message) (location : Std.U64)
   (siblings : Slice Clause0_Digest) :
-  RustM (core.option.Option qmdb.Acceptance)
+  RustM (core.option.Option inclusion.Acceptance)
   := do
   let o ← clientMessagesInst.parse terms1 message
   match o with
   | core.option.Option.None => ok core.option.Option.None
   | core.option.Option.Some item =>
     let b ←
-      qmdb.verify termsTermsInst terms1 height location root item siblings
+      inclusion.verify_element_inclusion termsTermsInst terms1 height location
+        root item siblings
     if b
     then ok (core.option.Option.Some { height, location, item })
     else ok core.option.Option.None
+
+/-- Trait implementation: [commonware_symbolic::reads::{impl core::clone::Clone for commonware_symbolic::reads::Update<K, V, Clause1_Value>}]
+    Source: 'src/reads.rs', lines 42:0-50:1 -/
+@[reducible]
+impl_def reads.Update.Insts.CoreCloneClone {K : Type _} {V : Type _}
+  {Clause1_Value : Type _} (KeyInst : reads.Key K) (ValueEncodingInst :
+  reads.ValueEncoding V Clause1_Value) : core.clone.Clone (reads.Update K V
+  Clause1_Value) := {
+  clone := reads.Update.Insts.CoreCloneClone.clone KeyInst ValueEncodingInst
+  clone_from := core.clone.Clone.clone_from.default
+    (reads.Update.Insts.CoreCloneClone KeyInst ValueEncodingInst)
+}
+
+/-- Trait implementation: [commonware_symbolic::reads::{impl commonware_symbolic::reads::Graftable for u64}]
+    Source: 'src/reads.rs', lines 90:0-90:25 -/
+@[reducible]
+def U64.Insts.Commonware_symbolicReadsGraftable : reads.Graftable Std.U64 := {
+  coremarkerCopyInst := core.U64.Insts.CoreMarkerCopy
+}
+
+/-- [commonware_symbolic::reads::encode]:
+    Source: 'src/reads.rs', lines 93:0-111:1 -/
+def reads.encode
+  {K : Type _} {V : Type _} {W : Type _} {Clause1_Value : Type _} (KeyInst :
+  reads.Key K) (ValueEncodingInst : reads.ValueEncoding V Clause1_Value)
+  (layoutWriterWKClause1_ValueUpdateInst : layout.Writer W K Clause1_Value
+  (reads.Update K V Clause1_Value)) (writer : W) (widths : layout.Widths)
+  (operation : reads.Operation Std.U64 K V Clause1_Value) :
+  RustM W
+  := do
+  match operation with
+  | reads.Operation.Update update =>
+    layout.write_fixed layoutWriterWKClause1_ValueUpdateInst writer widths
+      (layout.Operation.Update update)
+  | reads.Operation.Commit metadata floor =>
+    layout.write_fixed layoutWriterWKClause1_ValueUpdateInst writer widths
+      (layout.Operation.Commit metadata floor)
+
+/-- [commonware_symbolic::reads::verify_selected]:
+    Source: 'src/reads.rs', lines 114:0-150:1 -/
+def reads.verify_selected
+  {K : Type _} {V : Type _} {T : Type _} {W : Type _} {Clause1_Value : Type _}
+  {Clause2_Digest : Type _} (KeyInst : reads.Key K) (ValueEncodingInst :
+  reads.ValueEncoding V Clause1_Value) (termsTermsInst : terms.Terms T
+  Clause2_Digest) (DigestInst : reads.Digest Clause2_Digest)
+  (layoutWriterWKClause1_ValueUpdateInst : layout.Writer W K Clause1_Value
+  (reads.Update K V Clause1_Value)) (coreconvertAsRefWSliceU8Inst :
+  core.convert.AsRef W (Slice Std.U8)) (terms1 : T) (widths : layout.Widths)
+  (writer : W)
+  (proof : reads.OperationProof Std.U64 Clause2_Digest (reads.Payload
+  Clause2_Digest)) (operation : reads.Operation Std.U64 K V Clause1_Value)
+  (root : Clause2_Digest) :
+  RustM Bool
+  := do
+  let (t, p) := proof.payload
+  let writer1 ←
+    reads.encode KeyInst ValueEncodingInst
+      layoutWriterWKClause1_ValueUpdateInst writer widths operation
+  let s ← coreconvertAsRefWSliceU8Inst.as_ref writer1
+  current.verify_operation
+    geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks
+    termsTermsInst () terms1 BACKWARD_FOLD true
+    {
+      leaves := p.leaves,
+      inactive := p.inactive,
+      digests := p.digests,
+      ops_root := t,
+      pending := p.pending,
+      «partial» := p.partial
+    } proof.loc p.chunk s root
+
+/-- [commonware_symbolic::reads::verify_member]:
+    Source: 'src/reads.rs', lines 155:0-174:1 -/
+def reads.verify_member
+  {K : Type _} {V : Type _} {T : Type _} {W : Type _} {Clause1_Value : Type _}
+  {Clause2_Digest : Type _} (KeyInst : reads.Key K) (ValueEncodingInst :
+  reads.ValueEncoding V Clause1_Value) (termsTermsInst : terms.Terms T
+  Clause2_Digest) (DigestInst : reads.Digest Clause2_Digest)
+  (layoutWriterWKClause1_ValueUpdateInst : layout.Writer W K Clause1_Value
+  (reads.Update K V Clause1_Value)) (coreconvertAsRefWSliceU8Inst :
+  core.convert.AsRef W (Slice Std.U8)) (terms1 : T) (widths : layout.Widths)
+  (writer : W) (key : K) (value : Clause1_Value) (next : K)
+  (proof : reads.OperationProof Std.U64 Clause2_Digest (reads.Payload
+  Clause2_Digest)) (root : Clause2_Digest) :
+  RustM Bool
+  := do
+  let operation ←
+    reads.claim.membership U64.Insts.Commonware_symbolicReadsGraftable KeyInst
+      ValueEncodingInst key value next
+  reads.verify_selected KeyInst ValueEncodingInst termsTermsInst DigestInst
+    layoutWriterWKClause1_ValueUpdateInst coreconvertAsRefWSliceU8Inst terms1
+    widths writer proof operation root
+
+/-- [commonware_symbolic::reads::verify_exclusion]:
+    Source: 'src/reads.rs', lines 178:0-199:1 -/
+def reads.verify_exclusion
+  {K : Type _} {V : Type _} {T : Type _} {W : Type _} {Clause1_Value : Type _}
+  {Clause2_Digest : Type _} (KeyInst : reads.Key K) (ValueEncodingInst :
+  reads.ValueEncoding V Clause1_Value) (termsTermsInst : terms.Terms T
+  Clause2_Digest) (DigestInst : reads.Digest Clause2_Digest)
+  (layoutWriterWKClause1_ValueUpdateInst : layout.Writer W K Clause1_Value
+  (reads.Update K V Clause1_Value)) (coreconvertAsRefWSliceU8Inst :
+  core.convert.AsRef W (Slice Std.U8)) (terms1 : T) (widths : layout.Widths)
+  (writer : W) (key : K)
+  (proof : reads.ExclusionProof Std.U64 K V Clause2_Digest (reads.Payload
+  Clause2_Digest) Clause1_Value) (root : Clause2_Digest) :
+  RustM Bool
+  := do
+  let o ←
+    reads.claim.exclusion U64.Insts.Commonware_symbolicReadsGraftable KeyInst
+      ValueEncodingInst DigestInst key proof
+  match o with
+  | core.option.Option.None => ok false
+  | core.option.Option.Some p =>
+    let (op, operation) := p
+    reads.verify_selected KeyInst ValueEncodingInst termsTermsInst DigestInst
+      layoutWriterWKClause1_ValueUpdateInst coreconvertAsRefWSliceU8Inst terms1
+      widths writer op operation root
 
 end commonware_symbolic

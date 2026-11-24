@@ -11,8 +11,8 @@ use crate::{
     cyclic,
     geometry::Mmb,
     layout::{self, Widths, Writer},
-    qmdb::BACKWARD_FOLD,
     terms::Terms,
+    BACKWARD_FOLD,
 };
 use core::ops::Range;
 

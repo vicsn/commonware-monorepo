@@ -161,7 +161,7 @@ theorem peaks_around (n : Std.U64) (valid : n.val ≤ Peaks.maxLeaves) {loc i h 
 /-! ## Rebuilding the peak that holds the location -/
 
 /-- The eight-byte big-endian word of `Plan` is the bytes production hashes for a position. -/
-theorem word_eq (p : Std.U64) : count (UInt64.ofNat p.val) = part (.Bytes (Verifier.be p)) := by
+theorem word_eq (p : Std.U64) : count (UInt64.ofNat p.val) = part (.Bytes (Inclusion.be p)) := by
   rw [CurrentRoot.be_wire]
   simp only [count]
   congr 2
@@ -192,7 +192,7 @@ theorem sibling_ok (o : Opening (N := N)) (room : o.cursor.val < o.siblings.leng
     CoreModels.core.slice.Slice.get, roomv,
     CoreModels.core.Usize.Insts.CoreSliceIndexSliceIndexSliceT.get,
     rust_primitives.slice.slice_length,
-    rust_primitives.slice.slice_index, Verifier.index_ok o.siblings o.cursor room, hc]
+    rust_primitives.slice.slice_index, Inclusion.index_ok o.siblings o.cursor room, hc]
 
 /-- With enough siblings, the production traversal of an MMB subtree that holds `loc` returns
 the value of `peakShape` over the proof's fields and reads exactly `k` siblings. The hypotheses
@@ -202,12 +202,12 @@ theorem dfs
       p.val = subtreePosition s (k + 1) → h.val = k + 1 →
       ∃ l r : Std.U64, nodes.children x p h = RustM.ok (l, r) ∧
         l.val = subtreePosition s k ∧ r.val = subtreePosition (s + 2 ^ k) k)
-    (leafH : ∀ p a, nodes.leaf_digest x p a = RustM.ok (Verifier.leafTerm p a))
+    (leafH : ∀ p a, nodes.leaf_digest x p a = RustM.ok (Inclusion.leafTerm p a))
     (nodeH : ∀ (p : Std.U64) (h : Std.U32) (st : Std.U64) (l r : Bytes),
       st.val ≤ loc.val → loc.val < st.val + 2 ^ h.val → h.val ≤ 62 → 2 ^ h.val ∣ st.val →
       nodes.node_digest x p h st l r = RustM.ok
         (if g && h.val = 8 then Hash.hash (Concat.concat (Active.literal raw.chunk)
-          (Verifier.nodeTerm p l r)) else Verifier.nodeTerm p l r)) (k : Nat) :
+          (Inclusion.nodeTerm p l r)) else Inclusion.nodeTerm p l r)) (k : Nat) :
     ∀ (s : Nat) (p w st e : Std.U64) (o : Opening (N := N)),
       o.nodes = x → o.siblings.val = raw.digests → Peaks.Subtree n s k →
       p.val = subtreePosition s k → w.val = 2 ^ k → st.val = s → s ≤ loc.val →
@@ -231,7 +231,7 @@ theorem dfs
     simp [c1, c2, c3, traversal.Opening.Insts.Commonware_symbolicTraversalBackend.leaf, hel,
       reconstruct.Single.Insts.CoreIterTraitsIteratorIteratorElement.next,
       reconstruct.Element.Insts.CoreConvertAsRefSliceU8.as_ref, hx, leafH, peakShape,
-      Shape.fill, Expr.value, RawProof.get, Verifier.leafTerm, chain, ← hp, word_eq]
+      Shape.fill, Expr.value, RawProof.get, Inclusion.leafTerm, chain, ← hp, word_eq]
   | succ k ih =>
     intro s p w st e o hx hs tree hp hw hst lo hi he hel room
     have one : 1 ≤ 2 ^ k := Nat.one_le_two_pow
@@ -250,7 +250,7 @@ theorem dfs
     let hh : Std.U32 := ⟨BitVec.ofNat 32 (k + 1)⟩
     have hhv : hh.val = k + 1 := by
       change (BitVec.ofNat 32 (k + 1)).toNat = k + 1; simp; omega
-    have ilog : CoreModels.core.num.U64.ilog2 w = RustM.ok hh := Verifier.ilog2_ok w (k + 1) hw
+    have ilog : CoreModels.core.num.U64.ilog2 w = RustM.ok hh := Inclusion.ilog2_ok w (k + 1) hw
     obtain ⟨lp, rp, kids, lpv, rpv⟩ := childH s k p hh tree hp hhv
     obtain ⟨lt, rt⟩ := tree.children
     obtain ⟨half, hhalf, halfv⟩ := UScalar.div_spec w (y := 2#u64) (by decide)
@@ -265,7 +265,7 @@ theorem dfs
         traversal.Opening.Insts.Commonware_symbolicTraversalBackend.node nodes single element
           noCollect { o with elements := .None, cursor := c' } p w st l r = RustM.ok
           (if g && k + 1 = 8 then Hash.hash (Concat.concat (Active.literal raw.chunk)
-            (Verifier.nodeTerm p l r)) else Verifier.nodeTerm p l r) := by
+            (Inclusion.nodeTerm p l r)) else Inclusion.nodeTerm p l r) := by
       simp only [traversal.Opening.Insts.Commonware_symbolicTraversalBackend.node, ilog,
         bind_ok, hx]
       rw [nodeH p hh st l r (by omega) (by rw [hhv]; omega) (by omega)
@@ -300,9 +300,9 @@ theorem dfs
         simp [fields, RawProof.get, List.getElem?_eq_getElem room₁']
       cases g <;> by_cases hk : k = 7 <;>
         first
-        | (subst hk; simp [Shape.fill, Expr.value, get, Verifier.nodeTerm, chain, word_eq,
+        | (subst hk; simp [Shape.fill, Expr.value, get, Inclusion.nodeTerm, chain, word_eq,
             RawProof.get])
-        | simp [hk, Shape.fill, Expr.value, get, Verifier.nodeTerm, chain, word_eq,
+        | simp [hk, Shape.fill, Expr.value, get, Inclusion.nodeTerm, chain, word_eq,
             RawProof.get]
     · have room₀ : o.cursor.val < raw.digests.length := by omega
       obtain ⟨c₁, hc₁, c₁v⟩ := sibling_ok nodes o (by simp [Slice.length, hs]; omega)
@@ -321,9 +321,9 @@ theorem dfs
         simp [fields, RawProof.get, List.getElem?_eq_getElem room₀]
       cases g <;> by_cases hk : k = 7 <;>
         first
-        | (subst hk; simp [Shape.fill, Expr.value, get, Verifier.nodeTerm, chain, word_eq,
+        | (subst hk; simp [Shape.fill, Expr.value, get, Inclusion.nodeTerm, chain, word_eq,
             RawProof.get, c₁v, Nat.sub_add_eq])
-        | simp [hk, Shape.fill, Expr.value, get, Verifier.nodeTerm, chain, word_eq,
+        | simp [hk, Shape.fill, Expr.value, get, Inclusion.nodeTerm, chain, word_eq,
             RawProof.get, c₁v, Nat.sub_add_eq]
 
 end Dfs
@@ -354,10 +354,10 @@ theorem grafted_children (x : GraftedNodes) (n : Nat) (s k : Nat) (p : Std.U64) 
     geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks.children, ok]
 
 theorem grafted_leaf (x : GraftedNodes) (p : Std.U64) (a : Slice Std.U8) :
-    grafted.leaf_digest x p a = RustM.ok (Verifier.leafTerm p a) := by
+    grafted.leaf_digest x p a = RustM.ok (Inclusion.leafTerm p a) := by
   simp [grafting.Grafted.Insts.Commonware_symbolicTraversalNodes.leaf_digest,
     reconstruct.StandardNodes.Insts.Commonware_symbolicTraversalNodes.leaf_digest,
-    Verifier.leaf_eq]
+    Inclusion.leaf_eq]
 
 /-- `is_zero` from index `i` on: whether every later byte is zero. -/
 theorem is_zero_loop_ok (c : Slice Std.U8) (k : Nat) : ∀ i : Std.Usize,
@@ -381,7 +381,7 @@ theorem is_zero_loop_ok (c : Slice Std.U8) (k : Nat) : ∀ i : Std.Usize,
     have more : i.val < c.val.length := by omega
     have ne : ¬ i = Slice.len c := fun h => by
       have := congrArg UScalar.val h; simp at this; omega
-    have get := Verifier.index_ok c i more
+    have get := Inclusion.index_ok c i more
     by_cases zero : c.val[i.val] = 0#u8
     · obtain ⟨i₁, hi₁, i₁v⟩ := add_ok i 1#usize (by scalar_tac)
       have i₁v' : i₁.val = i.val + 1 := by simpa using i₁v
@@ -454,12 +454,12 @@ theorem grafted_node (chunk : Active.Chunk) (chunks : Slice current.Chunk)
     grafted.node_digest ⟨⟨(), ()⟩, (), 8#u32, startChunk, chunks, graftable⟩ p h st l r =
       RustM.ok (if (decide (loc.val / 256 < graftable.val) &&
           !decide (chunk = Vector.replicate 32 0)) && h.val = 8 then
-        Hash.hash (Concat.concat (Active.literal chunk) (Verifier.nodeTerm p l r))
-        else Verifier.nodeTerm p l r) := by
+        Hash.hash (Concat.concat (Active.literal chunk) (Inclusion.nodeTerm p l r))
+        else Inclusion.nodeTerm p l r) := by
   have plain : reconstruct.StandardNodes.Insts.Commonware_symbolicTraversalNodes.node_digest
-      mmbGeometry dyTerms ⟨(), ()⟩ p h st l r = RustM.ok (Verifier.nodeTerm p l r) := by
+      mmbGeometry dyTerms ⟨(), ()⟩ p h st l r = RustM.ok (Inclusion.nodeTerm p l r) := by
     simp [reconstruct.StandardNodes.Insts.Commonware_symbolicTraversalNodes.node_digest,
-      Verifier.node_eq]
+      Inclusion.node_eq]
   by_cases eight : h = 8#u32
   case neg =>
     have ne : h.val ≠ 8 := fun e => eight (UScalar.eq_of_val_eq (by simp [e]))
@@ -487,7 +487,7 @@ theorem grafted_node (chunk : Active.Chunk) (chunks : Slice current.Chunk)
   have zero₀ : loc₀.val = 0 := by omega
   have castZero : (UScalar.cast .Usize loc₀).val = 0 := by simp [zero₀]
   have get : Slice.index_usize chunks (UScalar.cast .Usize loc₀) = RustM.ok (chunkSlice chunk) := by
-    rw [Verifier.index_ok chunks _ (by simp [castZero, Slice.length, one])]
+    rw [Inclusion.index_ok chunks _ (by simp [castZero, Slice.length, one])]
     simp [castZero, one]
   by_cases nz : chunk = Vector.replicate 32 0
   · simp [grafting.Grafted.Insts.Commonware_symbolicTraversalNodes.node_digest, plain,
@@ -557,22 +557,22 @@ end Bag
 
 /-- The domain bytes production hashes into an MMB operations root are `Plan`'s. -/
 theorem domain_eq :
-    part (.Bytes (Aeneas.Std.Array.make 2#usize [mmb_geometry.DOMAIN, qmdb.BACKWARD_FOLD]).to_slice)
+    part (.Bytes (Aeneas.Std.Array.make 2#usize [mmb_geometry.DOMAIN, BACKWARD_FOLD]).to_slice)
       = domainBytes := by
   simp only [part, domainBytes, wireLiteral]
   congr 1
   apply ByteArray.ext
   simp [toByteArray, Aeneas.Std.Array.make, Array.to_slice, mmb_geometry.DOMAIN,
-    qmdb.BACKWARD_FOLD]
+    BACKWARD_FOLD]
 
-theorem be_same (x : Std.U64) : Reconstruct.be x = Verifier.be x := rfl
+theorem be_same (x : Std.U64) : Reconstruct.be x = Inclusion.be x := rfl
 
 /-- `Plan`'s Merkle root is production's root over the same bag. -/
 theorem val_merkle (get : Field → Bytes) (hd : get .domain = domainBytes)
     (hw : ∀ n, get (.word n) = count (UInt64.ofNat n)) (leaves : Std.U64) (inactive : Std.Usize)
     (folded : Shape) :
     val get (merkleShape leaves.val inactive.val folded) =
-      rootTerm (Aeneas.Std.Array.make 2#usize [mmb_geometry.DOMAIN, qmdb.BACKWARD_FOLD])
+      rootTerm (Aeneas.Std.Array.make 2#usize [mmb_geometry.DOMAIN, BACKWARD_FOLD])
         leaves (UScalar.cast .U64 inactive) (val get folded) := by
   have castv : (UScalar.cast .U64 inactive).val = inactive.val := by
     simp [UScalar.cast_val_eq]
@@ -624,7 +624,7 @@ theorem sized_one (chunk : Active.Chunk) (chunks : Slice current.Chunk)
       RustM.ok true := by
   have lenOne : Slice.len chunks = 1#usize := UScalar.eq_of_val_eq (by simp [one])
   have ne : ¬ (0#usize : Std.Usize) = 1#usize := by decide
-  have get := Verifier.index_ok chunks 0#usize (by simp [Slice.length, one])
+  have get := Inclusion.index_ok chunks 0#usize (by simp [Slice.length, one])
   obtain ⟨i₁, hi₁, i₁v⟩ := add_ok (0#usize : Std.Usize) 1#usize (by scalar_tac)
   have i₁one : i₁ = 1#usize := UScalar.eq_of_val_eq (by simpa using i₁v)
   subst i₁one
@@ -741,7 +741,7 @@ theorem partial_ok (chunk : Active.Chunk) (chunks : Slice current.Chunk)
   obtain ⟨z, hz, zv⟩ := sub_ok (1#usize : Std.Usize) 1#usize (le_refl _)
   have z0 : z = 0#usize := UScalar.eq_of_val_eq (by simpa using zv)
   subst z0
-  have get := Verifier.index_ok chunks 0#usize (by simp [Slice.length, one])
+  have get := Inclusion.index_ok chunks 0#usize (by simp [Slice.length, one])
   by_cases nb : nextBit.val = 0
   · have : nextBit = 0#u64 := UScalar.eq_of_val_eq (by simp [nb])
     simp [current.partial_matches, this]
@@ -785,7 +785,7 @@ theorem pending_ok (chunk : Active.Chunk) (chunks : Slice current.Chunk)
       simp [current.pending_matches, hgap, gv, one', below, above, at_start]
   obtain ⟨z, hz, zv⟩ := sub_ok graftable start (by omega)
   have zc : (UScalar.cast .Usize z).val = 0 := by simp [zv, at_start]
-  have get := Verifier.index_ok chunks (UScalar.cast .Usize z) (by simp [Slice.length, one, zc])
+  have get := Inclusion.index_ok chunks (UScalar.cast .Usize z) (by simp [Slice.length, one, zc])
   have first : chunks.val[(UScalar.cast .Usize z).val]'(by simp [one, zc]) = chunkSlice chunk := by
     simp [one, zc]
   have notBelow : ¬ graftable.val < start.val := by omega
@@ -1018,7 +1018,7 @@ structure Wide (f : current.Fields Bytes) : Prop where
 theorem canonical_ok (f : current.Fields Bytes) (m : Bytes) (nb : Std.U64) :
     current.canonical dyTerms () f m nb = RustM.ok (CurrentRoot.term f.ops_root m
       (optionOf f.pending)
-      ((optionOf f.partial).map fun d => (part (.Bytes (Verifier.be nb)), d))) := by
+      ((optionOf f.partial).map fun d => (part (.Bytes (Inclusion.be nb)), d))) := by
   cases hp : f.pending <;> cases ht : f.partial <;>
     simp [current.canonical, hp, ht, optionOf, CurrentRoot.extracted]
 
@@ -1106,7 +1106,7 @@ theorem reconstruct_refines (f : current.Fields Bytes) (loc : Std.U64) (chunk : 
     (hrec : current.reconstruct mmbGeometry dyTerms
       reconstruct.Single.Insts.CoreIterTraitsIteratorIteratorElement
       reconstruct.Element.Insts.CoreConvertAsRefSliceU8 current.Chunk.Insts.CoreConvertAsRefSliceU8
-      (Tuple.Insts.Commonware_symbolicTraversalCollect Bytes) () () qmdb.BACKWARD_FOLD true f loc
+      (Tuple.Insts.Commonware_symbolicTraversalCollect Bytes) () () BACKWARD_FOLD true f loc
       1#u64 (.Some item) chunks 32#usize () = RustM.ok (.Some r)) :
     (rawOf f chunk).verify r f.leaves.val f.inactive.val loc.val (part (.Bytes item)) = true := by
   have maxv : mmb_geometry.MAX_LEAVES.val = Peaks.maxLeaves := by
@@ -1117,7 +1117,7 @@ theorem reconstruct_refines (f : current.Fields Bytes) (loc : Std.U64) (chunk : 
   have hb8 : geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks.birth_offset ()
       8#u32 = RustM.ok 383#u64 := birth_eight
   have ilog : CoreModels.core.num.U64.ilog2 256#u64 = RustM.ok 8#u32 :=
-    Verifier.ilog2_ok 256#u64 8 (by decide)
+    Inclusion.ilog2_ok 256#u64 8 (by decide)
   unfold current.reconstruct at hrec
   simp only [chunk_bits_ok, hmax, covered_one chunk chunks one _ _ _ (by rw [maxv]; decide),
     bind_ok] at hrec
@@ -1228,7 +1228,7 @@ theorem reconstruct_refines (f : current.Fields Bytes) (loc : Std.U64) (chunk : 
     (loc.val - (loc.val - off)) first.val)).value = peakV at hrec
   have atEnd : c.val = f.digests.val.length := by simp at cv; omega
   simp [outcome, atEnd] at hrec
-  cases hb : bagRoot (Array.make 2#usize [mmb_geometry.DOMAIN, qmdb.BACKWARD_FOLD] (by rfl)) true
+  cases hb : bagRoot (Array.make 2#usize [mmb_geometry.DOMAIN, BACKWARD_FOLD] (by rfl)) true
       f.leaves (UScalar.cast .U64 f.inactive) (toFoldOf true f.inactive.val pre.length)
       (listed f.digests.val (afterStartOf true f.inactive.val pre.length)
         (siblingsStartOf true f.inactive.val pre.length post.length) peakV) with
@@ -1331,7 +1331,7 @@ theorem reconstruct_refines (f : current.Fields Bytes) (loc : Std.U64) (chunk : 
   split at hb
   case isFalse => simp at hb
   have merkleEq : merkle = rootTerm (Aeneas.Std.Array.make 2#usize
-      [mmb_geometry.DOMAIN, qmdb.BACKWARD_FOLD] (by rfl)) f.leaves (UScalar.cast .U64 f.inactive)
+      [mmb_geometry.DOMAIN, BACKWARD_FOLD] (by rfl)) f.leaves (UScalar.cast .U64 f.inactive)
       (bagWith foldTerm true (toFoldOf true f.inactive.val pre.length - 1) first' rest') := by
     simpa using hb.symm
   -- The Merkle root of `Plan`'s tree is production's.
@@ -1381,7 +1381,7 @@ theorem reconstruct_refines (f : current.Fields Bytes) (loc : Std.U64) (chunk : 
         (i - f.inactive.val) + j))))
     (optionOf f.pending) (optionOf f.partial) pendArg tailArg
   rw [merkleVal] at ev
-  have tailWord : count (UInt64.ofNat (f.leaves.val % 256)) = part (.Bytes (Verifier.be nb)) := by
+  have tailWord : count (UInt64.ofNat (f.leaves.val % 256)) = part (.Bytes (Inclusion.be nb)) := by
     rw [← nbL]; exact word_eq nb
   rw [tailWord] at ev
   -- The validity checks of `RawProof`.
@@ -1470,7 +1470,7 @@ theorem reconstruct_refines (f : current.Fields Bytes) (loc : Std.U64) (chunk : 
       (true && decide (loc.val / 256 < graftedChunks f.leaves.val))).tree.fill
         (fields (rawOf f chunk) item)).value = CurrentRoot.term f.ops_root merkle
       (optionOf f.pending)
-      ((optionOf f.partial).map fun d => (part (.Bytes (Verifier.be nb)), d)) := ev
+      ((optionOf f.partial).map fun d => (part (.Bytes (Inclusion.be nb)), d)) := ev
   generalize assemble f.leaves.val f.inactive.val loc.val i h off (heights f.leaves.val).length
     (true && decide (loc.val / 256 < graftedChunks f.leaves.val)) = R at recipeEq fieldsOk valOk
   simp [RawProof.verify, RawProof.reconstruct, recipeEq, fieldsOk, valOk]
@@ -1480,7 +1480,7 @@ theorem reconstruct_refines (f : current.Fields Bytes) (loc : Std.U64) (chunk : 
 `RawProof.verify` on the same fields. -/
 theorem verify_operation_refines (f : current.Fields Bytes) (loc : Std.U64)
     (chunk : Active.Chunk) (item : Slice Std.U8) (root : Bytes) (wide : Wide f)
-    (acc : current.verify_operation mmbGeometry dyTerms () () qmdb.BACKWARD_FOLD true f loc
+    (acc : current.verify_operation mmbGeometry dyTerms () () BACKWARD_FOLD true f loc
       (chunkSlice chunk) item root = RustM.ok true) :
     (rawOf f chunk).verify root f.leaves.val f.inactive.val loc.val (part (.Bytes item)) =
       true := by
@@ -1509,7 +1509,7 @@ root along the paths `Plan` assigns to `loc`, as does its bitmap chunk, whose bi
 set. -/
 theorem verify_operation_sound (f : current.Fields Bytes) (loc : Std.U64) (chunk : Active.Chunk)
     (item : Slice Std.U8) (root : Bytes) (wide : Wide f)
-    (acc : current.verify_operation mmbGeometry dyTerms () () qmdb.BACKWARD_FOLD true f loc
+    (acc : current.verify_operation mmbGeometry dyTerms () () BACKWARD_FOLD true f loc
       (chunkSlice chunk) item root = RustM.ok true) :
     ∃ w, Mmb.Accepts root f.leaves.val f.inactive.val loc.val (part (.Bytes item)) w :=
   RawProof.sound (verify_operation_refines f loc chunk item root wide acc)
@@ -1518,7 +1518,7 @@ theorem verify_operation_sound (f : current.Fields Bytes) (loc : Std.U64) (chunk
 to a header with the proof's leaf and inactive-peak counts. -/
 theorem verify_operation_header (f : current.Fields Bytes) (loc : Std.U64)
     (chunk : Active.Chunk) (item : Slice Std.U8) (root : Bytes) (wide : Wide f)
-    (acc : current.verify_operation mmbGeometry dyTerms () () qmdb.BACKWARD_FOLD true f loc
+    (acc : current.verify_operation mmbGeometry dyTerms () () BACKWARD_FOLD true f loc
       (chunkSlice chunk) item root = RustM.ok true) :
     ∃ h : Header, h.root = root ∧ h.leaves.toNat = f.leaves.val ∧
       h.inactive.toNat = f.inactive.val :=

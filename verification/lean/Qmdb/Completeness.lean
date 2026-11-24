@@ -47,13 +47,13 @@ theorem run_mk_apply {α : Type} [ExecTraceTypes]
 /-- When the extracted step accepts the message, the trace of the attempt holds the event. -/
 theorem attempt_logs [Snapshot] (item : Slice Std.U8) (loc : Std.U64) (ws : Slice Bytes)
     (event : Acceptance)
-    (accepted : commonware_symbolic.qmdb.client_step dyTerms messages () Snapshot.root
+    (accepted : commonware_symbolic.inclusion.accept_inclusion dyTerms messages () Snapshot.root
       Snapshot.height (carrying item) loc ws = RustM.ok (some event)) :
     ∃ time, ((attempt item loc ws).run Trace.empty).snd.val.EventLoggedAt event time := by
   simp only [attempt, client, receive, accept, Traceful.run_bind, Network.sendMessage,
     Network.receiveMessage, appendEntry, getEntry, ProtocolEvent.logEvent, run_mk_apply,
     Traceful.run_pure, Trace.at?_append]
-  have matched : (commonware_symbolic.qmdb.client_step dyTerms messages () Snapshot.root
+  have matched : (commonware_symbolic.inclusion.accept_inclusion dyTerms messages () Snapshot.root
       Snapshot.height (carrying item) loc ws).match = MatchResult.ok (some event) := by
     rw [accepted]
     rfl

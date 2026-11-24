@@ -10,7 +10,7 @@ the item half. The verifier also returns a verdict on every input and accepts ev
 opening. Checked by Lean; only the statements of `unique`, `verify_total`, `verify_bounds`,
 `honest_opening` and `extra_sibling_rejected` matter for review. -/
 
-namespace Qmdb.Verifier
+namespace Qmdb.Inclusion
 open DY Aeneas Aeneas.Std Aeneas.Std.WP CoreModels Commonware.Symbolic commonware_symbolic
 @[expose] public section
 
@@ -73,14 +73,14 @@ theorem rootTerm_inj {domain : Aeneas.Std.Array Std.U8 2#usize} {n : Std.U64} {x
 /-! ## The size bound -/
 
 /-- The largest height that the client accepts: the extracted `MAX_HEIGHT`. -/
-def maxHeight : Nat := qmdb.MAX_HEIGHT.val
+def maxHeight : Nat := inclusion.MAX_HEIGHT.val
 
 /-- The most leaves of a tree that the client accepts, which is production's limit on an MMR. -/
 def maxLeaves : Nat := 2 ^ maxHeight
 
 /-- The value of the bound. Every other statement and proof names it. -/
 theorem maxHeight_eq : maxHeight = 62 := by
-  simp [maxHeight, qmdb.MAX_HEIGHT]
+  simp [maxHeight, inclusion.MAX_HEIGHT]
 
 /-- The client accepts trees of two leaves, which the sanity checks use. -/
 theorem one_le_maxHeight : 1 ≤ maxHeight := by
@@ -88,7 +88,8 @@ theorem one_le_maxHeight : 1 ≤ maxHeight := by
   decide
 
 /-- The client's height check, read on natural numbers. -/
-theorem above_maxHeight (h : Std.U32) : h > qmdb.MAX_HEIGHT ↔ h.val > maxHeight :=
+theorem above_maxHeight (h : Std.U32) :
+    h > inclusion.MAX_HEIGHT ↔ h.val > maxHeight :=
   Iff.rfl
 
 /-- A tree within the height bound is within the leaf bound. -/
@@ -417,7 +418,7 @@ theorem rebuild_inj (a b : Slice Std.U8) (loc : Nat) (n : Nat) : ∀ (p s : Nat)
 
 /-- The two domain bytes of the client's root, read from the extraction. -/
 abbrev domain : Aeneas.Std.Array Std.U8 2#usize :=
-  Array.make 2#usize [mmr_geometry.DOMAIN, qmdb.BACKWARD_FOLD]
+  Array.make 2#usize [mmr_geometry.DOMAIN, BACKWARD_FOLD]
 
 theorem eq_ok (a b : Bytes) :
     dyTerms.corecmpPartialEqInst.eq a b = RustM.ok (decide (a = b)) :=
@@ -442,13 +443,14 @@ theorem verify_eq (h : Std.U32) (bound : h.val ≤ maxHeight) (loc : Std.U64) (r
     (item : Slice Std.U8) (ws : Slice Bytes) (inside : loc.val < 2 ^ h.val) :
     ∃ (w p e : Std.U64), w.val = 2 ^ h.val ∧ p.val = 2 * (2 ^ h.val - 1) ∧
       e.val = loc.val + 1 ∧
-      qmdb.verify dyTerms () h loc root item ws =
+      inclusion.verify_element_inclusion dyTerms () h loc root item ws =
         if ws.val.length = h.val then (do
           let (r, o) ← traversal.reconstruct backend (start item ws) p w 0#u64 loc e
           RustM.ok (verdict w root ws r o))
         else RustM.ok false := by
   have top := maxHeight_eq
-  have short : ¬ h > qmdb.MAX_HEIGHT := mt (above_maxHeight h).mp (by omega)
+  have short : ¬ h > inclusion.MAX_HEIGHT :=
+    mt (above_maxHeight h).mp (by omega)
   obtain ⟨leaves, hl, lv⟩ := Reconstruct.width_ok h (by omega)
   obtain ⟨st, p, hh, hpeaks, pv, hhv, yields⟩ := MmrPeaks.single_peak h.val (by omega) leaves lv
   have same : hh = h := UScalar.eq_of_val_eq hhv
@@ -469,7 +471,7 @@ theorem verify_eq (h : Std.U32) (bound : h.val ≤ maxHeight) (loc : Std.U64) (r
   have ls0 : ls = 0#u64 := UScalar.eq_of_val_eq (by rw [lsv]; simp [Reconstruct.span])
   subst first0 ls0
   refine ⟨w, p, e, wv, by omega, ev, ?_⟩
-  unfold qmdb.verify
+  unfold inclusion.verify_element_inclusion
   simp only [short, ↓reduceIte, hl, bind_ok, reconstruct.StandardNodes.new,
     reconstruct.Single.new]
   have wl : w = leaves := UScalar.eq_of_val_eq (by omega)
@@ -504,16 +506,18 @@ theorem verify_eq (h : Std.U32) (bound : h.val ≤ maxHeight) (loc : Std.U64) (r
 /-- Outside the tree the client rejects. -/
 theorem verify_outside (h : Std.U32) (bound : h.val ≤ maxHeight) (loc : Std.U64) (root : Bytes)
     (item : Slice Std.U8) (ws : Slice Bytes) (out : 2 ^ h.val ≤ loc.val) :
-    qmdb.verify dyTerms () h loc root item ws = RustM.ok false := by
+    inclusion.verify_element_inclusion dyTerms () h loc root item ws =
+      RustM.ok false := by
   have top := maxHeight_eq
-  have short : ¬ h > qmdb.MAX_HEIGHT := mt (above_maxHeight h).mp (by omega)
+  have short : ¬ h > inclusion.MAX_HEIGHT :=
+    mt (above_maxHeight h).mp (by omega)
   obtain ⟨leaves, hl, lv⟩ := Reconstruct.width_ok h (by omega)
   have pow : 2 ^ h.val ≤ 2 ^ 62 := Nat.pow_le_pow_right (by decide) (by omega)
   obtain ⟨err, run⟩ := Reconstruct.reconstruct_outside mmrGeometry mmr () ⟨(), ()⟩ domain true
     leaves 0#usize ws loc item mmr_geometry.MAX_LEAVES
     (by simp [geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks.max_leaves])
     (by omega)
-  unfold qmdb.verify
+  unfold inclusion.verify_element_inclusion
   simp only [short, ↓reduceIte, hl, bind_ok, reconstruct.StandardNodes.new,
     reconstruct.Single.new]
   rw [run]
@@ -522,15 +526,17 @@ theorem verify_outside (h : Std.U32) (bound : h.val ≤ maxHeight) (loc : Std.U6
 /-- What an accepting `verify` has checked. -/
 theorem verify_true {h : Std.U32} {loc : Std.U64} {root : Bytes}
     {item : Slice Std.U8} {ws : Slice Bytes}
-    (acc : qmdb.verify dyTerms () h loc root item ws = RustM.ok true) :
+    (acc :
+      inclusion.verify_element_inclusion dyTerms () h loc root item ws =
+        RustM.ok true) :
     h.val ≤ maxHeight ∧ loc.val < 2 ^ h.val ∧ ∃ (w p e : Std.U64) (peak : Bytes) (r : Opening),
       w.val = 2 ^ h.val ∧ p.val = 2 * (2 ^ h.val - 1) ∧ e.val = loc.val + 1 ∧
       traversal.reconstruct backend (start item ws) p w 0#u64 loc e = RustM.ok (.Ok peak, r) ∧
       rootTerm domain w peak = root ∧ r.cursor.val = ws.val.length := by
   have top := maxHeight_eq
   by_cases tall : h.val > maxHeight
-  · have : h > qmdb.MAX_HEIGHT := (above_maxHeight h).mpr tall
-    unfold qmdb.verify at acc
+  · have : h > inclusion.MAX_HEIGHT := (above_maxHeight h).mpr tall
+    unfold inclusion.verify_element_inclusion at acc
     simp [this] at acc
   by_cases out : 2 ^ h.val ≤ loc.val
   · rw [verify_outside h (by omega) loc root item ws out] at acc
@@ -551,7 +557,9 @@ inside the tree. -/
 theorem verify_bounds
     {h : Std.U32} {loc : Std.U64} {root : Bytes}
     {item : Slice Std.U8} {ws : Slice Bytes}
-    (acc : qmdb.verify dyTerms () h loc root item ws = RustM.ok true) :
+    (acc :
+      inclusion.verify_element_inclusion dyTerms () h loc root item ws =
+        RustM.ok true) :
     h.val ≤ maxHeight ∧
     loc.val < 2 ^ h.val :=
   let ⟨height, inside, _⟩ := verify_true acc
@@ -560,7 +568,10 @@ theorem verify_bounds
 /-- An accepting `verify` has rebuilt a peak from all of its siblings, and the root over that peak
 is `root`. -/
 theorem verify_rebuild {h : Std.U32} {loc : Std.U64} {root : Bytes} {item : Slice Std.U8}
-    {ws : Slice Bytes} (acc : qmdb.verify dyTerms () h loc root item ws = RustM.ok true) :
+    {ws : Slice Bytes}
+    (acc :
+      inclusion.verify_element_inclusion dyTerms () h loc root item ws =
+        RustM.ok true) :
     ∃ peak, rebuild item loc.val h.val (2 * (2 ^ h.val - 1)) 0 ws.val = some (peak, []) ∧
       rootTerm domain (pos (2 ^ h.val)) peak = root := by
   obtain ⟨hh, hl, w, p, e, peak, r, wv, pv, ev, run, rooted, used⟩ := verify_true acc
@@ -579,8 +590,12 @@ same siblings. Position binding is the item half. -/
 theorem unique
     (h : Std.U32) (loc : Std.U64) (root : Bytes)
     (a b : Slice Std.U8) (wa wb : Slice Bytes)
-    (ha : qmdb.verify dyTerms () h loc root a wa = RustM.ok true)
-    (hb : qmdb.verify dyTerms () h loc root b wb = RustM.ok true) :
+    (ha :
+      inclusion.verify_element_inclusion dyTerms () h loc root a wa =
+        RustM.ok true)
+    (hb :
+      inclusion.verify_element_inclusion dyTerms () h loc root b wb =
+        RustM.ok true) :
     a = b ∧
     wa = wb := by
   obtain ⟨peak₁, path₁, root₁⟩ := verify_rebuild ha
@@ -715,7 +730,8 @@ theorem honest_verify (items : Std.U64 → Slice Std.U8) (h : Std.U32)
     (bound : h.val ≤ maxHeight)
     (loc : Std.U64) (inside : loc.val < 2 ^ h.val) (ws : Slice Bytes) (rest : List Bytes)
     (siblings : ws.val = path items h.val (2 * (2 ^ h.val - 1)) 0 loc.val ++ rest) :
-    qmdb.verify dyTerms () h loc (honestRoot items h.val) (items loc) ws =
+    inclusion.verify_element_inclusion dyTerms () h loc
+      (honestRoot items h.val) (items loc) ws =
       RustM.ok (decide (rest = [])) := by
   have top := maxHeight_eq
   have fits := maxLeaves_fits
@@ -747,7 +763,8 @@ theorem honest_opening
     (bound : h.val ≤ maxHeight)
     (loc : Std.U64)
     (inside : loc.val < 2 ^ h.val) :
-    qmdb.verify dyTerms () h loc (honestRoot items h.val) (items loc)
+    inclusion.verify_element_inclusion dyTerms () h loc
+      (honestRoot items h.val) (items loc)
       (honestSiblings items h.val loc bound) =
       RustM.ok true := by
   simpa using honest_verify items h bound loc inside _ [] (by simp [honestSiblings])
@@ -762,7 +779,8 @@ theorem extra_sibling_rejected
     (ws : Slice Bytes) (extra : Bytes)
     (siblings :
       ws.val = path items h.val (2 * (2 ^ h.val - 1)) 0 loc.val ++ [extra]) :
-    qmdb.verify dyTerms () h loc (honestRoot items h.val) (items loc) ws =
+    inclusion.verify_element_inclusion dyTerms () h loc
+      (honestRoot items h.val) (items loc) ws =
       RustM.ok false := by
   simpa using honest_verify items h bound loc inside ws [extra] siblings
 
@@ -832,12 +850,13 @@ every input. -/
 theorem verify_total
     (h : Std.U32) (loc : Std.U64) (root : Bytes)
     (item : Slice Std.U8) (ws : Slice Bytes) :
-    ∃ b, qmdb.verify dyTerms () h loc root item ws = RustM.ok b := by
+    ∃ b, inclusion.verify_element_inclusion dyTerms () h loc root item ws =
+      RustM.ok b := by
   have top := maxHeight_eq
   have fits := maxLeaves_fits
   by_cases tall : h.val > maxHeight
-  · have : h > qmdb.MAX_HEIGHT := (above_maxHeight h).mpr tall
-    unfold qmdb.verify
+  · have : h > inclusion.MAX_HEIGHT := (above_maxHeight h).mpr tall
+    unfold inclusion.verify_element_inclusion
     simp [this]
   by_cases out : 2 ^ h.val ≤ loc.val
   · exact ⟨false, verify_outside h (by omega) loc root item ws out⟩
@@ -852,4 +871,4 @@ theorem verify_total
   · exact ⟨false, rfl⟩
 
 end
-end Qmdb.Verifier
+end Qmdb.Inclusion

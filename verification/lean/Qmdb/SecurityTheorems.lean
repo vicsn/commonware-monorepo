@@ -15,14 +15,15 @@ the client accepts, some root and siblings give every stored item an opening
 that the extracted verifier accepts. -/
 theorem honest_snapshots_exist
     (items : Std.U64 → Slice Std.U8) (h : Std.U32)
-    (bound : h.val ≤ Verifier.maxHeight) :
+    (bound : h.val ≤ Inclusion.maxHeight) :
     ∃ (root : Bytes) (siblings : Std.U64 → Slice Bytes),
       ∀ loc : Std.U64,
         loc.val < 2 ^ h.val →
-        qmdb.verify dyTerms () h loc root (items loc) (siblings loc) =
+        inclusion.verify_element_inclusion dyTerms () h loc root (items loc)
+          (siblings loc) =
           RustM.ok true :=
-  ⟨_, fun loc => Verifier.honestSiblings items h.val loc bound,
-    fun loc inside => Verifier.honest_opening items h bound loc inside⟩
+  ⟨_, fun loc => Inclusion.honestSiblings items h.val loc bound,
+    fun loc inside => Inclusion.honest_opening items h bound loc inside⟩
 
 /-- Authentication on traces of attacker sends and extracted client steps: every
 acceptance that the client logs names the snapshot height, an in-range location

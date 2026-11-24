@@ -7,7 +7,7 @@
 
 use crate::{
     concrete::{Concrete, bytes},
-    qmdb,
+    inclusion,
 };
 use commonware_cryptography::{Hasher as _, Sha256, sha256};
 use commonware_storage::merkle::{
@@ -159,7 +159,7 @@ fn production_openings_verify() {
             let proof = mmr.proof(&hasher, Location::new(location), 0).unwrap();
             let siblings: Vec<_> = proof.digests.iter().map(bytes).collect();
             assert!(
-                qmdb::verify(
+                inclusion::verify_element_inclusion(
                     &Concrete,
                     height,
                     location,
@@ -202,7 +202,7 @@ fn verifiers_agree_with_production() {
                 assert_eq!(expected, claim.honest, "production: {context}");
                 let root = bytes(&claim.root);
                 assert_eq!(
-                    qmdb::verify(
+                    inclusion::verify_element_inclusion(
                         &Concrete,
                         height,
                         claim.location,
@@ -213,7 +213,7 @@ fn verifiers_agree_with_production() {
                     expected,
                     "verify: {context}"
                 );
-                let accepted = qmdb::client_step(
+                let accepted = inclusion::accept_inclusion(
                     &Concrete,
                     &root,
                     height,
@@ -237,11 +237,11 @@ fn verifiers_agree_with_production() {
 #[test]
 fn client_rejects_heights_above_the_bound() {
     // The bound is production's limit on the leaves of an MMR, as a height.
-    assert_eq!(1u64 << qmdb::MAX_HEIGHT, mmr::Family::MAX_LEAVES.as_u64());
+    assert_eq!(1u64 << inclusion::MAX_HEIGHT, mmr::Family::MAX_LEAVES.as_u64());
     let message = vec![1];
-    for height in [qmdb::MAX_HEIGHT + 1, u32::MAX] {
+    for height in [inclusion::MAX_HEIGHT + 1, u32::MAX] {
         assert!(
-            qmdb::client_step(&Concrete, &[0; 32], height, &message, 0, &[]).is_none(),
+            inclusion::accept_inclusion(&Concrete, &[0; 32], height, &message, 0, &[]).is_none(),
             "height {height}"
         );
     }

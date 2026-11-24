@@ -1,11 +1,11 @@
-// Differential probes of the audit. They vary what `qmdb/tests.rs` never varies: the bagging
+// Differential probes of the audit. They vary what `inclusion/tests.rs` never varies: the bagging
 // policy, tree sizes that are not a power of two, the proof's own fields and the height that the
 // client trusts. The last one shows a fact about bytes that the ideal hash cannot express. They
 // print counts and assert nothing. Run them from the repository root:
 //
-//     cat verification/audit/probes/differential.rs >> verification/symbolic/src/qmdb/tests.rs
+//     cat verification/audit/probes/differential.rs >> verification/symbolic/src/inclusion/tests.rs
 //     (cd verification/symbolic && cargo test --offline -- --nocapture probe)
-//     git checkout verification/symbolic/src/qmdb/tests.rs
+//     git checkout verification/symbolic/src/inclusion/tests.rs
 
 fn build(hasher: &Production, items: &[Vec<u8>]) -> Mmr<sha256::Digest> {
     let mut mmr = Mmr::new();
@@ -39,7 +39,7 @@ fn probe_forward_fold() {
                 production += 1;
             }
             let siblings: Vec<_> = proof.digests.iter().map(bytes).collect();
-            if qmdb::verify(&Concrete, height, location, &bytes(&root), item, &siblings) {
+            if inclusion::verify_element_inclusion(&Concrete, height, location, &bytes(&root), item, &siblings) {
                 client += 1;
             }
         }
@@ -72,7 +72,7 @@ fn probe_other_sizes() {
             }
             let siblings: Vec<_> = proof.digests.iter().map(bytes).collect();
             for height in 0..=7u32 {
-                if qmdb::verify(&Concrete, height, location, &bytes(&root), item, &siblings) {
+                if inclusion::verify_element_inclusion(&Concrete, height, location, &bytes(&root), item, &siblings) {
                     client += 1;
                 }
             }
@@ -143,7 +143,7 @@ fn probe_wrong_height() {
                     continue;
                 }
                 tried += 1;
-                if qmdb::verify(&Concrete, trusted, location, &root, item, &siblings) {
+                if inclusion::verify_element_inclusion(&Concrete, trusted, location, &root, item, &siblings) {
                     accepted += 1;
                 }
             }

@@ -4,7 +4,7 @@ public import Qmdb.SecurityTheorems
 /-! A concrete two-item snapshot and the extracted client's decisions on it. -/
 
 namespace Qmdb.Sanity
-open DY Aeneas Aeneas.Std Commonware.Symbolic Protocol Verifier Symbolic commonware_symbolic
+open DY Aeneas Aeneas.Std Commonware.Symbolic Protocol Inclusion Symbolic commonware_symbolic
 @[expose] public section
 
 /-- ASCII `Alice`. -/
@@ -39,7 +39,8 @@ def honestBob : Slice Bytes := honestSiblings items 1 1#u64 one_le_maxHeight
 
 /-- The client step of the protocol on a message carrying `item`. -/
 abbrev verdict (item : Slice Std.U8) (loc : Std.U64) (ws : Slice Bytes) :=
-  qmdb.client_step dyTerms messages () Snapshot.root Snapshot.height (carrying item) loc ws
+  inclusion.accept_inclusion dyTerms messages () Snapshot.root Snapshot.height (carrying item) loc
+    ws
 
 theorem accepts_alice : verdict alice 0#u64 honestAlice =
     RustM.ok (some { height := 1#u32, location := 0#u64, item := alice }) :=
@@ -69,7 +70,8 @@ theorem rejects_long (extra : Bytes) : verdict alice 0#u64 (longAlice extra) = R
     (longAlice extra) extra (by simp [longAlice, Slice.from_val])
   have stored : items 0#u64 = alice := by simp [items]
   rw [stored] at rejected
-  change qmdb.client_step dyTerms messages () (honestRoot items (1#u32 : Std.U32).val) 1#u32
+  change inclusion.accept_inclusion dyTerms messages ()
+    (honestRoot items (1#u32 : Std.U32).val) 1#u32
     (carrying alice) 0#u64 (longAlice extra) = _
   rw [client_step_carrying, rejected]
   simp

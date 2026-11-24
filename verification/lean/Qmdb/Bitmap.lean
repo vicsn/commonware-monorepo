@@ -1,6 +1,6 @@
 module
 public import Qmdb.Active
-public import Qmdb.Verifier
+public import Qmdb.Inclusion
 
 /-! The fixed-width bitmap check agrees with the activity arithmetic extracted from Rust. -/
 
@@ -55,7 +55,7 @@ theorem rustActive_eq (chunk : Chunk) (loc : Std.U64) :
     cases System.Platform.numBits_eq <;> simp [*] <;> omega
   have room : (UScalar.cast .Usize i).val < (Chunk.asSlice chunk).length := by
     simpa [castEq, Chunk.asSlice, Slice.length, Slice.from_val] using bound
-  simp [rustActive, activity.get, ho, hd, lift, Verifier.index_ok _ _ room]
+  simp [rustActive, activity.get, ho, hd, lift, Inclusion.index_ok _ _ room]
   simp [Chunk.asSlice, Slice.from_val, mask_ok, hi, hv, activeBit]
   have small : loc.val % 256 / 8 < 2 ^ System.Platform.numBits := by
     cases System.Platform.numBits_eq <;> simp [*] <;> omega

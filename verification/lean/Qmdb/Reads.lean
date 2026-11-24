@@ -5,9 +5,9 @@ public import Qmdb.Mmb.Extracted
 /-! The extracted ordered client's operation check: it encodes the operation with production's
 fixed layout and accepts only what the extracted current verifier accepts. Checked by Lean. -/
 
-namespace Qmdb.Ordered.Verified
+namespace Qmdb.Reads
 open DY Aeneas Aeneas.Std CoreModels Commonware.Symbolic commonware_symbolic
-open Qmdb.Ordered.Layout
+open Qmdb.Ordered Qmdb.Ordered.Layout
 @[expose] public section
 
 variable {K V : Type} (c : Codec K V)
@@ -18,7 +18,7 @@ def asSlice : CoreModels.core.convert.AsRef (List Std.U8) (Slice Std.U8) :=
     else CoreModels.core.panicking.internal.panic _⟩
 
 /-- The current-proof fields of an ordered operation proof. -/
-def fieldsOf (proof : ordered.OperationProof Std.U64 Bytes (ordered.Payload Bytes)) :
+def fieldsOf (proof : reads.OperationProof Std.U64 Bytes (reads.Payload Bytes)) :
     current.Fields Bytes :=
   ⟨proof.payload.2.leaves, proof.payload.2.inactive, proof.payload.2.digests, proof.payload.1,
     proof.payload.2.pending, proof.payload.2.partial⟩
@@ -40,19 +40,19 @@ theorem bytes_small (op : Operation K V) : (bytes c op).length ≤ Usize.max := 
 /-- Soundness of the extracted ordered client's operation check: an operation it accepts at a
 proof's location opens the trusted root, encoded with production's fixed layout, along the paths
 `Plan` assigns to that location. -/
-theorem verify_selected_sound (keyInst : ordered.Key K) (valueInst : ordered.ValueEncoding V V)
-    (digestInst : ordered.Digest Bytes)
-    (proof : ordered.OperationProof Std.U64 Bytes (ordered.Payload Bytes))
-    (op : ordered.Operation Std.U64 K V V) (root : Bytes) (chunk : Active.Chunk)
+theorem verify_selected_sound (keyInst : reads.Key K) (valueInst : reads.ValueEncoding V V)
+    (digestInst : reads.Digest Bytes)
+    (proof : reads.OperationProof Std.U64 Bytes (reads.Payload Bytes))
+    (op : reads.Operation Std.U64 K V V) (root : Bytes) (chunk : Active.Chunk)
     (hchunk : proof.payload.2.chunk = Mmb.Extracted.chunkSlice chunk)
     (wide : Mmb.Extracted.Wide (fieldsOf proof))
-    (acc : ordered.verify_selected keyInst valueInst dyTerms digestInst (writer c) asSlice ()
+    (acc : reads.verify_selected keyInst valueInst dyTerms digestInst (writer c) asSlice ()
       (widths c) [] proof op root = RustM.ok true) :
     ∃ w, Mmb.Accepts root proof.payload.2.leaves.val proof.payload.2.inactive.val proof.loc.val
       ((encoding c) (readOp op)) w := by
   obtain ⟨loc, t, p⟩ := proof
   simp only at hchunk
-  unfold ordered.verify_selected at acc
+  unfold reads.verify_selected at acc
   simp only [encode_ok, bind_ok, asSlice, bytes_small, ↓reduceDIte] at acc
   simp [hchunk] at acc
   obtain ⟨w, accepts⟩ := Mmb.Extracted.verify_operation_sound (fieldsOf ⟨loc, t, p⟩) loc chunk _
@@ -63,4 +63,4 @@ theorem verify_selected_sound (keyInst : ordered.Key K) (valueInst : ordered.Val
   exact ⟨w, item ▸ accepts⟩
 
 end
-end Qmdb.Ordered.Verified
+end Qmdb.Reads

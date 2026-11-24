@@ -1,6 +1,6 @@
 module
 public import Qmdb.Active
-public import Qmdb.Verifier
+public import Qmdb.Inclusion
 public import Commonware.Symbolic.Wire
 
 /-! How the current root of a grafted MMB places its two suffix contributions.
@@ -26,10 +26,10 @@ theorem extracted (ops g : Bytes) (pending : Option Bytes)
     commonware_symbolic.terms.current_root Commonware.Symbolic.dyTerms () ops g
         pending tail =
       Aeneas.Std.RustM.ok (term ops g pending (tail.map fun (n, d) =>
-        (Commonware.Symbolic.part (.Bytes (Verifier.be n)), d))) := by
+        (Commonware.Symbolic.part (.Bytes (Inclusion.be n)), d))) := by
   cases pending <;> rcases tail with _ | ⟨n, d⟩ <;>
     simp [commonware_symbolic.terms.current_root, term,
-      Verifier.to_be_bytes_ok, Verifier.be, CoreModels.core.array.Array.as_slice,
+      Inclusion.to_be_bytes_ok, Inclusion.be, CoreModels.core.array.Array.as_slice,
       Commonware.Symbolic.dyTerms, Commonware.Symbolic.part,
       CoreModels.rust_primitives.slice.array_as_slice,
       Commonware.Symbolic.chain]
@@ -37,12 +37,12 @@ theorem extracted (ops g : Bytes) (pending : Option Bytes)
 open Commonware.Symbolic Aeneas Aeneas.Std in
 /-- The extracted eight-byte big-endian count agrees with the wire codec. -/
 theorem be_wire (n : Std.U64) :
-    part (.Bytes (Verifier.be n)) = wireLiteral (writeBE 8 n.bv) := by
+    part (.Bytes (Inclusion.be n)) = wireLiteral (writeBE 8 n.bv) := by
   simp only [part, wireLiteral]
   congr 1
   apply ByteArray.ext
   apply _root_.Array.ext'
-  simp [toByteArray, Verifier.be, Std.core.num.U64.to_be_bytes, Array.to_slice,
+  simp [toByteArray, Inclusion.be, Std.core.num.U64.to_be_bytes, Array.to_slice,
     Std.Array.from_val, BitVec.toBEBytes]
   change _ = (writeBE 8 n.bv).toList
   have fold (k : Nat) (v : BitVec (8 * k)) :

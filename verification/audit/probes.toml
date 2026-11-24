@@ -15,45 +15,45 @@ expect = ["Qmdb.Reconstruct"]
 
 [[probe]]
 name = "R2 height bound 63"
-file = "verification/symbolic/src/qmdb.rs"
+file = "verification/symbolic/src/inclusion.rs"
 original = "pub(crate) const MAX_HEIGHT: u32 = 62;"
 mutated = "pub(crate) const MAX_HEIGHT: u32 = 63;"
-expect = ["Qmdb.Verifier"]
+expect = ["Qmdb.Inclusion"]
 
 [[probe]]
 name = "R3 height bound strict"
-file = "verification/symbolic/src/qmdb.rs"
+file = "verification/symbolic/src/inclusion.rs"
 original = "if height > MAX_HEIGHT {"
 mutated = "if height >= MAX_HEIGHT {"
-expect = ["Qmdb.Verifier"]
+expect = ["Qmdb.Inclusion"]
 
 [[probe]]
 name = "R4 sibling cursor not advanced"
 file = "storage/src/merkle/proof/traversal.rs"
 original = "                self.cursor += 1;\n"
 mutated = ""
-expect = ["Qmdb.Verifier"]
+expect = ["Qmdb.Inclusion"]
 
 [[probe]]
 name = "R5 leaf ignores its position"
 file = "storage/src/merkle/proof/traversal.rs"
 original = "Some(element) => Ok(self.nodes.leaf_digest(position, element.as_ref())),"
 mutated = "Some(element) => Ok(self.nodes.leaf_digest(0, element.as_ref())),"
-expect = ["Qmdb.Verifier"]
+expect = ["Qmdb.Inclusion"]
 
 [[probe]]
 name = "R6 bagging domain byte set to forward fold"
-file = "verification/symbolic/src/qmdb.rs"
+file = "verification/symbolic/src/lib.rs"
 original = "pub(crate) const BACKWARD_FOLD: u8 = 1;"
 mutated = "pub(crate) const BACKWARD_FOLD: u8 = 0;"
 expect = "survives"
 
 [[probe]]
 name = "R7 range of two leaves"
-file = "verification/symbolic/src/qmdb.rs"
+file = "verification/symbolic/src/inclusion.rs"
 original = "        location,\n        1,\n"
 mutated = "        location,\n        2,\n"
-expect = ["Qmdb.Verifier"]
+expect = ["Qmdb.Inclusion"]
 
 [[probe]]
 name = "R8 wrong peak position"
@@ -81,32 +81,32 @@ name = "R11 children swapped"
 file = "storage/src/merkle/mmr/geometry.rs"
 original = "(pos - (1 << height), pos - 1)"
 mutated = "(pos - 1, pos - (1 << height))"
-expect = ["Qmdb.Verifier"]
+expect = ["Qmdb.Inclusion"]
 
 [[probe]]
 name = "R12 element source never runs dry"
 file = "storage/src/merkle/proof/reconstruct.rs"
 original = "                self.0 = None;\n"
 mutated = ""
-expect = ["Qmdb.Verifier"]
+expect = ["Qmdb.Inclusion"]
 
 [[probe]]
 name = "R13 subtree starting at the range end treated as inside"
 file = "storage/src/merkle/proof/traversal.rs"
 original = "if start + width <= range_start || start >= range_end {"
 mutated = "if start + width <= range_start || start > range_end {"
-expect = ["Qmdb.Verifier"]
+expect = ["Qmdb.Inclusion"]
 
 [[probe]]
 name = "R14 node ignores its position"
 file = "storage/src/merkle/proof/traversal.rs"
 original = ".node_digest(position, width.ilog2(), start, &left, &right)"
 mutated = ".node_digest(0, width.ilog2(), start, &left, &right)"
-expect = ["Qmdb.Verifier"]
+expect = ["Qmdb.Inclusion"]
 
 [[probe]]
 name = "R15 client logs another location"
-file = "verification/symbolic/src/qmdb.rs"
+file = "verification/symbolic/src/inclusion.rs"
 original = "                    height,\n                    location,\n                    item,"
 mutated = "                    height,\n                    location: 0,\n                    item,"
 expect = ["Qmdb.Symbolic"]
@@ -118,21 +118,21 @@ name = "L1 digest equality always true"
 file = "verification/lean/Commonware/Symbolic/Terms.lean"
 original = "    { eq := fun a b => RustM.ok (decide (a = b)),\n      ne := fun a b => RustM.ok (!decide (a = b)) }"
 mutated = "    { eq := fun _ _ => RustM.ok true,\n      ne := fun _ _ => RustM.ok false }"
-expect = ["Qmdb.Verifier"]
+expect = ["Qmdb.Inclusion"]
 
 [[probe]]
 name = "L2 symbolic concatenation keeps only the last part"
 file = "verification/lean/Commonware/Symbolic/Terms.lean"
 original = "  | p :: rest => Concat.concat (part p) (chain rest)"
 mutated = "  | _ :: rest => chain rest"
-expect = ["Qmdb.Verifier"]
+expect = ["Qmdb.Inclusion"]
 
 [[probe]]
 name = "L3 hash ignores its input"
 file = "verification/lean/Commonware/Symbolic/Terms.lean"
 original = "  hash _ parts := RustM.ok (Hash.hash (chain parts.val))"
 mutated = "  hash _ _ := RustM.ok (Hash.hash (chain []))"
-expect = ["Qmdb.Verifier"]
+expect = ["Qmdb.Inclusion"]
 
 [[probe]]
 name = "L4 messages carry no item"
@@ -166,7 +166,7 @@ expect = ["Qmdb.Completeness"]
 [[probe]]
 name = "L8 client never logs"
 edits = [
-  { file = "verification/lean/Qmdb/Protocol.lean", original = "  receive (fun message =>\n    commonware_symbolic.qmdb.client_step dyTerms messages ()\n      Snapshot.root Snapshot.height message loc ws) handle", mutated = "  receive (fun message => do\n    let _ ← commonware_symbolic.qmdb.client_step dyTerms messages ()\n      Snapshot.root Snapshot.height message loc ws\n    RustM.ok (none : Option Acceptance)) handle" },
+  { file = "verification/lean/Qmdb/Protocol.lean", original = "  receive (fun message =>\n    commonware_symbolic.inclusion.accept_inclusion dyTerms messages ()\n      Snapshot.root Snapshot.height message loc ws) handle", mutated = "  receive (fun message => do\n    let _ ← commonware_symbolic.inclusion.accept_inclusion dyTerms messages ()\n      Snapshot.root Snapshot.height message loc ws\n    RustM.ok (none : Option Acceptance)) handle" },
   { file = "verification/lean/Qmdb/Protocol.lean", original = "  receive_preserves _ handle fun message event accepted _ =>\n    Symbolic.client_step_sound message loc ws event accepted", mutated = "  receive_preserves _ handle fun message event accepted _ => by\n    obtain ⟨_, _, wrapped⟩ := bind_eq_ok accepted\n    simpa using ok_inj wrapped" },
 ]
 expect = ["Qmdb.Completeness"]
@@ -192,7 +192,7 @@ message = "Qmdb.planted_sorry: [sorryAx]"
 
 [[probe]]
 name = "A2 sorry deep in a lemma that the theorems use"
-file = "verification/lean/Qmdb/Verifier.lean"
+file = "verification/lean/Qmdb/Inclusion.lean"
 original = "    terms.leaf_digest dyTerms u p item = RustM.ok (leafTerm p item) := by\n  simp [terms.leaf_digest, to_be_bytes_ok, core.array.Array.as_slice,\n    rust_primitives.slice.array_as_slice, dyTerms, leafTerm, be]"
 mutated = "    terms.leaf_digest dyTerms u p item = RustM.ok (leafTerm p item) := by\n  sorry"
 expect = ["Qmdb.Audit"]

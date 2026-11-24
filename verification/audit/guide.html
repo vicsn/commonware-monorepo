@@ -51,7 +51,7 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <tbody>
 <tr><th scope="row">What is proved</th><td>Two openings accepted at one location under one root carry the same item. Every acceptance that a client logs names the item stored there.</td><td>A claim that a key has a value, or has none, that is accepted under a root equals what replaying the journal gives.</td></tr>
 <tr><th scope="row">Root format</th><td>This branch’s, with its domain bytes. One peak. The height of the tree is trusted.</td><td><code>v2026.11.0</code>’s, with the domain bytes of an MMB. Any number of peaks. The leaf count and the inactive-peak count come from the proof, and the root fixes them.</td></tr>
-<tr><th scope="row">Verifier in the statements</th><td><code>qmdb::verify</code>: Rust written for the proof and extracted by hax.</td><td>Production’s <code>rules::verify_operation</code>, extracted unchanged and proved to refine <code>RawProof.verify</code>, a Lean definition of the reader’s check.</td></tr>
+<tr><th scope="row">Verifier in the statements</th><td><code>inclusion::verify_element_inclusion</code>: Rust written for the proof and extracted by hax.</td><td>Production’s <code>rules::verify_operation</code>, extracted unchanged and proved to refine <code>RawProof.verify</code>, a Lean definition of the reader’s check.</td></tr>
 <tr><th scope="row">Tie to the deployed verifier</th><td>Differential tests against production (L2).</td><td>A refinement proof (M5), with production’s callers delegating to the extracted files (M3).</td></tr>
 <tr><th scope="row">The attacker</th><td>DyLean traces: the attacker sends any message it can derive.</td><td>No trace. The statements hold for any proof and any root.</td></tr>
 <tr><th scope="row">What is assumed of the database</th><td>A root with an accepted opening for every stored item.</td><td>The writer’s invariants: activity bits, successor links, the commit floor and the layout of the root.</td></tr>
@@ -102,7 +102,7 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <rect x="20" y="40" width="160" height="60" rx="6" class="rust"/><text x="32" y="65" class="name">Production, baseline</text><text x="32" y="84" class="sub">before the refactor</text>
 <rect x="240" y="40" width="160" height="60" rx="6" class="rust"/><text x="252" y="65" class="name">Production now</text><text x="252" y="84" class="sub">proof.rs · hasher.rs</text>
 <rect x="460" y="40" width="160" height="60" rx="6" class="rust"/><text x="472" y="65" class="name">Shared files</text><text x="472" y="84" class="sub">terms.rs · traversal.rs</text>
-<rect x="450" y="170" width="170" height="60" rx="6" class="verif"/><text x="461" y="195" class="name">Verification-only client</text><text x="461" y="214" class="sub">symbolic/src/qmdb.rs</text>
+<rect x="450" y="170" width="170" height="60" rx="6" class="verif"/><text x="461" y="195" class="name">Verification-only client</text><text x="461" y="214" class="sub">symbolic/src/inclusion.rs</text>
 <rect x="680" y="105" width="140" height="60" rx="6" class="generated"/><text x="692" y="130" class="name">Generated Lean</text><text x="692" y="149" class="sub">Extraction/</text>
 <rect x="880" y="105" width="150" height="60" rx="6" class="checked"/><text x="892" y="130" class="name">Lean theorems</text><text x="892" y="149" class="sub">L8 · checked by Lean</text>
 <rect x="1090" y="105" width="110" height="60" rx="6" class="plain"/><text x="1102" y="130" class="name">README</text><text x="1102" y="149" class="sub">its claims</text>
@@ -141,7 +141,7 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <defs><marker id="chain2-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
 <rect x="20" y="30" width="170" height="60" rx="6" class="rust"/><text x="32" y="55" class="name">Production</text><text x="32" y="74" class="sub">OperationProof::verify</text>
 <rect x="250" y="30" width="160" height="60" rx="6" class="rust"/><text x="262" y="55" class="name">Shared files</text><text x="262" y="74" class="sub">rules.rs · layout.rs · …</text>
-<rect x="470" y="30" width="160" height="60" rx="6" class="verif"/><text x="482" y="55" class="name">Extracted crate</text><text x="482" y="74" class="sub">ordered.rs stand-ins</text>
+<rect x="470" y="30" width="160" height="60" rx="6" class="verif"/><text x="482" y="55" class="name">Extracted crate</text><text x="482" y="74" class="sub">reads.rs stand-ins</text>
 <rect x="470" y="190" width="160" height="60" rx="6" class="generated"/><text x="482" y="215" class="name">Generated Lean</text><text x="482" y="234" class="sub">Extraction/</text>
 <rect x="710" y="110" width="170" height="60" rx="6" class="trusted"/><text x="722" y="135" class="name">Specification</text><text x="722" y="154" class="sub">plan · RawProof.verify</text>
 <rect x="940" y="110" width="150" height="60" rx="6" class="checked"/><text x="952" y="135" class="name">Lean theorems</text><text x="952" y="154" class="sub">M9 · checked by Lean</text>
@@ -216,7 +216,7 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <section id="step-1">
 <h2>Step 1 · What is claimed</h2>
 <dl class="step">
-<dt>Read</dt><dd>The table below, then the statements it shows: five in <a class="src" href="lean/Qmdb/Verifier.lean" title="Open in VS Code">Verifier.lean</a> and two in <a class="src" href="lean/Qmdb/SecurityTheorems.lean" title="Open in VS Code">SecurityTheorems.lean</a> (44 lines). Statements only.</dd>
+<dt>Read</dt><dd>The table below, then the statements it shows: five in <a class="src" href="lean/Qmdb/Inclusion.lean" title="Open in VS Code">Inclusion.lean</a> and two in <a class="src" href="lean/Qmdb/SecurityTheorems.lean" title="Open in VS Code">SecurityTheorems.lean</a> (44 lines). Statements only.</dd>
 <dt>Pass when</dt><dd><ul><li>Each sentence of the README says no more than the statement beside it.</li><li>Every hypothesis of a statement appears in the sentence, or its absence is written down.</li><li>You can say what the hash is in each statement and what that leaves out.</li></ul></dd>
 <dt>Links</dt><dd>L7.</dd>
 <dt>Time</dt><dd>1 hour.</dd>
@@ -224,7 +224,7 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <p>Three questions to ask of every statement. What is the hash: in every statement it is DyLean’s ideal hash, never a real one. Which inputs are trusted: the root, and in every statement also the height. What does the client have to be given before the statement applies?</p>
 <p>Generated: each sentence is checked to occur in the README, and each statement is read from the Lean source.</p>
 <!-- claims -->
-<p>No theorem is stated twice. The properties of the verifier are stated in <code>Verifier.lean</code>, and the two results about the protocol and its assumption in <code>SecurityTheorems.lean</code>. The <a href="#dag-trusted">table of trusted declarations</a> says which definitions each of the eight statements depends on.</p>
+<p>No theorem is stated twice. The properties of the verifier are stated in <code>Inclusion.lean</code>, and the two results about the protocol and its assumption in <code>SecurityTheorems.lean</code>. The <a href="#dag-trusted">table of trusted declarations</a> says which definitions each of the eight statements depends on.</p>
 <!-- panel: term-equality -->
 </section>
 
@@ -248,12 +248,12 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <section id="step-3">
 <h2>Step 3 · The verification-only client</h2>
 <dl class="step">
-<dt>Read</dt><dd><a class="src" href="symbolic/src/qmdb.rs" title="Open in VS Code">qmdb.rs</a> (105 lines) and <a class="src" href="symbolic/src/geometry.rs" title="Open in VS Code">geometry.rs</a> against production’s verifier in <code>proof.rs</code>, <code>mmr/mod.rs</code> and <code>qmdb/mod.rs</code>. Then <a class="src" href="symbolic/src/qmdb/tests.rs" title="Open in VS Code">qmdb/tests.rs</a>.</dd>
+<dt>Read</dt><dd><a class="src" href="symbolic/src/inclusion.rs" title="Open in VS Code">inclusion.rs</a> (105 lines) and <a class="src" href="symbolic/src/geometry.rs" title="Open in VS Code">geometry.rs</a> against production’s verifier in <code>proof.rs</code>, <code>mmr/mod.rs</code> and <code>qmdb/mod.rs</code>. Then <a class="src" href="symbolic/src/inclusion/tests.rs" title="Open in VS Code">inclusion/tests.rs</a>.</dd>
 <dt>Pass when</dt><dd><ul><li>Every line of <code>verify</code> has a production counterpart or a divergence that you have written down.</li><li>For each divergence you can say whether the tests cover it.</li><li>You can say which deployed configuration the client models.</li></ul></dd>
 <dt>Links</dt><dd>L2.</dd>
 <dt>Time</dt><dd>2 hours.</dd>
 </dl>
-<p>The theorems are about <code>qmdb::verify</code> and <code>qmdb::client_step</code>. Production never calls either. They are an entry point written for the proof. It calls production’s own range-proof reconstruction, <code>reconstruct::reconstruct</code>, over production’s MMR geometry and QMDB’s bagging, with one item, one peak and a trusted tree size. Production’s <code>reconstruct_root_inner</code> calls the same function with the hasher’s byte encodings and with the sizes the proof carries. So the theorems reach production’s <code>Proof::verify_element_inclusion</code> only as far as the two calls return the same verdict, and that is shown by tests.</p>
+<p>The theorems are about <code>inclusion::verify_element_inclusion</code> and <code>inclusion::accept_inclusion</code>. Production never calls either. They are an entry point written for the proof. It calls production’s own range-proof reconstruction, <code>reconstruct::reconstruct</code>, over production’s MMR geometry and QMDB’s bagging, with one item, one peak and a trusted tree size. Production’s <code>reconstruct_root_inner</code> calls the same function with the hasher’s byte encodings and with the sizes the proof carries. So the theorems reach production’s <code>Proof::verify_element_inclusion</code> only as far as the two calls return the same verdict, and that is shown by tests.</p>
 <!-- panel: client-verify -->
 <!-- panel: client-constants -->
 <!-- panel: client-geometry -->
@@ -320,7 +320,7 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <!-- panel: protocol-client -->
 <h3>Who chooses each input of the client step</h3>
 <div class="table"><table>
-<thead><tr><th scope="col">Argument of <code>client_step</code></th><th scope="col">In the model</th><th scope="col">Chosen by</th></tr></thead>
+<thead><tr><th scope="col">Argument of <code>accept_inclusion</code></th><th scope="col">In the model</th><th scope="col">Chosen by</th></tr></thead>
 <tbody>
 <tr><th scope="row"><code>terms</code></th><td><code>dyTerms</code>: DyLean’s hash constructor over the symbolic reading of step 5.</td><td>The model. The hash is ideal (A4).</td></tr>
 <tr><th scope="row"><code>root</code>, <code>height</code></th><td><code>Snapshot.root</code>, <code>Snapshot.height</code>.</td><td>Trusted. How the client obtains them is outside the model.</td></tr>
@@ -348,9 +348,9 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <tr><td><code>bash verification/check.sh --mutation-testing</code></td><td>Exit 0 after about 27 minutes on a warm machine; the mutations of the three targets take most of it, and without the flag they are skipped. It prints <code>Extraction matches the committed files.</code>, <code>172 theorems in [Qmdb, Commonware.Symbolic] depend only on standard axioms.</code> and one <code>Proofs reject</code> line for each mutation, seventeen of them for this target.</td><td>The Rust tests pass, the generated Lean is reproducible, every proof and executed check of both parts builds, and the listed mutations are noticed.</td></tr>
 <tr><td><code>python3 verification/audit/probes.py</code></td><td>30 lines, each <code>as recorded</code>, after 10 minutes. 27 probes break a proof module and 3 survive.</td><td>Which changes to the Rust, to the trusted Lean and to the proofs of part I the build notices. Each probe is an entry of <a class="src" href="audit/probes.toml" title="Open in VS Code">probes.toml</a>.</td></tr>
 <tr><td><code>python3 verification/audit/build.py --dag --check</code></td><td><code>dag.json matches the Lean build.</code></td><td>The declaration graph of this guide, and with it the list of trusted declarations, is what Lean prints for the current proofs.</td></tr>
-<tr><td><code>cat verification/audit/probes/differential.rs &gt;&gt; verification/symbolic/src/qmdb/tests.rs
+<tr><td><code>cat verification/audit/probes/differential.rs &gt;&gt; verification/symbolic/src/inclusion/tests.rs
 (cd verification/symbolic &amp;&amp; cargo test --offline -- --nocapture probe)
-git checkout verification/symbolic/src/qmdb/tests.rs</code></td><td>Five <code>PROBE</code> lines. A forward-fold hasher: 127 honest openings, production accepts 127, the client 0. Other sizes: 1,953 openings, production accepts all, the client none. 45,085 proofs with another size or inactive count: production accepts none. 1,270 openings at another trusted height: the client accepts none. All 7 roots of small trees equal a leaf digest at position 2<sup>48</sup>.</td><td>What the differential tests never vary, which trees the client models, and one fact about bytes that the ideal hash cannot express.</td></tr>
+git checkout verification/symbolic/src/inclusion/tests.rs</code></td><td>Five <code>PROBE</code> lines. A forward-fold hasher: 127 honest openings, production accepts 127, the client 0. Other sizes: 1,953 openings, production accepts all, the client none. 45,085 proofs with another size or inactive count: production accepts none. 1,270 openings at another trusted height: the client accepts none. All 7 roots of small trees equal a leaf digest at position 2<sup>48</sup>.</td><td>What the differential tests never vary, which trees the client models, and one fact about bytes that the ideal hash cannot express.</td></tr>
 <tr><td><code>python3 verification/audit/build.py --check</code></td><td><code>hax-dylean-audit.html matches the sources.</code></td><td>The panels of this guide show the current code.</td></tr>
 <tr><td><code>git -C ../dylean rev-parse HEAD</code>, then read <code>toolchain.sh</code> and <code>symbolic/proofs/lean/lake-manifest.json</code></td><td>The DyLean pin of <code>toolchain.sh</code>. The manifest pins the Aeneas and hax Lean libraries by commit. The hax binary is whatever sits at <code>$HAX</code>: nothing records its source or a hash.</td><td>What the pins cover and what they do not.</td></tr>
 </tbody></table></div>
@@ -421,7 +421,7 @@ git checkout verification/symbolic/src/qmdb/tests.rs</code></td><td>Five <code>P
 <section id="step-10">
 <h2>Step 10 · Production code shared with part II</h2>
 <dl class="step">
-<dt>Read</dt><dd><a class="src" href="../storage/src/qmdb/current/ordered/proof/claim.rs" title="Open in VS Code">claim.rs</a>, <a class="src" href="../storage/src/qmdb/current/proof/activity.rs" title="Open in VS Code">activity.rs</a>, <a class="src" href="../utils/src/range/cyclic.rs" title="Open in VS Code">cyclic.rs</a>, <code>current_root</code> in <a class="src" href="../storage/src/merkle/hasher/terms.rs" title="Open in VS Code">terms.rs</a> and <a class="src" href="../storage/src/qmdb/any/operation/layout.rs" title="Open in VS Code">layout.rs</a>. Then <a class="src" href="symbolic/src/ordered.rs" title="Open in VS Code">ordered.rs</a> and, in <a class="src" href="lean/Qmdb/Ordered/Extraction.lean" title="Open in VS Code">Extraction.lean</a>, the readings <code>keys</code>, <code>readOp</code> and <code>select</code>.</dd>
+<dt>Read</dt><dd><a class="src" href="../storage/src/qmdb/current/ordered/proof/claim.rs" title="Open in VS Code">claim.rs</a>, <a class="src" href="../storage/src/qmdb/current/proof/activity.rs" title="Open in VS Code">activity.rs</a>, <a class="src" href="../utils/src/range/cyclic.rs" title="Open in VS Code">cyclic.rs</a>, <code>current_root</code> in <a class="src" href="../storage/src/merkle/hasher/terms.rs" title="Open in VS Code">terms.rs</a> and <a class="src" href="../storage/src/qmdb/any/operation/layout.rs" title="Open in VS Code">layout.rs</a>. Then <a class="src" href="symbolic/src/reads.rs" title="Open in VS Code">reads.rs</a> and, in <a class="src" href="lean/Qmdb/Ordered/Extraction.lean" title="Open in VS Code">Extraction.lean</a>, the readings <code>keys</code>, <code>readOp</code> and <code>select</code>.</dd>
 <dt>Pass when</dt><dd><ul><li>Every name that <code>claim.rs</code> takes from its surroundings has a stand-in that behaves like production’s for the two selectors.</li><li>You can say what <code>accepts_iff</code> leaves out.</li><li>You accept the byte-list writer of <code>Encoding.lean</code> as a reading of production's codec buffer.</li></ul></dd>
 <dt>Links</dt><dd>M1, M4.</dd>
 <dt>Time</dt><dd>1.5 hours.</dd>
@@ -438,7 +438,7 @@ git checkout verification/symbolic/src/qmdb/tests.rs</code></td><td>Five <code>P
 <section id="step-11">
 <h2>Step 11 · The extracted verifier against the plan</h2>
 <dl class="step">
-<dt>Read</dt><dd><a class="src" href="../storage/src/qmdb/current/proof/rules.rs" title="Open in VS Code">rules.rs</a> and <a class="src" href="../storage/src/qmdb/current/grafting/rules.rs" title="Open in VS Code">grafting/rules.rs</a> in full, <code>reconstruct</code> in <a class="src" href="../storage/src/merkle/proof/reconstruct.rs" title="Open in VS Code">reconstruct.rs</a>, and the statements of <a class="src" href="lean/Qmdb/Mmb/Extracted.lean" title="Open in VS Code">Extracted.lean</a> and <a class="src" href="lean/Qmdb/Ordered/Verified.lean" title="Open in VS Code">Verified.lean</a>.</dd>
+<dt>Read</dt><dd><a class="src" href="../storage/src/qmdb/current/proof/rules.rs" title="Open in VS Code">rules.rs</a> and <a class="src" href="../storage/src/qmdb/current/grafting/rules.rs" title="Open in VS Code">grafting/rules.rs</a> in full, <code>reconstruct</code> in <a class="src" href="../storage/src/merkle/proof/reconstruct.rs" title="Open in VS Code">reconstruct.rs</a>, and the statements of <a class="src" href="lean/Qmdb/Mmb/Extracted.lean" title="Open in VS Code">Extracted.lean</a> and <a class="src" href="lean/Qmdb/Reads.lean" title="Open in VS Code">Reads.lean</a>.</dd>
 <dt>Pass when</dt><dd><ul><li>You can say which production function each statement is about and that it is included unchanged.</li><li>You accept the two hypotheses of <code>verify_operation_refines</code>: digests of SHA-256 width and a 32-byte chunk.</li><li>You can name the production checks that the refinement relies on: chunk size, coverage, graftable count, the two suffix checks, the digest count, element exhaustion and the root comparison.</li></ul></dd>
 <dt>Links</dt><dd>M2, M3, M4, M5.</dd>
 <dt>Time</dt><dd>2 hours.</dd>

@@ -34,7 +34,8 @@ class Snapshot where
   honest :
     ∀ loc : Std.U64,
       loc.val < 2 ^ height.val →
-      qmdb.verify dyTerms () height loc root (items loc) (siblings loc) =
+      inclusion.verify_element_inclusion dyTerms () height loc root (items loc)
+        (siblings loc) =
         RustM.ok true
 
 end

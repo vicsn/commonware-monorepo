@@ -7,7 +7,7 @@ terms and clients.
 
 | Target | Rust | Lean | Record |
 | --- | --- | --- | --- |
-| QMDB single-item inclusion | [symbolic/src/qmdb.rs](symbolic/src/qmdb.rs) over production `terms.rs` and `traversal.rs` | [lean/Qmdb](lean/Qmdb) | [qmdb/README.md](qmdb/README.md) |
+| QMDB single-item inclusion | [symbolic/src/inclusion.rs](symbolic/src/inclusion.rs) over production `terms.rs` and `traversal.rs` | [lean/Qmdb](lean/Qmdb) | [qmdb/README.md](qmdb/README.md) |
 | Ordered QMDB checkpoint reads | shared ordered claim, activity, current-root, operation layout and current MMB verifier logic | [CheckpointAudit](lean/Qmdb/CheckpointAudit.lean) | [MMB and ordered reads](qmdb/mmb/README.md) |
 | BLS certificates | [symbolic/src/bls.rs](symbolic/src/bls.rs) over production `rules.rs` | [lean/Bls](lean/Bls) | [bls/README.md](bls/README.md) |
 | SAKE handshake | production `handshake/sake/rules.rs`, with no module of its own | [lean/Sake](lean/Sake) | [sake/README.md](sake/README.md) |
@@ -36,9 +36,9 @@ terms and clients.
     `cryptography/src/handshake/sake/rules.rs`.
   - [client.rs](symbolic/src/client.rs): what every client shares.
   - A module for each target whose client production does not state in full,
-    [qmdb.rs](symbolic/src/qmdb.rs) and [bls.rs](symbolic/src/bls.rs), with differential tests
+    [inclusion.rs](symbolic/src/inclusion.rs) and [bls.rs](symbolic/src/bls.rs), with differential tests
     against production. The steps of the SAKE handshake are production's own.
-  - [ordered.rs](symbolic/src/ordered.rs): stand-in types beside which production's
+  - [reads.rs](symbolic/src/reads.rs): stand-in types beside which production's
     `storage/src/qmdb/current/ordered/proof/claim.rs` is included for the ordered reads.
   - [concrete.rs](symbolic/src/concrete.rs): SHA-256 and BLS12-381 instances for those tests.
   - `proofs/lean/CommonwareSymbolic/`: the generated extraction.
@@ -161,8 +161,8 @@ own.
   theorem unique
       (h : Std.U32) (loc : Std.U64) (root : Bytes)
       (a b : Slice Std.U8) (wa wb : Slice Bytes)
-      (ha : qmdb.verify dyTerms () h loc root a wa = RustM.ok true)
-      (hb : qmdb.verify dyTerms () h loc root b wb = RustM.ok true) :
+      (ha : inclusion.verify_element_inclusion dyTerms () h loc root a wa = RustM.ok true)
+      (hb : inclusion.verify_element_inclusion dyTerms () h loc root b wb = RustM.ok true) :
       a = b ∧
       wa = wb := by
   ```

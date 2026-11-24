@@ -10,14 +10,14 @@ name = "leaf hash drops the element"
 file = "storage/src/merkle/hasher/terms.rs"
 original = "terms.hash(&[Part::Bytes(&position.to_be_bytes()), Part::Bytes(element)])"
 mutated = "terms.hash(&[Part::Bytes(&position.to_be_bytes())])"
-fails = "Qmdb.Verifier"
+fails = "Qmdb.Inclusion"
 
 [[mutation]]
 name = "node hash drops the left child"
 file = "storage/src/merkle/hasher/terms.rs"
 original = "Part::Digest(left),\n        Part::Digest(right),"
 mutated = "Part::Digest(right),"
-fails = "Qmdb.Verifier"
+fails = "Qmdb.Inclusion"
 
 [[mutation]]
 name = "root drops the peak"
@@ -31,14 +31,14 @@ name = "traversal treats a boundary subtree as inside"
 file = "storage/src/merkle/proof/traversal.rs"
 original = "if start + width <= range_start || start >= range_end {"
 mutated = "if start + width < range_start || start >= range_end {"
-fails = "Qmdb.Verifier"
+fails = "Qmdb.Inclusion"
 
 [[mutation]]
 name = "traversal hashes the right child twice"
 file = "storage/src/merkle/proof/traversal.rs"
 original = "Ok(backend.node(position, width, start, left, right))"
 mutated = "Ok(backend.node(position, width, start, right, right))"
-fails = "Qmdb.Verifier"
+fails = "Qmdb.Inclusion"
 
 [[mutation]]
 name = "verifier ignores unused siblings"
@@ -49,8 +49,8 @@ fails = "Qmdb.Reconstruct"
 
 [[mutation]]
 name = "client skips verification"
-file = "verification/symbolic/src/qmdb.rs"
-original = "if verify(terms, height, location, root, item, siblings) {"
+file = "verification/symbolic/src/inclusion.rs"
+original = "if verify_element_inclusion(terms, height, location, root, item, siblings) {"
 mutated = "if true {"
 fails = "Qmdb.Symbolic"
 

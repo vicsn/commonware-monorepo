@@ -5,7 +5,7 @@ import DY.Meta
 
 /-! The DyLean protocol around the extracted QMDB client. Trusted: `client`, the event invariant
 and the `#combine` configuration. The client is the shared `Commonware.Symbolic.receive` action
-over the extracted `client_step`, so preservation of the trace invariant reduces to
+over the extracted `accept_inclusion`, so preservation of the trace invariant reduces to
 `Symbolic.client_step_sound`. `SecurityTheorems` states what follows on reachable traces. -/
 
 namespace Qmdb.Protocol
@@ -14,7 +14,7 @@ open DY Aeneas Aeneas.Std Commonware.Symbolic
 
 /-- What the client logs: the acceptance that the extracted client step returns.
 -/
-abbrev Acceptance := commonware_symbolic.qmdb.Acceptance
+abbrev Acceptance := commonware_symbolic.inclusion.Acceptance
 
 #combine +toplevel into ExecEntryT, baseAttackerKnowledge from
   Network,
@@ -29,7 +29,7 @@ def client
     (handle : Nat) (loc : Std.U64) (ws : Slice Bytes) :
     Traceful Unit :=
   receive (fun message =>
-    commonware_symbolic.qmdb.client_step dyTerms messages ()
+    commonware_symbolic.inclusion.accept_inclusion dyTerms messages ()
       Snapshot.root Snapshot.height message loc ws) handle
 
 /-- The client as a step of reachable traces, for any handle, location and

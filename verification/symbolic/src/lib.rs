@@ -2,8 +2,9 @@
 //!
 //! Production modules are included unchanged through `#[path]`, so the proofs cover the code that
 //! production runs. [`client`] fixes what every client shares. A verified target adds a module
-//! where production does not already state the whole client: [`qmdb`] accepts one claimed item of
-//! an MMR with one peak, and [`bls`] supplies the quorum of a committee. The steps of the SAKE
+//! where production does not already state the whole client: [`inclusion`] accepts one claimed item
+//! of an MMR with one peak, [`reads`] checks ordered reads under a current root, and [`bls`]
+//! supplies the quorum of a committee. The steps of the SAKE
 //! handshake are production's own, in [`sake`]. Hax extracts the whole crate into one Lean
 //! package, so all targets share one extraction of the production modules and of [`client`]. Lean
 //! instantiates [`Terms`](terms::Terms) and [`Messages`](client::Messages) with DyLean's symbolic
@@ -54,8 +55,24 @@ pub(crate) mod client;
 #[path = "../../../utils/src/range/cyclic.rs"]
 pub(crate) mod cyclic;
 
-pub(crate) mod ordered;
-pub(crate) mod qmdb;
+pub(crate) mod inclusion;
+
+/// Domain byte of backward-fold peak bagging, the bagging of QMDB's operation roots.
+pub(crate) const BACKWARD_FOLD: u8 = 1;
+
+/// The module paths that the included QMDB production files name.
+pub(crate) mod qmdb {
+    pub(crate) mod current {
+        pub(crate) mod grafting {
+            pub(crate) use crate::grafting as rules;
+        }
+    }
+    pub(crate) mod operation {
+        pub(crate) use crate::tags;
+    }
+}
+
+pub(crate) mod reads;
 
 /// Production rules of BLS12-381 certificates.
 #[path = "../../../cryptography/src/bls12381/certificate/rules.rs"]

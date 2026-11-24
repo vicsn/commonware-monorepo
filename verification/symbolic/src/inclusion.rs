@@ -12,10 +12,8 @@ use crate::{
     mmr_geometry,
     reconstruct::{self, Single, StandardNodes},
     terms::Terms,
+    BACKWARD_FOLD,
 };
-
-/// Domain byte of backward-fold peak bagging, the bagging of QMDB's operation roots.
-pub(crate) const BACKWARD_FOLD: u8 = 1;
 
 /// Largest height whose `2^height` leaves fit production's `mmr::Family::MAX_LEAVES`.
 pub(crate) const MAX_HEIGHT: u32 = 62;
@@ -23,7 +21,7 @@ pub(crate) const MAX_HEIGHT: u32 = 62;
 /// Accept `item` at `location` of an MMR with `2^height` leaves and root `root` if the production
 /// reconstruction of a range proof of that one item, with `siblings` as its digests, returns
 /// `root`.
-pub(crate) fn verify<T: Terms>(
+pub(crate) fn verify_element_inclusion<T: Terms>(
     terms: &T,
     height: u32,
     location: u64,
@@ -64,8 +62,8 @@ pub(crate) struct Acceptance<'a> {
 }
 
 /// Accept the item in `message` at `location` of the snapshot with `2^height` leaves and trusted
-/// `root` if [`verify`] accepts `siblings` as its opening. Returns the event to log, or `None`.
-pub(crate) fn client_step<'a, T: Terms + Messages>(
+/// `root` if [`verify_element_inclusion`] accepts `siblings` as its opening. Returns the event to log, or `None`.
+pub(crate) fn accept_inclusion<'a, T: Terms + Messages>(
     terms: &T,
     root: &T::Digest,
     height: u32,
@@ -76,7 +74,7 @@ pub(crate) fn client_step<'a, T: Terms + Messages>(
     match terms.parse(message) {
         None => None,
         Some(item) => {
-            if verify(terms, height, location, root, item, siblings) {
+            if verify_element_inclusion(terms, height, location, root, item, siblings) {
                 Some(Acceptance {
                     height,
                     location,
@@ -87,18 +85,6 @@ pub(crate) fn client_step<'a, T: Terms + Messages>(
             }
         }
     }
-}
-
-/// The module paths that the included production files name.
-pub(crate) mod current {
-    pub(crate) mod grafting {
-        pub(crate) use crate::grafting as rules;
-    }
-}
-
-/// The module paths that the included production files name.
-pub(crate) mod operation {
-    pub(crate) use crate::tags;
 }
 
 #[cfg(test)]

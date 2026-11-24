@@ -19,8 +19,8 @@ prefixes = [
   "storage/src/merkle/",
   "storage/src/qmdb/",
   "utils/src/range/",
-  "verification/symbolic/src/qmdb.rs",
-  "verification/symbolic/src/ordered.rs",
+  "verification/symbolic/src/inclusion.rs",
+  "verification/symbolic/src/reads.rs",
   "verification/symbolic/src/client.rs",
 ]
 
@@ -31,12 +31,12 @@ id = "primer"
 kind = "reading"
 title = "How to read a Lean statement"
 link = "Everything before the last top-level colon is given; what follows it is proved. The proof after `:=` is checked by Lean and is never required reading."
-left = [{ file = "verification/lean/Qmdb/Verifier.lean", lean = "unique", statement = true, context = false }]
+left = [{ file = "verification/lean/Qmdb/Inclusion.lean", lean = "unique", statement = true, context = false }]
 right = [{ prose = [
   "The text between `/--` and `-/` is a comment. Lean does not check it against the statement.",
   "`(h : Std.U32) (loc : Std.U64)`: for any height and any location. `Std.U32`, `Std.U64` and `Slice Std.U8` are Rust's `u32`, `u64` and `&[u8]`; `.val` is the number or the list behind one.",
   "`(root : Bytes)` and `(wa wb : Slice Bytes)`: a root and two lists of siblings. `Bytes` is a DyLean term, not a byte string: a literal, a concatenation or a hash.",
-  "`(ha : qmdb.verify dyTerms () h loc root a wa = RustM.ok true)`: a hypothesis, named `ha`. The extracted Rust function `verify` returned `true`. `RustM` is the result of extracted Rust: `ok v`, a failure such as a panic or an overflow, or divergence.",
+  "`(ha : inclusion.verify_element_inclusion dyTerms () h loc root a wa = RustM.ok true)`: a hypothesis, named `ha`. The extracted Rust function `verify_element_inclusion` returned `true`. `RustM` is the result of extracted Rust: `ok v`, a failure such as a panic or an overflow, or divergence.",
   "`dyTerms` says what a hash is in this statement: DyLean's hash constructor. Step 5 shows it. No statement here is about a real hash function.",
   "After the colon: `a = b ∧ wa = wb`. The two items are equal and so are the two sibling lists.",
   "Trace statements add two notions: `tr.Reachable reachability` is any sequence of attacker sends and client steps, and `tr.EventLoggedAt e t` says that the client logged `e` at time `t`.",
@@ -52,9 +52,9 @@ title = "Why one root admits one opening"
 link = "A digest is a term. `Hash.hash_inj` of DyLean says that two hash terms are equal only if their inputs are, and the two lemmas on the right say the same of concatenations and of literals. So a root fixes its peak, a node its two children and a leaf its item, all the way down."
 left_label = "Digests fix what is below them"
 left = [
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "leafTerm_inj", context = false },
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "nodeTerm_inj", context = false },
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "rootTerm_inj", context = false },
+  { file = "verification/lean/Qmdb/Inclusion.lean", lean = "leafTerm_inj", context = false },
+  { file = "verification/lean/Qmdb/Inclusion.lean", lean = "nodeTerm_inj", context = false },
+  { file = "verification/lean/Qmdb/Inclusion.lean", lean = "rootTerm_inj", context = false },
 ]
 right_label = "What that rests on"
 right = [
@@ -117,7 +117,7 @@ strength = "tested"
 title = "The client's verifier and production's"
 link = "`verifiers_agree_with_production` compares the verdicts of the two on more than 1,000 claims at heights 0 to 6, with QMDB's backward-fold hasher and the proof's own `leaves`."
 left_label = "Verification-only client"
-left = [{ file = "verification/symbolic/src/qmdb.rs", rust = "fn verify" }]
+left = [{ file = "verification/symbolic/src/inclusion.rs", rust = "fn verify_element_inclusion" }]
 right_label = "Production"
 right = [
   { file = "storage/src/merkle/proof.rs", rust = "fn verify_range_inclusion", within = "impl Digest> Proof<F, D>", from = "match self.reconstruct_root", label = "verify_range_inclusion: root comparison" },
@@ -138,8 +138,8 @@ link = "The differential tests build production trees with `Bagging::BackwardFol
 left_label = "Verification-only client"
 left = [
   { file = "storage/src/merkle/mmr/geometry.rs", rust = "const DOMAIN" },
-  { file = "verification/symbolic/src/qmdb.rs", rust = "const BACKWARD_FOLD" },
-  { file = "verification/symbolic/src/qmdb.rs", rust = "const MAX_HEIGHT" },
+  { file = "verification/symbolic/src/lib.rs", rust = "const BACKWARD_FOLD" },
+  { file = "verification/symbolic/src/inclusion.rs", rust = "const MAX_HEIGHT" },
 ]
 right_label = "Production"
 right = [
@@ -170,7 +170,7 @@ strength = "tested"
 title = "How each side calls the shared reconstruction"
 link = "Both call `reconstruct::reconstruct`. The theorems cover the left instantiation only."
 left_label = "Verification-only client"
-left = [{ file = "verification/symbolic/src/qmdb.rs", rust = "fn verify", from = "match reconstruct::reconstruct(", through = "    ) {", label = "verify: reconstruction call" }]
+left = [{ file = "verification/symbolic/src/inclusion.rs", rust = "fn verify_element_inclusion", from = "match reconstruct::reconstruct(", through = "    ) {", label = "verify_element_inclusion: reconstruction call" }]
 right_label = "Production"
 right = [{ file = "storage/src/merkle/proof.rs", rust = "fn reconstruct_root_inner", from = "reconstruct::reconstruct(", through = ".map_err(Into::into)", label = "reconstruct_root_inner: reconstruction call" }]
 notes = [
@@ -224,8 +224,8 @@ kind = "rust-generated"
 strength = "assumed"
 title = "The client's verifier"
 link = "Assumed (A1). Arithmetic such as `1u64 << height` and `location + 1` becomes an operation that can fail, so an overflow is a failure in Lean."
-left = [{ source_of = "qmdb.verify" }]
-right = [{ generated = "qmdb.verify" }]
+left = [{ source_of = "inclusion.verify_element_inclusion" }]
+right = [{ generated = "inclusion.verify_element_inclusion" }]
 
 [[panel]]
 id = "spec-inputs"
@@ -235,13 +235,13 @@ title = "The digests that statements talk about"
 link = "`leaf_eq`, `node_eq` and `root_eq` prove that each generated function returns the term on the left. `root_eq` covers the branch with zero inactive peaks, the only one the client reaches."
 left_label = "Definitions and linking lemmas"
 left = [
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "be", context = false },
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "leafTerm", context = false },
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "nodeTerm", context = false },
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "rootTerm", context = false },
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "leaf_eq", statement = true, context = false },
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "node_eq", statement = true, context = false },
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "root_eq", statement = true, context = false },
+  { file = "verification/lean/Qmdb/Inclusion.lean", lean = "be", context = false },
+  { file = "verification/lean/Qmdb/Inclusion.lean", lean = "leafTerm", context = false },
+  { file = "verification/lean/Qmdb/Inclusion.lean", lean = "nodeTerm", context = false },
+  { file = "verification/lean/Qmdb/Inclusion.lean", lean = "rootTerm", context = false },
+  { file = "verification/lean/Qmdb/Inclusion.lean", lean = "leaf_eq", statement = true, context = false },
+  { file = "verification/lean/Qmdb/Inclusion.lean", lean = "node_eq", statement = true, context = false },
+  { file = "verification/lean/Qmdb/Inclusion.lean", lean = "root_eq", statement = true, context = false },
 ]
 right_label = "Generated from terms.rs"
 right = [
@@ -325,7 +325,7 @@ strength = "tested"
 title = "The snapshot assumption and the test behind it"
 link = "`production_openings_verify` checks that every opening production generates at heights 0 to 8 is accepted by the client under production's root, with SHA-256 and forward-fold bagging."
 left_label = "Test"
-left = [{ file = "verification/symbolic/src/qmdb/tests.rs", rust = "fn production_openings_verify" }]
+left = [{ file = "verification/symbolic/src/inclusion/tests.rs", rust = "fn production_openings_verify" }]
 right_label = "Assumed in Lean"
 right = [{ file = "verification/lean/Qmdb/Assumptions.lean", lean = "Snapshot" }]
 notes = [
@@ -339,11 +339,11 @@ kind = "reading"
 title = "What honest means in the statements about honest openings"
 link = "`honest_opening`, `extra_sibling_rejected` and `honest_snapshots_exist` are about the tree that the last four definitions build, up to the height that the first one names. It is a Lean tree over the same hash inputs as the verifier."
 left = [
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "maxHeight", context = false },
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "tree", context = false },
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "path", context = false },
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "honestRoot", context = false },
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "honestSiblings", context = false },
+  { file = "verification/lean/Qmdb/Inclusion.lean", lean = "maxHeight", context = false },
+  { file = "verification/lean/Qmdb/Inclusion.lean", lean = "tree", context = false },
+  { file = "verification/lean/Qmdb/Inclusion.lean", lean = "path", context = false },
+  { file = "verification/lean/Qmdb/Inclusion.lean", lean = "honestRoot", context = false },
+  { file = "verification/lean/Qmdb/Inclusion.lean", lean = "honestSiblings", context = false },
 ]
 right = [{ prose = [
   "`maxHeight` is the client's `MAX_HEIGHT`, read from the extraction. Its value is stated once, in `maxHeight_eq`.",
@@ -358,11 +358,11 @@ id = "protocol-client"
 kind = "rust-trusted"
 strength = "trusted"
 title = "The client step and the client in DyLean"
-link = "The Lean client runs the extracted `client_step` on a received message and logs the acceptance that it returns. An attempt sends a message that the attacker knows and runs the client on it; `attempt_logs` proves that the acceptance reaches the trace."
+link = "The Lean client runs the extracted `accept_inclusion` on a received message and logs the acceptance that it returns. An attempt sends a message that the attacker knows and runs the client on it; `attempt_logs` proves that the acceptance reaches the trace."
 left_label = "Rust"
 left = [
-  { file = "verification/symbolic/src/qmdb.rs", rust = "struct Acceptance" },
-  { file = "verification/symbolic/src/qmdb.rs", rust = "fn client_step" },
+  { file = "verification/symbolic/src/inclusion.rs", rust = "struct Acceptance" },
+  { file = "verification/symbolic/src/inclusion.rs", rust = "fn accept_inclusion" },
 ]
 right_label = "DyLean protocol"
 right = [
@@ -425,15 +425,15 @@ right = [{ prose = [
 [[claim]]
 source = "verification/qmdb/README.md"
 sentence = "Two openings that the extracted verifier accepts at one location under one root, for one trusted height, carry the same item and the same siblings."
-backed_by = [{ file = "verification/lean/Qmdb/Verifier.lean", lean = "unique" }]
-reading = "The hash is `dyTerms`, DyLean's constructor. The extracted verifier is `qmdb::verify` of the verification-only client, not production's `Proof::verify_element_inclusion`. Position binding is the first half of the conclusion."
+backed_by = [{ file = "verification/lean/Qmdb/Inclusion.lean", lean = "unique" }]
+reading = "The hash is `dyTerms`, DyLean's constructor. The extracted verifier is `inclusion::verify_element_inclusion` of the verification-only client, not production's `Proof::verify_element_inclusion`. Position binding is the first half of the conclusion."
 
 [[claim]]
 source = "verification/qmdb/README.md"
 sentence = "The verifier returns a verdict on every input, so it never panics or diverges, and it accepts every honest opening."
 backed_by = [
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "verify_total" },
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "honest_opening" },
+  { file = "verification/lean/Qmdb/Inclusion.lean", lean = "verify_total" },
+  { file = "verification/lean/Qmdb/Inclusion.lean", lean = "honest_opening" },
 ]
 reading = "`verify_total`: a verdict on every input, so no panic and no divergence. `honest_opening`: honest means built by `honestRoot` and `honestSiblings`, which are Lean definitions, not production's tree builder."
 
@@ -459,8 +459,8 @@ reading = "The assumption is not contradictory. It does not show that production
 source = "verification/qmdb/README.md"
 sentence = "The verifier accepts only heights up to `MAX_HEIGHT` and locations inside the tree, and it rejects an honest opening that an unused sibling follows."
 backed_by = [
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "verify_bounds" },
-  { file = "verification/lean/Qmdb/Verifier.lean", lean = "extra_sibling_rejected" },
+  { file = "verification/lean/Qmdb/Inclusion.lean", lean = "verify_bounds" },
+  { file = "verification/lean/Qmdb/Inclusion.lean", lean = "extra_sibling_rejected" },
 ]
 reading = "`verify_bounds`: acceptance implies `h ≤ maxHeight` and an in-range location. `extra_sibling_rejected`: one unused sibling after the honest ones."
 
@@ -582,7 +582,7 @@ reading = "A `Codec` gives keys and values fixed-width, injective bytes. `encodi
 group = "reads"
 source = "verification/qmdb/mmb/README.md"
 sentence = "The extracted ordered client accepts an operation only if that encoding opens the trusted root along the paths of the plan."
-backed_by = [{ file = "verification/lean/Qmdb/Ordered/Verified.lean", lean = "verify_selected_sound" }]
+backed_by = [{ file = "verification/lean/Qmdb/Reads.lean", lean = "verify_selected_sound" }]
 reading = "`verify_selected` encodes the selected operation and calls the extracted `current::verify_operation`. The hypotheses are a 32-byte chunk and digests of SHA-256 width. The conclusion is `Mmb.Accepts` with the operation's encoding as the item."
 
 [[claim]]
@@ -756,10 +756,10 @@ left = [
 ]
 right_label = "What it sees in the extracted crate"
 right = [
-  { file = "verification/symbolic/src/ordered.rs", rust = "trait Key" },
-  { file = "verification/symbolic/src/ordered.rs", rust = "fn contains_cyclic" },
-  { file = "verification/symbolic/src/ordered.rs", rust = "enum Operation" },
-  { file = "verification/symbolic/src/ordered.rs", rust = "enum ExclusionProof" },
+  { file = "verification/symbolic/src/reads.rs", rust = "trait Key" },
+  { file = "verification/symbolic/src/reads.rs", rust = "fn contains_cyclic" },
+  { file = "verification/symbolic/src/reads.rs", rust = "enum Operation" },
+  { file = "verification/symbolic/src/reads.rs", rust = "enum ExclusionProof" },
 ]
 notes = [
   "The stand-in `Operation` has no `Delete`. The selectors never build one.",
@@ -956,42 +956,42 @@ strength = "proved"
 title = "The ordered client's operation check"
 link = "`verify_selected_sound`: the extracted ordered client accepts an operation only if its encoding opens the trusted root at `Plan`'s paths, together with its chunk."
 left_label = "The client, extracted"
-left = [{ file = "verification/symbolic/src/ordered.rs", rust = "fn verify_selected" }]
+left = [{ file = "verification/symbolic/src/reads.rs", rust = "fn verify_selected" }]
 right_label = "Lean"
-right = [{ file = "verification/lean/Qmdb/Ordered/Verified.lean", lean = "verify_selected_sound", statement = true }]
+right = [{ file = "verification/lean/Qmdb/Reads.lean", lean = "verify_selected_sound", statement = true }]
 
 # Facts that the prose of the guide states and no panel shows.
 
 [[fact]]
-file = "verification/lean/Qmdb/Verifier.lean"
+file = "verification/lean/Qmdb/Inclusion.lean"
 text = "theorem maxHeight_eq : maxHeight = 62"
 
 [[fact]]
-file = "verification/symbolic/src/qmdb/tests.rs"
-text = "assert_eq!(1u64 << qmdb::MAX_HEIGHT, mmr::Family::MAX_LEAVES.as_u64());"
+file = "verification/symbolic/src/inclusion/tests.rs"
+text = "assert_eq!(1u64 << inclusion::MAX_HEIGHT, mmr::Family::MAX_LEAVES.as_u64());"
 
 [[fact]]
 file = "storage/src/qmdb/mod.rs"
 text = "pub(crate) const ROOT_BAGGING: Bagging = Bagging::BackwardFold;"
 
 [[fact]]
-file = "verification/symbolic/src/qmdb/tests.rs"
+file = "verification/symbolic/src/inclusion/tests.rs"
 text = "Production::new(Bagging::BackwardFold)"
 
 [[fact]]
-file = "verification/symbolic/src/qmdb/tests.rs"
+file = "verification/symbolic/src/inclusion/tests.rs"
 text = "for height in 0..=8u32"
 
 [[fact]]
-file = "verification/symbolic/src/qmdb/tests.rs"
+file = "verification/symbolic/src/inclusion/tests.rs"
 text = "for height in 0..=6u32"
 
 [[fact]]
-file = "verification/symbolic/src/qmdb/tests.rs"
+file = "verification/symbolic/src/inclusion/tests.rs"
 text = "leaves: proof.leaves,"
 
 [[fact]]
-file = "verification/symbolic/src/qmdb/tests.rs"
+file = "verification/symbolic/src/inclusion/tests.rs"
 text = "inactive_peaks: 0,"
 
 [[fact]]

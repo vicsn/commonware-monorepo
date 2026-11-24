@@ -302,67 +302,66 @@ structure grafting.Grafted (N : Type _) (T : Type _) (C : Type _) where
   chunks : Slice C
   graftable : Std.U64
 
-/-- [commonware_symbolic::ordered::Update]
-    Source: 'src/ordered.rs', lines 36:0-40:1 -/
-structure ordered.Update (K : Type _) (V : Type _) (Clause1_Value : Type _)
-  where
+/-- [commonware_symbolic::reads::Update]
+    Source: 'src/reads.rs', lines 36:0-40:1 -/
+structure reads.Update (K : Type _) (V : Type _) (Clause1_Value : Type _) where
   key : K
   value : Clause1_Value
   next_key : K
 
-/-- [commonware_symbolic::ordered::Operation]
-    Source: 'src/ordered.rs', lines 52:0-55:1 -/
+/-- [commonware_symbolic::reads::Operation]
+    Source: 'src/reads.rs', lines 52:0-55:1 -/
 @[discriminant isize]
-inductive ordered.Operation (F : Type _) (K : Type _) (V : Type _)
-  (Clause2_Value : Type _) where
+inductive reads.Operation (F : Type _) (K : Type _) (V : Type _) (Clause2_Value
+  : Type _) where
 | Update :
-  ordered.Update K V Clause2_Value →
-  ordered.Operation F K V Clause2_Value
+  reads.Update K V Clause2_Value →
+  reads.Operation F K V Clause2_Value
 | Commit :
   core.option.Option Clause2_Value →
   F →
-  ordered.Operation F K V Clause2_Value
+  reads.Operation F K V Clause2_Value
 
-/-- Trait declaration: [commonware_symbolic::ordered::ValueEncoding]
-    Source: 'src/ordered.rs', lines 24:0-26:1 -/
-structure ordered.ValueEncoding (Self : Type _) (Self_Value : Type _) where
+/-- Trait declaration: [commonware_symbolic::reads::ValueEncoding]
+    Source: 'src/reads.rs', lines 24:0-26:1 -/
+structure reads.ValueEncoding (Self : Type _) (Self_Value : Type _) where
   corecloneCloneInst : core.clone.Clone Self_Value
 
-/-- Trait declaration: [commonware_symbolic::ordered::Key]
-    Source: 'src/ordered.rs', lines 21:0-23:1 -/
-structure ordered.Key (Self : Type _) where
+/-- Trait declaration: [commonware_symbolic::reads::Key]
+    Source: 'src/reads.rs', lines 21:0-23:1 -/
+structure reads.Key (Self : Type _) where
   corecloneCloneInst : core.clone.Clone Self
   corecmpPartialEqInst : core.cmp.PartialEq Self Self
   less : Self → Self → RustM Bool
 
-/-- Trait declaration: [commonware_symbolic::ordered::Graftable]
-    Source: 'src/ordered.rs', lines 19:0-19:35 -/
-structure ordered.Graftable (Self : Type _) where
+/-- Trait declaration: [commonware_symbolic::reads::Graftable]
+    Source: 'src/reads.rs', lines 19:0-19:35 -/
+structure reads.Graftable (Self : Type _) where
   coremarkerCopyInst : core.marker.Copy Self
 
-/-- [commonware_symbolic::ordered::OperationProof]
-    Source: 'src/ordered.rs', lines 57:0-60:1 -/
-structure ordered.OperationProof (F : Type _) (D : Type _) (C : Type _) where
+/-- [commonware_symbolic::reads::OperationProof]
+    Source: 'src/reads.rs', lines 57:0-60:1 -/
+structure reads.OperationProof (F : Type _) (D : Type _) (C : Type _) where
   loc : F
   payload : (D × C)
 
-/-- [commonware_symbolic::ordered::ExclusionProof]
-    Source: 'src/ordered.rs', lines 62:0-65:1 -/
+/-- [commonware_symbolic::reads::ExclusionProof]
+    Source: 'src/reads.rs', lines 62:0-65:1 -/
 @[discriminant isize]
-inductive ordered.ExclusionProof (F : Type _) (K : Type _) (V : Type _) (D :
+inductive reads.ExclusionProof (F : Type _) (K : Type _) (V : Type _) (D :
   Type _) (C : Type _) (Clause2_Value : Type _) where
 | KeyValue :
-  ordered.OperationProof F D C →
-  ordered.Update K V Clause2_Value →
-  ordered.ExclusionProof F K V D C Clause2_Value
+  reads.OperationProof F D C →
+  reads.Update K V Clause2_Value →
+  reads.ExclusionProof F K V D C Clause2_Value
 | Commit :
-  ordered.OperationProof F D C →
+  reads.OperationProof F D C →
   core.option.Option Clause2_Value →
-  ordered.ExclusionProof F K V D C Clause2_Value
+  reads.ExclusionProof F K V D C Clause2_Value
 
-/-- Trait declaration: [commonware_symbolic::ordered::Digest]
-    Source: 'src/ordered.rs', lines 20:0-20:26 -/
-structure ordered.Digest (Self : Type _) where
+/-- Trait declaration: [commonware_symbolic::reads::Digest]
+    Source: 'src/reads.rs', lines 20:0-20:26 -/
+structure reads.Digest (Self : Type _) where
 
 /-- [commonware_symbolic::current::Fields]
     Source: 'src/../../../storage/src/qmdb/current/proof/rules.rs', lines 49:0-62:1 -/
@@ -405,21 +404,21 @@ def geometry.Mmb := Unit
 @[reducible]
 def geometry.Mmr := Unit
 
-/-- [commonware_symbolic::ordered::Payload]
-    Source: 'src/ordered.rs', lines 72:0-85:1 -/
-structure ordered.Payload (D : Type _) where
+/-- [commonware_symbolic::inclusion::Acceptance]
+    Source: 'src/inclusion.rs', lines 55:0-62:1 -/
+structure inclusion.Acceptance where
+  height : Std.U32
+  location : Std.U64
+  item : Slice Std.U8
+
+/-- [commonware_symbolic::reads::Payload]
+    Source: 'src/reads.rs', lines 72:0-85:1 -/
+structure reads.Payload (D : Type _) where
   leaves : Std.U64
   inactive : Std.Usize
   digests : Slice D
   pending : core.option.Option D
   «partial» : core.option.Option D
   chunk : Slice Std.U8
-
-/-- [commonware_symbolic::qmdb::Acceptance]
-    Source: 'src/qmdb.rs', lines 57:0-64:1 -/
-structure qmdb.Acceptance where
-  height : Std.U32
-  location : Std.U64
-  item : Slice Std.U8
 
 end commonware_symbolic

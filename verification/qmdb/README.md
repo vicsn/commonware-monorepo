@@ -22,7 +22,7 @@
     snapshot height, an in-range location and the item stored there.
   - Some reachable trace logs the honest acceptance of each stored item.
 
-  The client's decision is the extracted Rust `client_step`. No reference model is involved.
+  The client's decision is the extracted Rust `accept_inclusion`. No reference model is involved.
 - Assumption: the application's snapshot supplies a root and, for every stored item, the siblings
   of an opening that the extracted verifier accepts under it. A snapshot with a root and an
   accepted opening for every stored item exists at every height up to `MAX_HEIGHT`, the
@@ -61,18 +61,20 @@ family's child positions, so a hasher that overrides `node_digest` (grafting) ke
 
 ## Extracted Rust
 
-The shared crate in [verification/symbolic](../symbolic/src) includes `terms.rs` and
-`traversal.rs` unchanged through `#[path]`. [client.rs](../symbolic/src/client.rs), shared by
-every client, defines `Messages`, which reads the item that a received message carries. QMDB adds
-only [qmdb.rs](../symbolic/src/qmdb.rs): MMR child positions and a `Nodes` implementation over the
-production encodings, a single-element source, `verify` (height and location bounds, the
-production traversal over one peak, sibling exhaustion, the production root encoding with
-forward-fold bagging) and `client_step`, which parses a message and returns the `Acceptance` event
-when `verify` accepts it under the trusted root. Tests instantiate `Terms` and `Messages` with the
-shared SHA-256 instances in [concrete.rs](../symbolic/src/concrete.rs); Lean instantiates the
+The shared crate in [verification/symbolic](../symbolic/src) includes the production range-proof
+reconstruction (`reconstruct.rs`, `traversal.rs`, `terms.rs`) and the MMR geometry unchanged
+through `#[path]`. [client.rs](../symbolic/src/client.rs), shared by every client, defines
+`Messages`, which reads the item that a received message carries. QMDB adds
+[inclusion.rs](../symbolic/src/inclusion.rs): `verify_element_inclusion`, which bounds the height
+and runs production's `reconstruct::reconstruct` for one item over the MMR geometry with QMDB's
+backward-fold bagging, and `accept_inclusion`, which parses a message and returns the `Acceptance`
+event when `verify_element_inclusion` accepts it under the trusted root.
+[geometry.rs](../symbolic/src/geometry.rs) hands the production geometries to the reconstruction.
+Tests instantiate `Terms` and `Messages` with the shared SHA-256 instances in
+[concrete.rs](../symbolic/src/concrete.rs); Lean instantiates the
 extraction with DyLean terms and DyLean's hash constructor.
 
-[qmdb/tests.rs](../symbolic/src/qmdb/tests.rs) builds MMRs with this branch's
+[inclusion/tests.rs](../symbolic/src/inclusion/tests.rs) builds MMRs with this branch's
 `commonware-storage`. Every production opening at heights 0 to 8 verifies under the production
 root. The client and `Proof::verify_element_inclusion` agree on 1,653 honest, substituted,
 misplaced, reordered, short, long, wrong-item and wrong-root claims at heights 0 to 6. These tests
@@ -93,7 +95,7 @@ literals, concatenation, the hash constructor and a second one for Keccak-256, w
 the ordered reads hashes its keys with) and the application-supplied `Snapshot` with its root, the
 siblings of every stored item and their honest-opening assumption.
 
-[Verifier](../lean/Qmdb/Verifier.lean) proves the following by induction over the extracted
+[Inclusion](../lean/Qmdb/Inclusion.lean) proves the following by induction over the extracted
 `traversal::reconstruct`:
 
 - `unique`: two openings that `verify` accepts at one location under one root carry the same item
@@ -117,7 +119,7 @@ item at a location is rejected whatever the siblings. `client_step_complete` is 
 the snapshot supplies.
 
 [Protocol](../lean/Qmdb/Protocol.lean) is trusted. Its `client` is the shared `receive` action over
-the extracted `client_step`: it receives a message and logs the acceptance that `client_step`
+the extracted `accept_inclusion`: it receives a message and logs the acceptance that `accept_inclusion`
 returns. The shared `receive_preserves` reduces the Hoare triple to `client_step_sound`.
 [Completeness](../lean/Qmdb/Completeness.lean) shows that the client logs what it accepts. An
 `attempt` sends a message that the attacker knows and runs the client on it; `attempt_reachable` proves
@@ -130,7 +132,7 @@ snapshot height, an in-range location and the item stored there. `honest_snapsho
 snapshot assumption can be met. `honest_acceptance_logged`: for every location of the snapshot
 some reachable trace has logged the acceptance of the item stored there, so `client_authentication`
 is not about an empty set of events. Root authenticity is an input. No theorem is stated twice: the
-verifier's properties are cited from `Verifier.lean`.
+verifier's properties are cited from `Inclusion.lean`.
 [SanityChecks](../lean/Qmdb/SanityChecks.lean) instantiates a two-item snapshot, proves the
 extracted client's decisions on honest, substituted, misplaced and long openings. [Audit](../lean/Qmdb/Audit.lean) checks that every theorem in `Qmdb`
 and `Commonware.Symbolic` depends only on Lean's standard axioms.
@@ -138,7 +140,7 @@ and `Commonware.Symbolic` depends only on Lean's standard axioms.
 [mutations.toml](mutations.toml), run by [mutate.py](../mutate.py), re-extracts the crate after
 dropping the element from leaf hashing, the left child from node hashing or the peak from the
 root, making the traversal treat a subtree that ends at the queried location as inside or hash
-the right child twice, or ignoring unused siblings; each breaks `Qmdb.Verifier`. Skipping the
+the right child twice, or ignoring unused siblings; each breaks `Qmdb.Inclusion`. Skipping the
 client's verification breaks `Qmdb.Symbolic`. The proofs do not fix the family domain bytes, so
 changing them is caught by the Rust tests only. Swapping the child digests passed to node
 collection survives: the client collects nothing. Two further mutations change the selectors of
@@ -148,9 +150,9 @@ the ordered reads in `claim.rs` and break `Qmdb.Ordered.Extraction`.
 
 Review the shared boundary listed in [verification/](../README.md) once: `terms.rs`,
 `traversal.rs`, `client.rs`, the definitions in `Terms.lean`, `receive` in `Client.lean`,
-`Audit.lean`, the [compatibility patch](../lean435.patch) and the tool pins. QMDB adds `qmdb.rs`,
+`Audit.lean`, the [compatibility patch](../lean435.patch) and the tool pins. QMDB adds `inclusion.rs`,
 `Assumptions.lean`, `maxHeight` and the statements of `unique`, `verify_total`, `verify_bounds`,
-`honest_opening` and `extra_sibling_rejected` in `Verifier.lean`, the client, invariant and `#combine` configuration
+`honest_opening` and `extra_sibling_rejected` in `Inclusion.lean`, the client, invariant and `#combine` configuration
 in `Protocol.lean`, and the statements in `SecurityTheorems.lean`. Lean checks the proofs.
 hax/Charon/Aeneas translation, CoreModels, DyLean and Lean's kernel are trusted.
 

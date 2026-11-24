@@ -6,7 +6,7 @@ import Qmdb.Mmb.Children
 import Qmdb.Mmb.RawHeader
 import Qmdb.Mmb.Extracted
 import Qmdb.Ordered.Encoding
-import Qmdb.Ordered.Verified
+import Qmdb.Reads
 import Qmdb.Ordered.Examples
 import Lean
 
@@ -35,8 +35,8 @@ open Lean Elab Command
 those about ordered reads in the Lean model, and those that relate the model to extracted Rust.
 `pairs.toml` names the same statements with the sentence that each backs. -/
 def cited : Array Name := #[
-  ``Qmdb.Verifier.unique, ``Qmdb.Verifier.verify_total, ``Qmdb.Verifier.verify_bounds,
-  ``Qmdb.Verifier.honest_opening, ``Qmdb.Verifier.extra_sibling_rejected,
+  ``Qmdb.Inclusion.unique, ``Qmdb.Inclusion.verify_total, ``Qmdb.Inclusion.verify_bounds,
+  ``Qmdb.Inclusion.honest_opening, ``Qmdb.Inclusion.extra_sibling_rejected,
   ``Qmdb.honest_snapshots_exist, ``Qmdb.client_authentication,
   ``Qmdb.honest_acceptance_logged,
   -- Ordered reads in the model.
@@ -45,7 +45,7 @@ def cited : Array Name := #[
   ``Qmdb.Mmb.RawProof.header_of_verify, ``Qmdb.Mmb.Header.binding,
   ``Qmdb.Ordered.accepted_read, ``Qmdb.Ordered.honest_member, ``Qmdb.Ordered.honest_gap,
   ``Qmdb.Ordered.honest_empty, ``Qmdb.Ordered.Layout.encode_ok,
-  ``Qmdb.Ordered.Layout.bytes_inj, ``Qmdb.Ordered.Verified.verify_selected_sound,
+  ``Qmdb.Ordered.Layout.bytes_inj, ``Qmdb.Reads.verify_selected_sound,
   ``Commonware.Symbolic.rootPair_binding, ``Qmdb.Ordered.Examples.empty_claim,
   ``Qmdb.Ordered.Examples.singleton_claims,
   -- The model against extracted Rust.
