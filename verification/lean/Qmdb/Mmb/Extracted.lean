@@ -499,5 +499,93 @@ theorem grafted_node (chunk : Active.Chunk) (chunks : Slice current.Chunk)
       nz, late, CoreModels.core.array.Array.as_slice,
       CoreModels.rust_primitives.slice.array_as_slice, dyTerms, chain, part_chunk]
 
+/-! ## Bagging the peaks -/
+
+section Bag
+variable (get : Field → Bytes)
+
+/-- The value of a filled shape. -/
+abbrev val (e : Shape) : Bytes := (e.fill get).value
+
+theorem val_bag (x y : Shape) : val get (bag x y) = foldTerm (val get x) (val get y) := rfl
+
+theorem val_foldl (L : List Shape) : ∀ a : Shape,
+    val get (L.foldl bag a) = (L.map (val get)).foldl foldTerm (val get a) := by
+  induction L with
+  | nil => intro; rfl
+  | cons x L ih => intro a; simp only [List.foldl_cons, List.map_cons, ih, val_bag]
+
+theorem val_foldr (L : List Shape) (last : Shape) :
+    val get (L.foldr bag last) = (L.map (val get)).foldr foldTerm (val get last) := by
+  induction L with
+  | nil => rfl
+  | cons x L ih => simp only [List.foldr_cons, List.map_cons, val_bag, ih]
+
+/-- `Plan`'s fold of a prefix then backward bagging is production's backward bagging. -/
+theorem val_foldFrom (k : Nat) (first : Shape) (rest : List Shape) :
+    val get (foldFrom k first rest) =
+      bagWith foldTerm true k (val get first) (rest.map (val get)) := by
+  unfold foldFrom bagWith
+  simp only [← List.map_take, ← List.map_drop, ← List.map_reverse, ↓reduceIte]
+  cases h : (rest.drop k).reverse with
+  | nil => simp [val_foldl]
+  | cons last rev =>
+    simp only [List.map_cons, val_foldr, List.foldr_cons, val_bag, val_foldl, List.map_reverse]
+    congr 1
+    rw [List.foldr_reverse]
+
+/-- The bag of `Plan`'s peak list. -/
+theorem val_foldTarget (i inactive : Nat) (left : List Shape) (target : Shape)
+    (right : List Shape) :
+    ∃ first rest, (left ++ target :: right).map (val get) = first :: rest ∧
+      val get (foldTarget i inactive left target right) =
+        bagWith foldTerm true (toFoldOf true inactive i - 1) first rest := by
+  have kept : (if min i inactive = 0 then inactive else inactive - min i inactive + 1) =
+      toFoldOf true inactive i := by
+    simp [toFoldOf, foldOf, Nat.min_comm]
+  cases left with
+  | nil =>
+    refine ⟨val get target, right.map (val get), by simp, ?_⟩
+    simp only [foldTarget, bagPeaks, kept, val_foldFrom]
+  | cons l ls =>
+    refine ⟨val get l, (ls ++ target :: right).map (val get), by simp, ?_⟩
+    simp only [foldTarget, bagPeaks, kept, val_foldFrom]
+
+end Bag
+
+/-- The domain bytes production hashes into an MMB operations root are `Plan`'s. -/
+theorem domain_eq :
+    part (.Bytes (Aeneas.Std.Array.make 2#usize [mmb_geometry.DOMAIN, qmdb.BACKWARD_FOLD]).to_slice)
+      = domainBytes := by
+  simp only [part, domainBytes, wireLiteral]
+  congr 1
+  apply ByteArray.ext
+  simp [toByteArray, Aeneas.Std.Array.make, Array.to_slice, mmb_geometry.DOMAIN,
+    qmdb.BACKWARD_FOLD]
+
+theorem be_same (x : Std.U64) : Reconstruct.be x = Verifier.be x := rfl
+
+/-- `Plan`'s Merkle root is production's root over the same bag. -/
+theorem val_merkle (get : Field → Bytes) (hd : get .domain = domainBytes)
+    (hw : ∀ n, get (.word n) = count (UInt64.ofNat n)) (leaves : Std.U64) (inactive : Std.Usize)
+    (folded : Shape) :
+    val get (merkleShape leaves.val inactive.val folded) =
+      rootTerm (Aeneas.Std.Array.make 2#usize [mmb_geometry.DOMAIN, qmdb.BACKWARD_FOLD])
+        leaves (UScalar.cast .U64 inactive) (val get folded) := by
+  have castv : (UScalar.cast .U64 inactive).val = inactive.val := by
+    simp [UScalar.cast_val_eq]
+    have b := UScalar.hBounds inactive
+    cases System.Platform.numBits_eq <;> simp_all [UScalarTy.numBits]
+  by_cases z : inactive.val = 0
+  · have zc : UScalar.cast .U64 inactive = 0#u64 := UScalar.eq_of_val_eq (by simp [castv, z])
+    simp [merkleShape, z, zc, rootTerm, val, Shape.fill, Expr.value, hd, hw, chain, domain_eq,
+      word_eq, be_same]
+  · have zc : ¬ UScalar.cast .U64 inactive = 0#u64 := fun e => z (by
+      have := congrArg UScalar.val e; simp [castv] at this; exact this)
+    have ws := word_eq (UScalar.cast .U64 inactive)
+    rw [castv] at ws
+    simp [merkleShape, z, zc, rootTerm, val, Shape.fill, Expr.value, hd, hw, chain, domain_eq,
+      word_eq, ws, be_same]
+
 end
 end Qmdb.Mmb.Extracted
