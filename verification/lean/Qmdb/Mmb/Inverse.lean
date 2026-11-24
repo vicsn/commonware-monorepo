@@ -6,7 +6,7 @@ below the required crossing. The loop advances one leaf at a time until it finds
 position or passes it. -/
 
 namespace Qmdb.Mmb.Inverse
-open Aeneas Aeneas.Std CoreModels Commonware.Symbolic pinned_peaks Peaks
+open Aeneas Aeneas.Std CoreModels Commonware.Symbolic commonware_symbolic.mmb_geometry Peaks
 @[expose] public section
 
 /-- MMB position of a leaf. -/

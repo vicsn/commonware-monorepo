@@ -4,7 +4,7 @@ public import Qmdb.Mmb.Peaks
 /-! The pinned delayed-merge arithmetic at each reachable interior node. -/
 
 namespace Qmdb.Mmb.Peaks
-open Aeneas Aeneas.Std Commonware.Symbolic pinned_peaks
+open Aeneas Aeneas.Std Commonware.Symbolic commonware_symbolic.mmb_geometry
 @[expose] public section
 
 /-- Unfold the delayed birth of a non-leaf subtree. -/
@@ -25,14 +25,14 @@ structure Subtree (n start height : Nat) : Prop where
   born : birth start height < n
 
 /-- The next root enumerated by the peak iterator is a reachable subtree. -/
-theorem cursor_subtree {it : PeakIterator} {n start i : Nat} (valid : n ≤ maxLeaves)
+theorem cursor_subtree {it : Peaks} {n start i : Nat} (valid : n ≤ maxLeaves)
     (c : Cursor it n (i + 1) start) : Subtree n start (peakHeight (n + 1) i) := by
   have height : peakHeight (n + 1) i ≤ i + 1 := by dsimp [peakHeight]; omega
   refine ⟨valid, le_trans height (le_trans c.limit (logBound (by omega))), ?_,
     birth_inside c.extent⟩
   exact dvd_trans (pow_dvd_pow 2 height) c.aligned
 
-private theorem selected_aux {n k : Nat} (valid : n ≤ maxLeaves) {it : PeakIterator}
+private theorem selected_aux {n k : Nat} (valid : n ≤ maxLeaves) {it : Peaks}
     {start i loc peak h off : Nat} (c : Cursor it n k start)
     (selected : containing (peakHeights (n + 1) k) i loc = some (peak, h, off)) :
     off ≤ loc ∧ Subtree n (start + loc - off) h := by

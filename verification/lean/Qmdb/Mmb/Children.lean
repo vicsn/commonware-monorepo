@@ -6,23 +6,8 @@ public import Qmdb.Mmb.Inverse
 the peaks it starts from and all recursively reachable descendants. -/
 
 namespace Qmdb.Mmb.Peaks
-open Aeneas Aeneas.Std CoreModels Commonware.Symbolic pinned_peaks
+open Aeneas Aeneas.Std CoreModels Commonware.Symbolic commonware_symbolic.mmb_geometry
 @[expose] public section
-
-/-- Starting with its physical node count, the pinned constructor and iterator enumerate
-all planned peaks in order, ending at the final leaf cursor. -/
-theorem all_peaks_from_size (size n : Std.U64) (valid : n.val ≤ maxLeaves)
-    (nodes : size.val = Inverse.position n.val) :
-    ∃ init last, PeakIterator.new_at size = RustM.ok init ∧ Cursor init n.val (n.val + 1).log2 0 ∧
-      Yields init (located 0 (heights n.val)) last ∧ Cursor last n.val 0 n.val := by
-  obtain ⟨init, last, ok, it, seq, fin⟩ := all_peaks n valid
-  have bound := Inverse.strict.monotone valid
-  have maximum : Inverse.position maxLeaves = 9223372036854775806 := by decide
-  rw [maximum, ← nodes] at bound
-  have fits : size ≤ MAX_NODES := by unfold MAX_NODES; scalar_tac
-  have loc := Inverse.leaf size n valid nodes
-  exact ⟨init, last, by simp [PeakIterator.new_at, count, is_valid, fits, loc,
-    CoreModels.core.option.Option.expect, ok], it, seq, fin⟩
 
 private theorem pos_eq (s k : Nat) :
     subtreePosition s k =
@@ -59,7 +44,7 @@ private theorem parent_lookup {n s k : Nat} (tree : Subtree n s (k + 1))
 subtrees retain the premises required to repeat the argument at each internal node. -/
 theorem physical_children {n s k : Nat} (tree : Subtree n s (k + 1)) (p : Std.U64) (h : Std.U32)
     (position : p.val = subtreePosition s (k + 1)) (height : h.val = k + 1) :
-    ∃ left right, pinned_peaks.children p h = RustM.ok (left, right) ∧
+    ∃ left right, commonware_symbolic.mmb_geometry.children p h = RustM.ok (left, right) ∧
       left.val = subtreePosition s k ∧ right.val = subtreePosition (s + 2 ^ k) k ∧
       Subtree n s k ∧ Subtree n (s + 2 ^ k) k := by
   let b : Std.U64 := ⟨BitVec.ofNat 64 (birth s (k + 1))⟩
@@ -82,7 +67,7 @@ theorem physical_children {n s k : Nat} (tree : Subtree n s (k + 1)) (p : Std.U6
     have := rt.born; omega)
   have hn : h > 0#u32 := by scalar_tac
   refine ⟨lp, rp, ?_, ?_, ?_, lt, rt⟩
-  · simp [pinned_peaks.children, hn, found, CoreModels.core.option.Option.expect,
+  · simp [commonware_symbolic.mmb_geometry.children, hn, found, CoreModels.core.option.Option.expect,
       child, left, right]
   · simpa [pos_eq, Inverse.position, zero, vl] using pl
   · simpa [pos_eq, Inverse.position, zero, vr] using pr

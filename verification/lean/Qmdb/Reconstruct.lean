@@ -1038,7 +1038,146 @@ theorem list_target (st st₁ : P) (pos : Std.U64) (h : Std.U32) (l : reconstruc
   | Ok d => simp [peak_ok, hle, hi₁]
   | Err err => simp
 
+/-- A vector holding `L`. -/
+def vecOf (L : List Bytes) (fits : L.length ≤ Usize.max) : DigestVec := Slice.from L fits
+
+theorem items_vecOf (L : List Bytes) (fits : L.length ≤ Usize.max) :
+    items (vecOf L fits) = L := by
+  simp [items, vecOf]
+
+theorem vec_ext {v w : DigestVec} (h : items v = items w) : v = w :=
+  Slice.ext _ _ h
+
+/-- The listing pass over all the peaks: the peaks before the range list the digests from the
+first individually listed one, then the traversal rebuilds the peak holding the range, and the
+peaks after it list the digests from the first individually listed one after the range. -/
+theorem list_single (pre post : List (Std.U64 × Std.U32)) (pos : Std.U64) (h : Std.U32) (st : P)
+    (l : reconstruct.Layout) (digests : Slice Bytes) (loc e w : Std.U64)
+    (prefixStart afterStart : Std.Usize)
+    (o : traversal.Opening N reconstruct.Single Unit Bytes) (v : DigestVec)
+    (yields : Yields geo.PeaksInst.next st (pre ++ (pos, h) :: post))
+    (low : Low (pre ++ (pos, h) :: post))
+    (fits : span (pre ++ (pos, h) :: post) < 2 ^ 63)
+    (count : pre.length + 1 + post.length ≤ 64)
+    (lb : l.before.val = pre.length) (lo : l.overlapping.val = 1) (la : l.after.val = post.length)
+    (foldLe : l.fold.val ≤ l.before.val) (indLe : l.individual_after.val ≤ l.after.val)
+    (hPrefix : reconstruct.Layout.prefix_start l = RustM.ok prefixStart)
+    (hAfter : reconstruct.Layout.after_start l = RustM.ok afterStart)
+    (afterv : afterStart.val = prefixStart.val + (l.before.val - l.fold.val))
+    (inside : afterStart.val + l.individual_after.val ≤ digests.val.length)
+    (hw : 1#u64 <<< h = RustM.ok w) (wv : w.val = 2 ^ h.val)
+    (room : (items v).length ≤ 1) :
+    ∃ ls : Std.U64, ls.val = span pre ∧
+      listLoop geo nodes st l digests loc e o v 0#usize 0#u64 = (do
+        let (r, o₁) ← traversal.reconstruct (backend nodes) o pos w ls loc e
+        match r with
+        | .Ok d => RustM.ok (.Ok (), o₁, vecOf (items v ++
+            (digests.val.drop prefixStart.val).take (l.before.val - l.fold.val) ++ [d] ++
+            (digests.val.drop afterStart.val).take l.individual_after.val) (by
+              simp; scalar_tac))
+        | .Err err => do
+          let x ← reconstruct.missing err
+          RustM.ok (.Err x, o₁, vecOf (items v ++
+            (digests.val.drop prefixStart.val).take (l.before.val - l.fold.val)) (by
+              simp; scalar_tac))) := by
+  -- TODO: unfinished; paused on request.
+  sorry
 end List
+
+/-! ## A proof of one location -/
+
+/-- Peaks before the range that fold into the prefix accumulator. -/
+def foldOf (backward : Bool) (inactive before : Nat) : Nat :=
+  if backward then min inactive before else before
+
+/-- Peaks after the range that the proof lists individually. -/
+def individualOf (backward : Bool) (inactive before after : Nat) : Nat :=
+  if backward then min (inactive - (before + 1)) after else after
+
+/-- Index of the first individually listed peak after the range. -/
+def afterStartOf (backward : Bool) (inactive before : Nat) : Nat :=
+  (if foldOf backward inactive before = 0 then 0 else 1) + (before - foldOf backward inactive before)
+
+/-- Index of the first path sibling. -/
+def siblingsStartOf (backward : Bool) (inactive before after : Nat) : Nat :=
+  afterStartOf backward inactive before + individualOf backward inactive before after +
+    (if individualOf backward inactive before after < after then 1 else 0)
+
+/-- Inactive peaks still to fold once the prefix accumulator replaces the folded ones. -/
+def toFoldOf (backward : Bool) (inactive before : Nat) : Nat :=
+  if foldOf backward inactive before = 0 then inactive
+  else inactive - foldOf backward inactive before + 1
+
+/-- The peak digests a reconstruction bags: the listed ones before the range, the rebuilt peak,
+then the listed ones and the suffix accumulator after it. -/
+def listed (digests : List Bytes) (afterStart siblingsStart : Nat) (peak : Bytes) : List Bytes :=
+  digests.take afterStart ++ peak :: (digests.drop afterStart).take (siblingsStart - afterStart)
+
+/-- The root over a bag of peak digests, or `none` if fewer than `toFold` are listed. -/
+def bagRoot (domain : Aeneas.Std.Array Std.U8 2#usize) (backward : Bool) (leaves : Std.U64)
+    (inactive : Std.U64) (toFold : Nat) : List Bytes → Option Bytes
+  | [] => none
+  | first :: rest => if toFold ≤ rest.length + 1 then
+      some (rootTerm domain leaves inactive (bagWith foldTerm backward (toFold - 1) first rest))
+    else none
+
+/-- The result of a reconstruction once the traversal of the peak holding the range has
+returned `r` and left the opening `o`. -/
+def outcome {N : Type} (domain : Aeneas.Std.Array Std.U8 2#usize) (backward : Bool)
+    (leaves : Std.U64) (inactive : Std.Usize) (pre post : Nat) (digests : List Bytes)
+    (r : CoreModels.core.result.Result Bytes traversal.Error)
+    (o : traversal.Opening N reconstruct.Single Unit Bytes) :
+    CoreModels.core.result.Result Bytes reconstruct.Error :=
+  match r with
+  | .Err .MissingElements => .Err .MissingElements
+  | .Err .MissingDigests => .Err .MissingDigests
+  | .Ok peak =>
+    match o.elements with
+    | .Some _ => .Err .ExtraDigests
+    | .None =>
+      if o.cursor.val ≠ digests.length then .Err .ExtraDigests
+      else
+        match bagRoot domain backward leaves (UScalar.cast .U64 inactive)
+            (toFoldOf backward inactive.val pre)
+            (listed digests (afterStartOf backward inactive.val pre)
+              (siblingsStartOf backward inactive.val pre post) peak) with
+        | some root => .Ok root
+        | none => .Err .InvalidProof
+
+section Single
+variable {G P N : Type} (geo : reconstruct.Geometry G P) (nodes : traversal.Nodes N Bytes)
+
+/-- What the production reconstruction returns for a proof of one item at `loc`, held by the
+peak `(pos, h)` with `pre` peaks before it and `post` after it. Unless the proof carries exactly
+the digests its layout needs, it fails; otherwise it runs the traversal of that peak from the
+first path sibling, and its result is the `outcome` of that traversal. -/
+theorem reconstruct_single (g : G) (n : N) (domain : Aeneas.Std.Array Std.U8 2#usize)
+    (backward : Bool) (leaves : Std.U64) (inactive : Std.Usize) (digests : Slice Bytes)
+    (loc : Std.U64) (item : Slice Std.U8) (pre post : List (Std.U64 × Std.U32)) (pos : Std.U64)
+    (h : Std.U32) (st : P) (maxLeaves : Std.U64)
+    (hmax : geo.max_leaves g = RustM.ok maxLeaves) (bound : leaves.val ≤ maxLeaves.val)
+    (small : maxLeaves.val < 2 ^ 63)
+    (hpeaks : geo.peaks g leaves = RustM.ok st)
+    (yields : Yields geo.PeaksInst.next st (pre ++ (pos, h) :: post))
+    (low : Low (pre ++ (pos, h) :: post)) (total : span (pre ++ (pos, h) :: post) = leaves.val)
+    (inside : span pre ≤ loc.val ∧ loc.val < span pre + 2 ^ h.val)
+    (count : pre.length + 1 + post.length ≤ 64)
+    (boundary : inactive.val ≤ pre.length + 1 + post.length) :
+    ∃ (w ls e : Std.U64) (first : Std.Usize), w.val = 2 ^ h.val ∧ ls.val = span pre ∧
+      e.val = loc.val + 1 ∧
+      first.val = siblingsStartOf backward inactive.val pre.length post.length ∧
+      reconstruct.reconstruct geo dyTerms nodes single element noCollect g () n domain backward
+        leaves inactive digests loc 1#u64 (.Some item) () =
+      if digests.val.length < first.val + h.val then RustM.ok (.Err .MissingDigests)
+      else if first.val + h.val < digests.val.length then RustM.ok (.Err .ExtraDigests)
+      else (do
+        let (r, o) ← traversal.reconstruct (backend nodes)
+          ⟨n, .Some item, digests, first, ()⟩ pos w ls loc e
+        RustM.ok (outcome domain backward leaves inactive pre.length post.length digests.val r o))
+      := by
+  -- TODO: unfinished; paused on request.
+  sorry
+end Single
 
 end
 end Qmdb.Reconstruct

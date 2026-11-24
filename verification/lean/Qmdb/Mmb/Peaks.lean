@@ -1,13 +1,13 @@
 module
 public import Qmdb.Mmb.Coverage
-public import Qmdb.Mmb.PinnedPeaks
+public import Commonware.Symbolic.RustM
 public import Commonware.Symbolic.RustM
 
 /-! Correctness of every step of the pinned MMB peak iterator on a valid leaf count.
 The fork converts the node count to a valid leaf count before initializing its cursor. -/
 
 namespace Qmdb.Mmb.Peaks
-open Aeneas Aeneas.Std Aeneas.Std.WP CoreModels Commonware.Symbolic pinned_peaks
+open Aeneas Aeneas.Std Aeneas.Std.WP CoreModels Commonware.Symbolic commonware_symbolic.mmb_geometry
 @[expose] public section
 
 /-- Last valid leaf count at Tempo's Commonware revision. -/
@@ -95,7 +95,7 @@ theorem birth_ok (last : Std.U64) (h : Std.U32) (start : Nat)
 
 /-- The cursor at the head of the k remaining peaks. For an exhausted nonempty iterator
 the last decrement has wrapped the index; the guard inspects only remaining. -/
-structure Cursor (it : PeakIterator) (n k start : Nat) : Prop where
+structure Cursor (it : Peaks) (n k start : Nat) : Prop where
   /-- The stored MMB leaf count. -/
   count : it.n.val = n
   /-- The exact remaining count. -/
@@ -113,11 +113,11 @@ structure Cursor (it : PeakIterator) (n k start : Nat) : Prop where
 
 /-- Initialization from the valid leaf count, including the default empty iterator. -/
 theorem initialized (n : Std.U64) (valid : n.val ≤ maxLeaves) :
-    ∃ it, PeakIterator.new n = RustM.ok it ∧ Cursor it n.val (n.val + 1).log2 0 := by
+    ∃ it, Peaks.new n = RustM.ok it ∧ Cursor it n.val (n.val + 1).log2 0 := by
   by_cases zero : n = 0#u64
   · subst n
-    exact ⟨⟨0#u64, 0#u32, 0#u32, 0#u64⟩, by simp [PeakIterator.new,
-      PeakIterator.Insts.CoreDefaultDefault.default,
+    exact ⟨⟨0#u64, 0#u32, 0#u32, 0#u64⟩, by simp [Peaks.new,
+      Peaks.Insts.CoreDefaultDefault.default,
       CoreModels.core.U64.Insts.CoreDefaultDefault.default,
       CoreModels.core.U32.Insts.CoreDefaultDefault.default],
       ⟨rfl, rfl, rfl, rfl, rfl, dvd_zero _, le_rfl⟩⟩
@@ -133,7 +133,7 @@ theorem initialized (n : Std.U64) (valid : n.val ≤ maxLeaves) :
     rw [z] at h
     omega
   obtain ⟨i, hi, vi⟩ := sub_ok k 1#u32 (by scalar_tac)
-  refine ⟨⟨n, i, k, 0#u64⟩, by simp [PeakIterator.new, zero, hu, hk, hi], ?_⟩
+  refine ⟨⟨n, i, k, 0#u64⟩, by simp [Peaks.new, zero, hu, hk, hi], ?_⟩
   exact ⟨rfl, vk, by simp [kPos.ne', vi, vk], rfl, by simp [width_all], dvd_zero _, le_rfl⟩
 
 private theorem shift_bit (u : Std.U64) (i : Std.U32) (small : i.val < 64) :
@@ -169,10 +169,10 @@ theorem birth_inside {start n i : Nat} (full : start + leftWidth (n + 1) (i + 1)
 
 /-- Every nonterminal call yields exactly the next height and its physical root position,
 advances the leaf cursor by that peak's width, and returns the correct next machine state. -/
-theorem next_peak {it : PeakIterator} {n i start : Nat} (valid : n ≤ maxLeaves)
+theorem next_peak {it : Peaks} {n i start : Nat} (valid : n ≤ maxLeaves)
     (c : Cursor it n (i + 1) start) :
-    ∃ (p : Std.U64) (h : Std.U32) (next : PeakIterator),
-      PeakIterator.next it = RustM.ok (.Some (p, h), next) ∧
+    ∃ (p : Std.U64) (h : Std.U32) (next : Peaks),
+      Peaks.next it = RustM.ok (.Some (p, h), next) ∧
       h.val = peakHeight (n + 1) i ∧ p.val = subtreePosition start h.val ∧
       Cursor next n i (start + 2 ^ h.val) := by
   let height := peakHeight (n + 1) i
@@ -214,10 +214,10 @@ theorem next_peak {it : PeakIterator} {n i start : Nat} (valid : n ≤ maxLeaves
   obtain ⟨rem', hr, vr⟩ := sub_ok it.remaining 1#u32 (by scalar_tac)
   let idx' := Aeneas.Std.U32.wrapping_sub it.current_i 1#u32
   have wrapped : CoreModels.core.num.U32.wrapping_sub it.current_i 1#u32 = RustM.ok idx' := rfl
-  let next : PeakIterator := ⟨it.n, idx', rem', cursor⟩
+  let next : Peaks := ⟨it.n, idx', rem', cursor⟩
   refine ⟨p, h32, next, ?_, vh32, ?_, ?_⟩
   · dsimp [h32] at hb
-    simp [PeakIterator.next, nz, hu, hs, hh, hw, hc, hl, hr, wrapped, lift, next, h32, hb, hp]
+    simp [Peaks.next, nz, hu, hs, hh, hw, hc, hl, hr, wrapped, lift, next, h32, hb, hp]
   · have hz : (h = 0#u64) ↔ height = 0 := by
       refine ⟨fun eq => by rw [← vh, eq]; rfl, fun eq => UScalar.eq_of_val_eq (vh.trans eq)⟩
     simpa [subtreePosition, birth, vh32, hz, vb] using vp
@@ -236,10 +236,10 @@ theorem next_peak {it : PeakIterator} {n i start : Nat} (valid : n ≤ maxLeaves
       · exact pow_dvd_pow _ (show i ≤ height by dsimp [height, peakHeight]; omega)
 
 /-- On the exhausted cursor, every further call returns None without changing state. -/
-theorem done_next {it : PeakIterator} {n start : Nat} (c : Cursor it n 0 start) :
-    PeakIterator.next it = RustM.ok (.None, it) ∧ start = n := by
+theorem done_next {it : Peaks} {n start : Nat} (c : Cursor it n 0 start) :
+    Peaks.next it = RustM.ok (.None, it) ∧ start = n := by
   have rem : it.remaining = 0#u32 := UScalar.eq_of_val_eq c.remaining
-  exact ⟨by simp [PeakIterator.next, rem], by simpa [leftWidth, Nat.mod_one] using c.extent⟩
+  exact ⟨by simp [Peaks.next, rem], by simpa [leftWidth, Nat.mod_one] using c.extent⟩
 
 /-- Pair each planned peak's physical position with its height in iteration order. -/
 def located (start : Nat) : List Nat → List (Nat × Nat)
@@ -247,15 +247,15 @@ def located (start : Nat) : List Nat → List (Nat × Nat)
   | h :: hs => (subtreePosition start h, h) :: located (start + 2 ^ h) hs
 
 /-- The sequence actually returned by repeated calls to the extracted Rust method. -/
-inductive Yields : PeakIterator → List (Nat × Nat) → PeakIterator → Prop where
+inductive Yields : Peaks → List (Nat × Nat) → Peaks → Prop where
   /-- The iterator is exhausted and remains at its final cursor. -/
-  | stop {it} (done : PeakIterator.next it = RustM.ok (.None, it)) : Yields it [] it
+  | stop {it} (done : Peaks.next it = RustM.ok (.None, it)) : Yields it [] it
   /-- Emit one actual successful Rust result and then visit the tail. -/
-  | step {it next final : PeakIterator} {h : Std.U32} {p : Std.U64} {rest}
-      (emit : PeakIterator.next it = RustM.ok (.Some (p, h), next))
+  | step {it next final : Peaks} {h : Std.U32} {p : Std.U64} {rest}
+      (emit : Peaks.next it = RustM.ok (.Some (p, h), next))
       (tail : Yields next rest final) : Yields it ((p.val, h.val) :: rest) final
 
-private theorem complete {n k start : Nat} {it : PeakIterator} (valid : n ≤ maxLeaves)
+private theorem complete {n k start : Nat} {it : Peaks} (valid : n ≤ maxLeaves)
     (cursor : Cursor it n k start) :
     ∃ last, Yields it (located start (peakHeights (n + 1) k)) last ∧ Cursor last n 0 n := by
   induction k generalizing start it with
@@ -271,7 +271,7 @@ private theorem complete {n k start : Nat} {it : PeakIterator} (valid : n ≤ ma
 /-- On every valid leaf count the extracted iterator enumerates exactly all peaks used by
 the verifier, with the first leaf cursor at zero and the exhausted cursor at the leaf count. -/
 theorem all_peaks (n : Std.U64) (valid : n.val ≤ maxLeaves) :
-    ∃ init last, PeakIterator.new n = RustM.ok init ∧ Cursor init n.val (n.val + 1).log2 0 ∧
+    ∃ init last, Peaks.new n = RustM.ok init ∧ Cursor init n.val (n.val + 1).log2 0 ∧
       Yields init (located 0 (heights n.val)) last ∧ Cursor last n.val 0 n.val := by
   obtain ⟨it, ok, c⟩ := initialized n valid
   obtain ⟨last, seq, fin⟩ := complete valid c
