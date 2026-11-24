@@ -4,9 +4,9 @@
 `guide.html` holds the prose of the guide and `pairs.toml` says which code items face each other in
 its side-by-side panels. Items are addressed by name, never by line number, so the panels follow
 the code. This script resolves every item, renders the panels into the placeholders of the guide
-and writes `verification/hax-dylean-audit.html`. A missing or ambiguous item, a quoted report
-sentence that the report no longer contains, or a stated fact that the sources no longer contain
-stops the build. With `--check` it writes nothing and fails when the committed page is stale,
+and writes `verification/hax-dylean-audit.html`. A missing or ambiguous item, a quoted sentence
+that its document no longer contains, or a stated fact that the sources no longer contain stops
+the build. With `--check` it writes nothing and fails when the committed page is stale,
 naming the panels that changed.
 
 The declaration graph of the guide is drawn from `dag.json`, which is what Lean prints for
@@ -35,7 +35,6 @@ HERE = VERIFICATION / 'audit'
 GUIDE = HERE / 'guide.html'
 PAIRS = HERE / 'pairs.toml'
 PAGE = VERIFICATION / 'hax-dylean-audit.html'
-REPORT = VERIFICATION / 'hax-dylean.html'
 CRATE = VERIFICATION / 'symbolic'
 EXTRACTION = CRATE / 'proofs/lean/CommonwareSymbolic'
 GENERATED = [EXTRACTION / 'Extraction/Funs.lean', EXTRACTION / 'Extraction/Types.lean']
@@ -49,6 +48,7 @@ KINDS = {
     'rust-generated': 'Rust ↔ generated Lean',
     'rust-trusted': 'Rust ↔ trusted Lean',
     'spec-generated': 'Lean definition ↔ generated Lean',
+    'rust-model': 'Rust ↔ Lean model',
     'lean-lean': 'Lean ↔ Lean',
     'reading': 'Code ↔ how to read it',
 }
@@ -245,6 +245,13 @@ def lean_statement_end(masked, start, end, what):
 
 
 AUDIT_WIDTH = 80
+# The groups of cited statements, in the order of the guide. The statements of the first group
+# and the declarations they depend on follow the audit layout; the others are shown as written.
+GROUPS = {
+    'inclusion': 'Single-item inclusion',
+    'reads': 'Ordered reads in the model',
+    'rust': 'The model against extracted Rust',
+}
 RELATIONS = '=≤<>≥≠∈∧∨¬↔∀∃'
 
 
@@ -386,13 +393,15 @@ def resolve(item):
             span = lean_item(path, item['lean'], item.get('statement', False),
                              item.get('doc', True))
             language, label = 'Lean', item.get('label', item['lean'])
+            if graph.generated('.'.join(path.relative_to(LEAN).with_suffix('').parts)):
+                language = 'Generated Lean'
             if item.get('context', True):
                 context = lean_context(path, span[0])
         else:
             span = (0, len(lines_of(path)) - 1)
             require('from' in item, f'{item["file"]}: an item needs a name or a `from` anchor')
             language = {'.rs': 'Rust', '.lean': 'Lean', '.patch': 'Patch', '.sh': 'Shell',
-                        '.toml': 'TOML'}.get(path.suffix, 'Text')
+                        '.toml': 'TOML', '.py': 'Python'}.get(path.suffix, 'Text')
             label = item.get('label', path.name)
     lines = lines_of(path)
     start, end = excerpt(lines, span, item, f'{path.name}: {item}')
@@ -411,6 +420,12 @@ def source_link(path, span, text=None):
     shown = text or f'{"/".join(path.parts[-2:])}:{span[0] + 1}–{span[1] + 1}'
     return (f'<a class="src" href="{html.escape(href)}" data-line="{span[0] + 1}" '
             f'data-end="{span[1] + 1}" title="Open in VS Code">{html.escape(shown)}</a>')
+
+
+def file_link(path, text):
+    href = os.path.relpath(path, VERIFICATION)
+    return (f'<a class="src" href="{html.escape(href)}" title="Open in VS Code">'
+            f'{html.escape(text)}</a>')
 
 
 def snippet(item):
@@ -470,29 +485,51 @@ def render_panel(panel):
             f'{inner}</figure>')
 
 
-# The claim table: report sentences beside the statements that back them.
+# The claim tables: sentences of the READMEs beside the statements that back them.
 
 
-def report_text():
-    page = re.sub(r'<[^>]+>', '', REPORT.read_text())
-    return re.sub(r'\s+', ' ', html.unescape(page))
+def document_text(path):
+    """The prose of a document on one line: a page without its tags, or a Markdown or Lean file
+    without link targets and backticks."""
+    text = path.read_text()
+    if path.suffix == '.html':
+        text = html.unescape(re.sub(r'<[^>]+>', '', text))
+    else:
+        text = re.sub(r'\[([^\]]+)\]\([^)]*\)', r'\1', text).replace('`', '')
+    return re.sub(r'\s+', ' ', text)
 
 
-def render_claims(claims):
-    report = report_text()
+def group_of(claim):
+    group = claim.get('group', 'inclusion')
+    require(group in GROUPS, f'unknown group of claims: {group}')
+    return group
+
+
+def render_claims(claims, group):
+    """The claims of one group: each sentence, checked to occur in the document that makes it,
+    beside the statements that back it."""
     rows = []
     for claim in claims:
+        if group_of(claim) != group:
+            continue
+        require('source' in claim, f'a claim names no source: {claim["sentence"][:50]}…')
+        source = ROOT / claim['source']
+        require(source.is_file(), f'{claim["source"]} is missing')
         sentence = re.sub(r'\s+', ' ', claim['sentence'])
-        require(sentence in report, f'the report no longer says: {sentence[:70]}…')
+        require(sentence.replace('`', '') in document_text(source),
+                f'{source.name} no longer says: {sentence[:70]}…')
         statements = ''.join(
             snippet({'file': backing['file'], 'lean': backing['lean'], 'statement': True,
                      'context': False, 'doc': False})
             for backing in claim['backed_by'])
-        rows.append(f'<tr><td class="claim">“{inline(sentence)}”</td><td>{statements}</td>'
+        where = f'<div class="muted">{file_link(source, "/".join(source.parts[-2:]))}</div>'
+        rows.append(f'<tr><td class="claim">“{inline(sentence)}”{where}</td><td>{statements}</td>'
                     f'<td>{inline(claim["reading"])}</td><td class="verdict"></td></tr>')
+    require(rows, f'no claim in group {group}')
     inner = ''.join(rows)
-    return ('<div class="table claims" id="claims" data-digest="' + digest(inner) + '"><table>'
-            '<thead><tr><th scope="col">The report says</th>'
+    name = 'claims' if group == 'inclusion' else f'claims-{group}'
+    return (f'<div class="table claims" id="{name}" data-digest="' + digest(inner) + '"><table>'
+            '<thead><tr><th scope="col">The claim, and where it is made</th>'
             '<th scope="col">The Lean statement behind it</th>'
             '<th scope="col">Reading</th><th scope="col">Your verdict</th></tr></thead>'
             f'<tbody>{inner}</tbody></table></div>')
@@ -547,14 +584,25 @@ def render_dag(claims):
                                            nodes[key]['file'] or '', nodes[key]['line'] or 0))
     index = {key: number for number, key in enumerate(order)}
     cited = [key for key in order if nodes[key]['trust'] == 'statement']
-    backed = {backing['lean'] for claim in claims for backing in claim['backed_by']}
-    stated = {nodes[key]['name'].rsplit('.', 1)[-1] for key in cited}
-    require(backed == stated, 'the statements that Dag.lean cites and those that back the claims '
-            f'differ: {sorted(backed ^ stated)}')
+    # Each cited statement backs the claims of one group, and each backing statement is cited.
+    group = {}
+    for claim in claims:
+        for backing in claim['backed_by']:
+            found = [key for key in cited if nodes[key]['path'] == backing['file']
+                     and ('.' + nodes[key]['name']).endswith('.' + backing['lean'])]
+            require(len(found) == 1, f'{backing["lean"]} of {backing["file"]} backs a claim and '
+                    f'{len(found)} statements cited by Dag.lean match it')
+            require(group.setdefault(found[0], group_of(claim)) == group_of(claim),
+                    f'{backing["lean"]} backs claims of two groups')
+    require(set(group) == set(cited), 'Dag.lean cites statements that back no claim: '
+            f'{sorted(nodes[key]["name"] for key in set(cited) - set(group))}')
+    members = {name: [key for key in cited if group[key] == name] for name in GROUPS}
+    strict = set(members['inclusion'])
     count = {trust: sum(node['trust'] == trust for node in nodes.values()) for trust in trusts}
     for key in order:
         node = nodes[key]
-        if node['trust'] in ('statement', 'trusted') and node['kind'] != '#combine':
+        audited = key in strict or strict & set(node['said_by'])
+        if node['trust'] in ('statement', 'trusted') and node['kind'] != '#combine' and audited:
             path = ROOT / node['path']
             name = node['name'].rsplit('.', 1)[-1]
             first = node['line'] - 1
@@ -590,13 +638,24 @@ def render_dag(claims):
              'u': sorted(index[other] for other in nodes[key]['uses'])} for key in order]
 
     trusted = [key for key in order if nodes[key]['trust'] == 'trusted']
-    short = [nodes[key]['name'].rsplit('.', 1)[-1] for key in cited]
-    head = ''.join(f'<th scope="col"><code>{html.escape(name).replace("_", "_<wbr>")}</code></th>'
-                   for name in short)
-    matrix = ''.join(
-        f'<tr><th scope="row">{link(key)}</th><td>{html.escape(nodes[key]["kind"])}</td>'
-        + ''.join('<td class="dot">●</td>' if statement in nodes[key]['said_by'] else '<td></td>'
-                  for statement in cited) + '</tr>' for key in trusted)
+
+    def short(key):
+        return html.escape(nodes[key]['label']).replace('_', '_<wbr>').replace('.', '.<wbr>')
+
+    def matrix(name):
+        """The trusted declarations that the statements of one group depend on."""
+        columns = members[name]
+        rows = [key for key in trusted if set(columns) & set(nodes[key]['said_by'])]
+        head = ''.join(f'<th scope="col"><code>{short(key)}</code></th>' for key in columns)
+        body = ''.join(
+            f'<tr><th scope="row">{link(key)}</th><td>{html.escape(nodes[key]["kind"])}</td>'
+            + ''.join('<td class="dot">●</td>' if statement in nodes[key]['said_by'] else
+                      '<td></td>' for statement in columns) + '</tr>' for key in rows)
+        return (f'<h4 id="dag-trusted-{name}">{html.escape(GROUPS[name])}: {len(columns)} '
+                f'statements, {len(rows)} trusted declarations</h4>'
+                '<div class="table matrix"><table><thead><tr>'
+                '<th scope="col">Trusted declaration</th><th scope="col">Kind</th>'
+                f'{head}</tr></thead><tbody>{body}</tbody></table></div>')
 
     def reach(key):
         node = nodes[key]
@@ -606,15 +665,25 @@ def render_dag(claims):
             return 'None.'
         if len(node['said_by']) == len(cited):
             return 'All.'
-        return ', '.join(f'<code>{html.escape(nodes[other]["name"].rsplit(".", 1)[-1])}</code>'
-                         for other in cited if other in node['said_by'])
+        parts = []
+        for name, title in GROUPS.items():
+            said = [other for other in members[name] if other in node['said_by']]
+            if said and len(said) == len(members[name]):
+                parts.append(f'{html.escape(title)}: all.')
+            elif said:
+                parts.append(f'{html.escape(title)}: '
+                             + ', '.join(f'<code>{short(other)}</code>' for other in said) + '.')
+        return ' '.join(parts)
 
     rows = ''.join(f'<tr data-i="{index[key]}"><td>{link(key)}</td>'
                    f'<td>{html.escape(nodes[key]["kind"])}</td><td>{chip(nodes[key]["trust"])}</td>'
                    f'<td>{reach(key)}</td></tr>' for key in order)
     inner = (
         f'<p>The target has {len(nodes)} declarations. {count["statement"]} are statements that '
-        f'the report cites. What those statements say depends on {count["trusted"]} handwritten '
+        'this guide cites: '
+        + ', '.join(f'{len(members[name])} for {html.escape(title[0].lower() + title[1:])}'
+                    for name, title in GROUPS.items())
+        + f'. What those statements say depends on {count["trusted"]} handwritten '
         f'declarations, on {count["generated"]} generated ones and on {count["assumed"]} '
         f'libraries. The other {count["checked"]} are lemmas and definitions that only proofs '
         'use: Lean checks them, and no cited statement depends on what they say.</p>'
@@ -635,9 +704,8 @@ def render_dag(claims):
         '<h3 id="dag-trusted">The trusted declarations and the statements that depend on them</h3>'
         '<p>A dot means that the statement of the column cannot be read without the declaration '
         'of the row. Every statement also depends on the generated definitions it mentions and '
-        'on the libraries.</p>'
-        f'<div class="table matrix"><table><thead><tr><th scope="col">Trusted declaration</th>'
-        f'<th scope="col">Kind</th>{head}</tr></thead><tbody>{matrix}</tbody></table></div>'
+        'on the libraries. There is one table for each group of statements.</p>'
+        + ''.join(matrix(name) for name in GROUPS) +
         f'<details id="dag-all"><summary>All {len(nodes)} declarations</summary>'
         '<div class="table"><table><thead><tr><th scope="col">Declaration</th>'
         '<th scope="col">Kind</th><th scope="col">Trust type</th>'
@@ -687,8 +755,10 @@ def build():
             f'{sorted(set(used) ^ set(panels))}')
     for name in used:
         page = page.replace(f'<!-- panel: {name} -->', render_panel(panels[name]))
-    require(page.count('<!-- claims -->') == 1, 'the guide needs one claims placeholder')
-    page = page.replace('<!-- claims -->', render_claims(table['claim']))
+    for group in GROUPS:
+        mark = '<!-- claims -->' if group == 'inclusion' else f'<!-- claims: {group} -->'
+        require(page.count(mark) == 1, f'the guide needs one placeholder {mark}')
+        page = page.replace(mark, render_claims(table['claim'], group))
     require(page.count('<!-- index -->') == 1, 'the guide needs one index placeholder')
     index, count = render_index(table['index']['prefixes'])
     page = page.replace('<!-- index -->', index).replace('<!-- index-count -->', str(count))

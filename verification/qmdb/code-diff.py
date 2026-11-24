@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install/open report diff links on macOS; no background service required."""
+"""Install and open the Diff links of the audit guide on macOS; no background service required."""
 
 import argparse
 import hashlib
@@ -7,12 +7,11 @@ import html
 import os
 from pathlib import Path, PurePosixPath
 import plistlib
-import re
 import shlex
 import shutil
 import subprocess
 import sys
-from urllib.parse import quote, unquote, urlsplit
+from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
 STATE = ROOT / '.verification-tools/qmdb/code-diff'
@@ -47,10 +46,10 @@ def resolve(uri):
     current = (repo / relative).resolve()
     if not current.is_relative_to(repo.resolve()) or not current.is_file():
         raise ValueError('Source must be an existing file inside the experiment checkout')
-    # Only files explicitly linked from the report can be opened by the handler.
-    report = (ROOT / 'verification/hax-dylean.html').read_text()
-    if f'href="{html.escape(uri, quote=True)}"' not in report:
-        raise ValueError('Diff is not linked from the QMDB report')
+    # Only files explicitly linked from the audit guide can be opened by the handler.
+    guide = (ROOT / 'verification/hax-dylean-audit.html').read_text()
+    if f'href="{html.escape(uri, quote=True)}"' not in guide:
+        raise ValueError('Diff is not linked from the audit guide')
     revision, original = comparison_base(url.netloc, relative)
     commit = git(repo, 'rev-parse', '--verify', revision + '^{commit}').decode().strip()
     exists = git(repo, 'ls-tree', '-z', commit, '--', original)
@@ -65,40 +64,10 @@ def resolve(uri):
     return baseline, current
 
 
-def update_report():
-    report = ROOT / 'verification/hax-dylean.html'
-    source = report.read_text()
-    # Reinstallation refreshes links without adding duplicates.
-    source = re.sub(r' <a class="code-diff"[^>]*>Diff</a>', '', source)
-    ordered = sorted(EXPERIMENTS.items(), key=lambda item: len(str(item[1][0])), reverse=True)
-    def add(match):
-        current = (report.parent / unquote(html.unescape(match[1]))).resolve()
-        if current.suffix not in {'.rs', '.lean', '.py', '.sh', '.toml'}:
-            return match[0]
-        for name, (repo, revision) in ordered:
-            if not current.is_relative_to(repo):
-                continue
-            relative = current.relative_to(repo).as_posix()
-            revision, original = comparison_base(name, relative)
-            exists = git(repo, 'ls-tree', '-z', revision, '--', original)
-            previous = git(repo, 'show', f'{revision}:{original}') if exists else b''
-            if exists and previous == current.read_bytes():
-                return match[0]
-            uri = f'{SCHEME}://{name}/' + quote(relative, safe='/')
-            return match[0] + f' <a class="code-diff" href="{uri}" title="Compare documented baseline with working file in VS Code">Diff</a>'
-        return match[0]
-    source = re.sub(r'<a class="src" href="([^"]+)"[^>]*>.*?</a>', add, source)
-    note = '<p class="muted" id="diff-help">Diff compares each experiment’s working file against the common original baseline <code>b45ef2d78</code>, including test changes in the same file. New files have an empty left pane. Install the local VS Code handler with <code>python3 verification/qmdb/code-diff.py --install</code>.</p>'
-    source = re.sub(r'\n?<p class="muted" id="diff-help">.*?</p>', '', source)
-    source = source.replace('<section id="changes"><h2>Production code changes</h2>', '<section id="changes"><h2>Production code changes</h2>\n' + note)
-    report.write_text(source)
-
-
 def install():
     if sys.platform != 'darwin' or not CODE.is_file():
         raise RuntimeError('Requires macOS with Visual Studio Code in /Applications')
     STATE.mkdir(parents=True, exist_ok=True)
-    update_report()
     # The application dispatches only to this fixed script. URLs are shell-quoted
     # by AppleScript and validated above; none of their contents are shell code.
     command = shlex.join([sys.executable, str(Path(__file__).resolve()), '--open']) + ' '
@@ -117,7 +86,7 @@ def install():
         plistlib.dump(info, f)
     subprocess.run(['codesign', '--force', '--sign', '-', str(APP)], check=True)
     subprocess.run([REGISTER, '-f', str(APP)], check=True)
-    print(f'Installed {APP}; report Diff links refreshed.')
+    print(f'Installed {APP}.')
 
 
 def main():

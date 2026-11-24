@@ -33,6 +33,12 @@ def source(file):
     return 'verification/lean/' + stem
 
 
+def generated(file):
+    """Whether hax produced module `file`: the extraction of the crate, or a projection of the
+    pinned fork."""
+    return file.startswith(('CommonwareSymbolic.', 'Qmdb.Mmb.Pinned'))
+
+
 def shorten(name):
     """A declaration name without the prefixes that every name of its kind shares."""
     for prefix in ('Commonware.Symbolic.', 'Qmdb.', 'commonware_symbolic.'):
@@ -59,6 +65,8 @@ def load(text, first_line):
             assert dependency in nodes, (node['id'], dependency)
         node['kind'] = node['kinds'][0] if node['kinds'] else 'def'
         node['name'] = node['names'][0] if node['names'] else node['id']
+        # Lean prefixes the name of a private declaration with its module.
+        node['name'] = re.sub(r'^_private\.[\w.]+?\.0\.', '', node['name'])
         node['label'] = shorten(node['name'])
         if node['file']:
             node['path'] = source(node['file'])
@@ -94,7 +102,7 @@ def load(text, first_line):
     for key, node in nodes.items():
         if key in LIBRARIES:
             node['trust'] = 'assumed'
-        elif node['file'].startswith('CommonwareSymbolic.'):
+        elif generated(node['file']):
             node['trust'] = 'generated'
         elif node['cited']:
             node['trust'] = 'statement'

@@ -1,11 +1,11 @@
 # BLS certificates with DyLean
 
-- Approach / branch / worktree: DyLean, `verify/qmdb-hax-dylean`, `.worktrees/qmdb-hax-dylean`.
+- Approach / branch: DyLean, `verify/qmdb-hax-dylean`.
 - Status: complete for signer-index interpretation, quorum authorization and subject and domain
   binding of multisignature certificates, at the level of the extracted production rules and on
   DyLean traces. Four further properties are assessed [below](#four-further-properties), not
   proved.
-- Updated: 2026-11-20. Source: `0d3bf4a23`. It changes the production files
+- Updated: 2026-11-24. Source: `dc2450925`. It changes the production files
   `cryptography/src/bls12381/certificate/{rules.rs,mod.rs,multisig/mod.rs,threshold/mod.rs}` and
   `cryptography/src/certificate.rs`.
 - Proved scope: for any signature scheme, the extracted client step returns a verdict on every
@@ -22,12 +22,11 @@
 - Assumptions: the application supplies the committee's registered keys in member order, and a
   proof of possession is derivable for every flagged key of a submitted certificate. Production
   does not check proofs of possession; registration must.
-- Last validation: `bash verification/check.sh` on 2026-11-23 at `a02833212`, passed. 3 Rust tests (198
+- Last validation: `bash verification/check.sh` on 2026-11-24 at `dc2450925`, passed. 3 Rust tests (198
   certificate claims, 24 attestation claims and the quorum of every committee size up to
   100,000), reproducible extraction, an axiom audit of all 138 theorems in `Bls` and
   `Commonware.Symbolic` (standard Lean axioms), 3 executed checks and 10 rejected mutations. The
-  count was 144 while the shared hash interface, which QMDB no longer uses, was imported, and 136
-  before the shared client glue gained two lemmas. The production files are unchanged since
+  production files are unchanged since
   `08229c65d`, where `just test -p commonware-cryptography` (834 passed), clippy, the no-std
   tests and build, the WASM build, the conformance tests and the consensus scheme tests passed.
   Logs: `verification/.lake/logs/`.

@@ -2,36 +2,49 @@
 
 - Approach / branch: DyLean, `verify/qmdb-hax-dylean`.
 - Status: complete for uniqueness of the single-item openings that the extracted verifier accepts
-  under DyLean's ideal hash, and for client authentication on top of it.
-- Updated: 2026-11-23. Source: `a02833212`. It changes the production files
-  `storage/src/merkle/{hasher.rs,hasher/terms.rs,proof.rs,proof/traversal.rs}`.
+  under DyLean's ideal hash, and for client authentication on top of it. Ordered reads under a
+  checkpoint root are a second part of this target, with their own record in
+  [mmb/README.md](mmb/README.md).
+- Updated: 2026-11-24. Source: `dc2450925`. It changes the production files
+  `storage/src/merkle/{hasher.rs,hasher/terms.rs,proof.rs,proof/traversal.rs}`. The ordered
+  reads also change `storage/src/qmdb/current/{db.rs,ordered/proof.rs,proof/mod.rs,proof/operation.rs}`
+  and `utils/src/range.rs`, and add `ordered/proof/claim.rs`, `proof/activity.rs` and
+  `range/cyclic.rs` beside them.
 - Proved scope: the hash is DyLean's hash constructor, so a root is one term that fixes every
-  digest below it. Two openings that the extracted verifier accepts at one location under one
-  root, for one trusted height, carry the same item and the same siblings. The verifier never
-  panics or diverges, accepts every honest opening and rejects one with an unused sibling. Every
-  acceptance logged on a reachable trace names the trusted snapshot height, an in-range location
-  and the item stored there. The client's decision is the extracted Rust `client_step`. No
-  reference model is involved.
+  digest below it.
+  - Two openings that the extracted verifier accepts at one location under one root, for one
+    trusted height, carry the same item and the same siblings.
+  - The verifier returns a verdict on every input, so it never panics or diverges, and it
+    accepts every honest opening.
+  - The verifier accepts only heights up to `MAX_HEIGHT` and locations inside the tree, and it
+    rejects an honest opening that an unused sibling follows.
+  - Every acceptance that the extracted client logs on a reachable trace names the trusted
+    snapshot height, an in-range location and the item stored there.
+  - Some reachable trace logs the honest acceptance of each stored item.
+
+  The client's decision is the extracted Rust `client_step`. No reference model is involved.
 - Assumption: the application's snapshot supplies a root and, for every stored item, the siblings
-  of an opening that the extracted verifier accepts under it. `honest_snapshots_exist` shows
-  that such roots and siblings exist at every height up to `MAX_HEIGHT`, the client's limit,
-  which is production's `MAX_LEAVES` as a height.
-- Last validation: `bash verification/check.sh` on 2026-11-23 at `a02833212`, passed. 3 Rust tests (1,653
-  differential claims and 511 honest production openings), reproducible extraction, an axiom
-  audit of all 104 theorems in `Qmdb` and `Commonware.Symbolic` (standard Lean axioms) and 7
-  rejected mutations. The production files are unchanged since `just test -p commonware-storage`
-  passed on 2026-11-18 (4,672 passed, 994 skipped). Logs: `verification/.lake/logs/`.
+  of an opening that the extracted verifier accepts under it. A snapshot with a root and an
+  accepted opening for every stored item exists at every height up to `MAX_HEIGHT`, the
+  client's limit, which is production's `MAX_LEAVES` as a height.
+- Last validation: `bash verification/check.sh` on 2026-11-24 at `dc2450925`, passed. 3 Rust
+  tests (1,653 differential claims and 511 honest production openings), reproducible extraction,
+  an axiom audit of all 113 theorems in `Qmdb` and `Commonware.Symbolic` (standard Lean axioms)
+  and 9 rejected mutations, 2 of them for the ordered reads. `just test -p commonware-storage`
+  (4,672 passed, 994 skipped) and `just test -p commonware-utils` (847 passed) passed on the
+  same day at that revision. Logs: `verification/.lake/logs/`.
 - Remaining boundary: the hash function itself, which the model treats as ideal, and production's
   `ByteTerms`; the production `Hasher`/`Family` wrappers, their bounds checks and blueprint;
   hashers that override the default encodings (grafting); node collection; multiple peaks and
-  multi-item ranges; the journal and storage.
+  multi-item ranges; the journal and storage. The ordered reads cover several peaks, grafting
+  and the journal for the pinned format, in a Lean model and not through this client.
 - Next step: extend the client to the production blueprint (several peaks, range proofs,
   collection).
 
 QMDB is one target of the shared symbolic verification in [verification/](../README.md): one
 extracted crate, one Lean package and one check for every target. This README covers what QMDB
-adds. An [audit guide](../hax-dylean-audit.html) walks through this target, and
-[audit/FINDINGS.md](../audit/FINDINGS.md) records a first pass through it.
+adds. An [audit guide](../hax-dylean-audit.html) walks through both parts of this target and
+sets each sentence of the proved scope beside the Lean statement behind it.
 
 ## Production Rust
 
@@ -76,7 +89,8 @@ parts apart, for any DyLean algebra with these constructors.
 [Client](../lean/Commonware/Symbolic/Client.lean) runs an extracted step as a DyLean action.
 
 [Assumptions](../lean/Qmdb/Assumptions.lean) is trusted: QMDB's term algebra (`#combine` of
-literals, concatenation and hashing) and the application-supplied `Snapshot` with its root, the
+literals, concatenation, the hash constructor and a second one for Keccak-256, which a consumer of
+the ordered reads hashes its keys with) and the application-supplied `Snapshot` with its root, the
 siblings of every stored item and their honest-opening assumption.
 
 [Verifier](../lean/Qmdb/Verifier.lean) proves the following by induction over the extracted
@@ -127,7 +141,8 @@ root, making the traversal treat a subtree that ends at the queried location as 
 the right child twice, or ignoring unused siblings; each breaks `Qmdb.Verifier`. Skipping the
 client's verification breaks `Qmdb.Symbolic`. The proofs do not fix the family domain bytes, so
 changing them is caught by the Rust tests only. Swapping the child digests passed to node
-collection survives: the client collects nothing.
+collection survives: the client collects nothing. Two further mutations change the selectors of
+the ordered reads in `claim.rs` and break `Qmdb.Ordered.Extraction`.
 
 ## Review boundary, dependencies and generated files
 

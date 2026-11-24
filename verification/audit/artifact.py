@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-"""Write a copy of the report whose links open GitHub at one revision.
+"""Write a copy of the audit guide whose links open GitHub at one revision.
 
-The report links to files of its own checkout and to a local diff handler. A published copy has
+The guide links to files of its own checkout and to a local diff handler. A published copy has
 no checkout, so this script rewrites every source link to the file on GitHub at `--rev` and every
 diff link to GitHub's comparison of the production baseline with that revision. A link to another
 page of this directory becomes the published copy of that page when `--page` gives one, and that
 page's file on GitHub otherwise. The copy has no document wrapper: the page that hosts it
 supplies one.
-
-`--report` converts another page of this directory, such as the audit guide, the same way.
 """
 
 import argparse
@@ -20,13 +18,13 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-REPORT = ROOT / 'verification/hax-dylean.html'
+GUIDE = ROOT / 'verification/hax-dylean-audit.html'
 REPOSITORY = 'vicsn/commonware-monorepo'
 DIFF = 'qmdb-diff://dylean/'
 
 
 class Mismatch(Exception):
-    """The report does not have the shape this script rewrites."""
+    """The guide does not have the shape this script rewrites."""
 
 
 def require(condition, message):
@@ -129,8 +127,8 @@ def main():
     parser.add_argument('--rev', help='revision the links open (default: HEAD)')
     parser.add_argument('--repository', default=REPOSITORY,
                         help=f'GitHub repository that holds the revision (default: {REPOSITORY})')
-    parser.add_argument('--report', type=Path, default=REPORT,
-                        help='the page to convert (default: the report)')
+    parser.add_argument('--guide', type=Path, default=GUIDE,
+                        help='the page to convert (default: the audit guide)')
     parser.add_argument('--page', action='append', default=[], metavar='FILE=URL',
                         help='where a page that this one links to is published (default: its '
                              'file on GitHub); repeatable')
@@ -141,9 +139,9 @@ def main():
         require(re.fullmatch(r'[0-9a-f]{40}', revision), '--rev must be a full commit hash')
         require(all('=' in entry for entry in args.page), '--page takes FILE=URL')
         published = dict(entry.split('=', 1) for entry in args.page)
-        copy = convert(args.report.read_text(), args.repository, revision, published)
+        copy = convert(args.guide.read_text(), args.repository, revision, published)
     except Mismatch as error:
-        sys.exit(f'report-artifact: {error}')
+        sys.exit(f'artifact: {error}')
     args.out.write_text(copy)
     print(f'Wrote {args.out} with links to {args.repository} at {revision[:9]}.')
 

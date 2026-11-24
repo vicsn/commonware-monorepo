@@ -5,7 +5,7 @@ model. One crate, one extraction and one Lean package serve every target. A targ
 module, a directory of Lean modules and a mutation table, and reuses the shared reading of
 terms and clients.
 
-| Target | Rust | Lean | Report |
+| Target | Rust | Lean | Record |
 | --- | --- | --- | --- |
 | QMDB single-item inclusion | [symbolic/src/qmdb.rs](symbolic/src/qmdb.rs) over production `terms.rs` and `traversal.rs` | [lean/Qmdb](lean/Qmdb) | [qmdb/README.md](qmdb/README.md) |
 | Ordered QMDB checkpoint reads | shared ordered claim, activity, current-root and pinned MMB verifier logic | [CheckpointAudit](lean/Qmdb/CheckpointAudit.lean) | [MMB and ordered reads](qmdb/mmb/README.md) |
@@ -24,12 +24,15 @@ terms and clients.
 - [symbolic/](symbolic): the crate that hax extracts, outside the Commonware workspace.
   - `lib.rs` includes production modules unchanged through `#[path]`:
     `storage/src/merkle/hasher/terms.rs`, `storage/src/merkle/proof/traversal.rs`,
+    `storage/src/qmdb/current/proof/activity.rs`, `utils/src/range/cyclic.rs`,
     `cryptography/src/bls12381/certificate/rules.rs` and
     `cryptography/src/handshake/sake/rules.rs`.
   - [client.rs](symbolic/src/client.rs): what every client shares.
   - A module for each target whose client production does not state in full,
     [qmdb.rs](symbolic/src/qmdb.rs) and [bls.rs](symbolic/src/bls.rs), with differential tests
     against production. The steps of the SAKE handshake are production's own.
+  - [ordered.rs](symbolic/src/ordered.rs): stand-in types beside which production's
+    `storage/src/qmdb/current/ordered/proof/claim.rs` is included for the ordered reads.
   - [concrete.rs](symbolic/src/concrete.rs): SHA-256 and BLS12-381 instances for those tests.
   - `proofs/lean/CommonwareSymbolic/`: the generated extraction.
 - [lean/](lean): the Lean package, on Lean's module system.
@@ -137,9 +140,10 @@ own.
   goals, `fun x => …`, one goal per tactic block, `change` where a `show` changes the goal, and
   a doc string on every public definition, field and constructor. `check.sh` fails on any
   warning of the Lean build, so it also fails on `sorry`.
-- What auditors read. The statements that the report cites, and the definitions those
-  statements depend on, are the trusted declarations of the audit guide's graph. Each stays
-  within 80 columns, comment included, so that the guide shows it unwrapped. A signature that
+- What auditors read. The statements that the audit guide cites, and the definitions those
+  statements depend on, are the trusted declarations of the guide's graph. Those of single-item
+  inclusion stay within 80 columns, comment included, so that the guide shows them unwrapped;
+  those of the ordered reads are shown as written. A signature that
   does not fit one line puts the name alone on the first line, every hypothesis and every
   assumed instance such as `[Snapshot]` on a line of its own, and the conclusion on lines of
   its own, one conjunct per line. Binders keep their order: moving one changes every caller.
@@ -175,41 +179,32 @@ managed hax CLI in `.verification-tools/qmdb/qmdb-hax-tools` (override with `HAX
 present; otherwise Lake builds them. After one run, `lean/` is a Lake package that an editor can
 open.
 
-## Report
-
-[hax-dylean.html](hax-dylean.html) records what is proved, assumed and validated for the QMDB
-and BLS targets; [sake/README.md](sake/README.md) is the record of the SAKE target. The report's
-links open files of the checkout that holds it.
-`python3 verification/qmdb/dylean-pictures.py` regenerates its pictures from the statements that
-Lean prints. `python3 verification/qmdb/report-artifact.py --out <file>` writes a copy for
-publishing, whose links open GitHub at a pushed revision. The report links to the audit guide:
-pass `--page hax-dylean-audit.html=<URL>` if the guide is published somewhere, or the link opens
-the guide's file on GitHub.
-
 ## Audit
 
-[hax-dylean-audit.html](hax-dylean-audit.html) is a step plan for auditing the Merkle target. It
-states what the audit assumes, the hax pipeline first, and shows side by side the code that must
-agree: production and the verification-only client, Rust and its generated Lean, Rust traits and
-their handwritten Lean readings, sentences of the report and theorem statements.
+[hax-dylean-audit.html](hax-dylean-audit.html) is a step plan for auditing the Merkle target, in
+two parts: single-item inclusion, and ordered reads under a checkpoint root. It states what the
+audit assumes, the hax pipeline first, and shows side by side the code that must agree:
+production and the verification-only client, Rust and its generated Lean, Rust and the Lean
+definitions that restate it, and the sentences of [qmdb/README.md](qmdb/README.md) and
+[qmdb/mmb/README.md](qmdb/mmb/README.md) beside theorem statements.
 
 - [audit/guide.html](audit/guide.html) and [audit/pairs.toml](audit/pairs.toml): the prose and
   the table of panels, whose items are addressed by name. `python3 verification/audit/build.py`
   writes the page, and `check.sh` fails when it is stale.
 - [audit/Dag.lean](audit/Dag.lean) prints every Lean declaration of the target with what it
   mentions, and [audit/dag.py](audit/dag.py) draws that as the guide's graph, coloured by trust
-  type: a declaration is trusted when a statement that the report cites depends on what it says.
+  type: a declaration is trusted when a statement that the guide cites depends on what it says.
   After changing Lean, run `python3 verification/audit/build.py --dag` and then
   `python3 verification/audit/build.py`; `check.sh` fails when [audit/dag.json](audit/dag.json)
   is stale.
-- [audit/FINDINGS.md](audit/FINDINGS.md): a first pass through the guide, and what changed since.
 - [audit/probes.py](audit/probes.py) with [audit/probes.toml](audit/probes.toml): mutations of
   the Rust, of the trusted Lean and of the proofs, with their recorded verdicts. Some survive.
   [audit/probes/](audit/probes) holds differential tests that vary what the committed tests do
   not.
-- Publish the guide like the report: `python3 verification/qmdb/report-artifact.py --report
-  verification/hax-dylean-audit.html --out <file>`, with `--page hax-dylean.html=<URL>` if the
-  report is published too.
+- `python3 verification/audit/artifact.py --out <file>` writes a copy of the guide for
+  publishing, whose links open GitHub at a pushed revision. In a checkout its links open the
+  checkout's files, and `python3 verification/qmdb/code-diff.py --install` makes its Diff links
+  open in VS Code.
 
 ## Shared review boundary
 

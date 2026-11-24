@@ -1,8 +1,21 @@
 import Qmdb.SecurityTheorems
 import Qmdb.SanityChecks
+import Commonware.Symbolic.RootPair
+import Qmdb.Bitmap
+import Qmdb.Mmb.Blueprint
+import Qmdb.Mmb.Bagging
+import Qmdb.Mmb.Grafting
+import Qmdb.Mmb.Dfs
+import Qmdb.Mmb.Children
+import Qmdb.Mmb.RawHeader
+import Qmdb.Ordered.Encoding
+import Qmdb.Ordered.Examples
 import Lean
 
 /-! Every Lean declaration of the QMDB target with what it depends on, as JSON for the audit guide.
+The target has two parts: single-item inclusion, and ordered reads under a checkpoint root in the
+format of Tempo's pinned fork. The imports after the first two are those of
+`Qmdb.CheckpointAudit`.
 
 A node is one declaration of the handwritten Lean, one generated definition that the handwritten
 Lean reaches, or one library that both rest on. Lean derives helper constants for a declaration
@@ -11,21 +24,38 @@ source line that produced them. An edge says that a node mentions another. It is
 when the statement of a theorem or the body of a definition mentions it, and a `proof` edge when
 only the proof of a theorem does.
 
-The trust type of a node follows from the edges. The statements that the report cites are listed
+The trust type of a node follows from the edges. The statements that the guide cites are listed
 below. Whatever they reach through meaning edges is what they say, so a person must read it: it
-is `trusted` when handwritten, `generated` when hax produced it, and `assumed` when it is a
-library. Every other handwritten declaration is `checked`: Lean accepts it, and no statement
+is `trusted` when handwritten, `generated` when hax produced it from the crate or from the
+projections of the pinned fork, and `assumed` when it is a library. Every other handwritten declaration is `checked`: Lean accepts it, and no statement
 depends on what it says. This file is not a module, so it sees the bodies of every imported
 definition. `python3 verification/audit/build.py --dag` runs it and stores what it prints. -/
 
 open Lean Elab Command
 
-/-- The statements that the report cites. -/
+/-- The statements that the guide cites: those behind the README's sentences about inclusion,
+those about ordered reads in the Lean model, and those that relate the model to extracted Rust.
+`pairs.toml` names the same statements with the sentence that each backs. -/
 def cited : Array Name := #[
   ``Qmdb.Verifier.unique, ``Qmdb.Verifier.verify_total, ``Qmdb.Verifier.verify_bounds,
   ``Qmdb.Verifier.honest_opening, ``Qmdb.Verifier.extra_sibling_rejected,
   ``Qmdb.honest_snapshots_exist, ``Qmdb.client_authentication,
-  ``Qmdb.honest_acceptance_logged]
+  ``Qmdb.honest_acceptance_logged,
+  -- Ordered reads in the model.
+  ``Qmdb.Active.accepted, ``Qmdb.Active.honest, ``Qmdb.Mmb.RawProof.sound,
+  ``Qmdb.Mmb.plan_coverage, ``Qmdb.Mmb.accepted, ``Qmdb.Mmb.honest,
+  ``Qmdb.Mmb.RawProof.header_of_verify, ``Qmdb.Mmb.Header.binding,
+  ``Qmdb.Ordered.accepted_read, ``Qmdb.Ordered.honest_member, ``Qmdb.Ordered.honest_gap,
+  ``Qmdb.Ordered.honest_empty, ``Qmdb.Ordered.operationTerm_inj,
+  ``Commonware.Symbolic.rootPair_binding, ``Qmdb.Ordered.Examples.empty_claim,
+  ``Qmdb.Ordered.Examples.singleton_claims,
+  -- The model against extracted Rust.
+  ``Qmdb.Ordered.Extraction.accepts_iff, ``Qmdb.Active.rustActive_eq,
+  ``Qmdb.CurrentRoot.extracted_wire, ``Qmdb.Mmb.Blueprint.rust_classifies,
+  ``Qmdb.Mmb.Blueprint.split_spec, ``Qmdb.Mmb.Blueprint.split_plan,
+  ``Qmdb.Mmb.Peaks.all_peaks_from_size, ``Qmdb.Mmb.Peaks.physical_children,
+  ``Qmdb.Mmb.Dfs.reconstruct_peak, ``Qmdb.Mmb.pinned_placement,
+  ``Qmdb.Mmb.pinned_graft_chunk, ``Qmdb.Mmb.Bagging.compressed_eq]
 
 /-- Where a constant is drawn: a source line of a file of this repository, or a library. -/
 inductive Place where
@@ -42,10 +72,17 @@ def Place.key : Place → String
 def fileOf (env : Environment) (decl : Name) : Option Name :=
   (env.getModuleIdxFor? decl).map fun index => env.header.moduleNames[index.toNat]!
 
-def handwritten (file : Name) : Bool :=
-  (`Qmdb).isPrefixOf file || (`Commonware).isPrefixOf file
+/-- A module that hax produced from a projection of the pinned fork, such as
+`Qmdb.Mmb.PinnedPeaks`. -/
+def pinned (file : Name) : Bool :=
+  match file with
+  | .str parent last => parent == `Qmdb.Mmb && last.startsWith "Pinned"
+  | _ => false
 
-def generated (file : Name) : Bool := (`CommonwareSymbolic).isPrefixOf file
+def handwritten (file : Name) : Bool :=
+  ((`Qmdb).isPrefixOf file || (`Commonware).isPrefixOf file) && !pinned file
+
+def generated (file : Name) : Bool := (`CommonwareSymbolic).isPrefixOf file || pinned file
 
 /-- The declaration that a person or hax wrote and that produced `decl`: the type of a constructor
 or of a field, the declaration that a helper constant was derived from, or `decl` itself. -/

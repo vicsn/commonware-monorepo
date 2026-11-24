@@ -1,6 +1,6 @@
 # Side-by-side panels of the audit guide. `build.py` resolves every item by name and fails when one
 # is missing or ambiguous. Kinds: rust-rust, rust-generated, rust-trusted, spec-generated,
-# lean-lean, reading. Strengths: proved, tested, trusted, assumed, shared, none.
+# rust-model, lean-lean, reading. Strengths: proved, tested, trusted, assumed, shared, none.
 #
 # An item is one of:
 #   { file, rust = "fn NAME" | "const NAME" | "trait NAME" | "impl TEXT", within = "impl TEXT" }
@@ -17,7 +17,10 @@
 [index]
 prefixes = [
   "storage/src/merkle/",
+  "storage/src/qmdb/",
+  "utils/src/range/",
   "verification/symbolic/src/qmdb.rs",
+  "verification/symbolic/src/ordered.rs",
   "verification/symbolic/src/client.rs",
 ]
 
@@ -435,16 +438,18 @@ right = [{ prose = [
   "Hunk 3 registers a trace class only if Aeneas has not already registered one of the same name.",
 ] }]
 
-# Step 1: the claim table. Every sentence must occur verbatim in the report, and the statements
+# Step 1: the claim table. Every sentence must occur verbatim in its `source`, and the statements
 # that back the claims must be the ones that `Dag.lean` lists as cited.
 
 [[claim]]
+source = "verification/qmdb/README.md"
 sentence = "Two openings that the extracted verifier accepts at one location under one root, for one trusted height, carry the same item and the same siblings."
 backed_by = [{ file = "verification/lean/Qmdb/Verifier.lean", lean = "unique" }]
 reading = "The hash is `dyTerms`, DyLean's constructor. The extracted verifier is `qmdb::verify` of the verification-only client, not production's `Proof::verify_element_inclusion`. Position binding is the first half of the conclusion."
 
 [[claim]]
-sentence = "The verifier is total and accepts honest openings."
+source = "verification/qmdb/README.md"
+sentence = "The verifier returns a verdict on every input, so it never panics or diverges, and it accepts every honest opening."
 backed_by = [
   { file = "verification/lean/Qmdb/Verifier.lean", lean = "verify_total" },
   { file = "verification/lean/Qmdb/Verifier.lean", lean = "honest_opening" },
@@ -452,27 +457,532 @@ backed_by = [
 reading = "`verify_total`: a verdict on every input, so no panic and no divergence. `honest_opening`: honest means built by `honestRoot` and `honestSiblings`, which are Lean definitions, not production's tree builder."
 
 [[claim]]
-sentence = "Every acceptance that the extracted client logs on a reachable trace identifies the trusted snapshot height, an in-range location and the item stored there."
+source = "verification/qmdb/README.md"
+sentence = "Every acceptance that the extracted client logs on a reachable trace names the trusted snapshot height, an in-range location and the item stored there."
 backed_by = [{ file = "verification/lean/Qmdb/SecurityTheorems.lean", lean = "client_authentication" }]
 reading = "`Stored` means `Snapshot.items`. The property holds for every message, location and sibling list, so the trace adds no hypothesis beyond `Symbolic.client_step_sound`."
 
 [[claim]]
+source = "verification/qmdb/README.md"
 sentence = "Some reachable trace logs the honest acceptance of each stored item."
 backed_by = [{ file = "verification/lean/Qmdb/SecurityTheorems.lean", lean = "honest_acceptance_logged" }]
 reading = "The trace is an attempt: the attacker sends the item, and the client runs on the siblings that the snapshot supplies. `attempt_logs` shows that the accepted event is in the trace. `client_authentication` alone does not, because a Hoare triple holds of an action that fails."
 
 [[claim]]
-sentence = "The snapshot supplies a root and an accepted opening for each stored item; such snapshots exist at every height up to MAX_HEIGHT."
+source = "verification/qmdb/README.md"
+sentence = "A snapshot with a root and an accepted opening for every stored item exists at every height up to `MAX_HEIGHT`, the client's limit, which is production's `MAX_LEAVES` as a height."
 backed_by = [{ file = "verification/lean/Qmdb/SecurityTheorems.lean", lean = "honest_snapshots_exist" }]
 reading = "The assumption is not contradictory. It does not show that production's tree builder produces such a snapshot; the tests in step 6 sample that."
 
 [[claim]]
-sentence = "It rejects heights above MAX_HEIGHT and out-of-range locations, accepts honest openings and rejects them when an unused sibling follows."
+source = "verification/qmdb/README.md"
+sentence = "The verifier accepts only heights up to `MAX_HEIGHT` and locations inside the tree, and it rejects an honest opening that an unused sibling follows."
 backed_by = [
   { file = "verification/lean/Qmdb/Verifier.lean", lean = "verify_bounds" },
   { file = "verification/lean/Qmdb/Verifier.lean", lean = "extra_sibling_rejected" },
 ]
 reading = "`verify_bounds`: acceptance implies `h ≤ maxHeight` and an in-range location. `extra_sibling_rejected`: one unused sibling after the honest ones."
+
+# Part II: ordered reads under a checkpoint root. Its claims come from its README where the README
+# makes them, and from the doc comment of the theorem otherwise.
+
+# Step 8: what part II claims.
+
+[[panel]]
+id = "ck-openings"
+kind = "reading"
+title = "An opening: a path into a root, with the prover's siblings"
+link = "Every statement of part II is about these three definitions. An opening says where a term sits under a root. It says nothing about who built the root."
+left = [
+  { file = "verification/lean/Qmdb/Active.lean", lean = "Witness" },
+  { file = "verification/lean/Qmdb/Active.lean", lean = "Witness.rebuild" },
+  { file = "verification/lean/Qmdb/Active.lean", lean = "Opens" },
+  { file = "verification/lean/Qmdb/Active.lean", lean = "Witness.binding", statement = true },
+]
+right = [{ prose = [
+  "A `Witness` walks from a root down to one term. `hash` enters the input of a hash, `left` and `right` enter one side of a concatenation and carry the other side as a sibling.",
+  "`rebuild` computes the root again from the term at the tip. `Opens path root tip`: some witness that follows `path` rebuilds `root` from `tip`.",
+  "A sibling is any term. The prover chooses it and no statement restricts it.",
+  "`Witness.binding`: two witnesses with one path that rebuild one root have the same term at the tip. This is where the ideal hash is used, through `Hash.hash_inj` and `concat_inj`, as in part I.",
+  "A path is a list of steps, not a byte offset. A real verifier works on bytes; the model reads production's hash inputs as concatenations of whole fields (assumption A4).",
+] }]
+
+[[claim]]
+group = "reads"
+source = "verification/qmdb/mmb/README.md"
+sentence = "The operation and bitmap openings are tied to a single current root."
+backed_by = [
+  { file = "verification/lean/Qmdb/Active.lean", lean = "accepted" },
+  { file = "verification/lean/Qmdb/Active.lean", lean = "honest" },
+]
+reading = "`Accepts s` is `Verifies` at the snapshot's root and layout: the location is in range, the claimed chunk has the bit of the location set, and both witnesses follow the snapshot's paths and rebuild its root. `accepted`: then the location is live in the snapshot and the item is the one stored there. `honest`: every live location has such a proof. Both take an `Active.Snapshot`, whose proof fields say that the root opens to the stored items and chunks (step 9)."
+
+[[claim]]
+group = "reads"
+source = "verification/qmdb/mmb/README.md"
+sentence = "Coverage proves that every selected plan for a nonzero chunk includes both the operation and the bitmap bytes, even when the preceding or following peaks are compressed."
+backed_by = [{ file = "verification/lean/Qmdb/Mmb/Coverage.lean", lean = "plan_coverage" }]
+reading = "Stated for the graft flag `true`. The tree of the plan has a path to the item and a path to the bitmap bytes. `RawProof.sound` needs this to produce both openings."
+
+[[claim]]
+group = "reads"
+source = "verification/qmdb/mmb/README.md"
+sentence = "Its soundness theorem constructs both openings by induction on the same program."
+backed_by = [{ file = "verification/lean/Qmdb/Mmb/Raw.lean", lean = "RawProof.sound" }]
+reading = "`RawProof.verify` is the Lean reconstruction of the reader's check. It is not extracted Rust (step 11). Acceptance gives a pair of witnesses at the paths that `plan` computes from the leaf count, the inactive-peak count and the location, and both rebuild the supplied root. Nothing is assumed of the root or of the fields of the proof."
+
+[[claim]]
+group = "reads"
+source = "verification/qmdb/mmb/README.md"
+sentence = "Mmb connects the openings to an honest snapshot."
+backed_by = [
+  { file = "verification/lean/Qmdb/Mmb.lean", lean = "accepted" },
+  { file = "verification/lean/Qmdb/Mmb.lean", lean = "honest" },
+]
+reading = "`accepted`: an opening checked with the snapshot's root and leaf count is one that `Active.accepted` applies to, if the snapshot has the pinned `Layout` at that inactive-peak count. `Layout` is an assumption about the writer: its paths are the planner's, and where a grafted chunk is all zero, the field at the bitmap path holds an 8-byte position. `honest` is the converse for live locations."
+
+[[claim]]
+group = "reads"
+source = "verification/qmdb/mmb/README.md"
+sentence = "RawHeader proves that each accepted proof opens its root to its own dimensions."
+backed_by = [{ file = "verification/lean/Qmdb/Mmb/RawHeader.lean", lean = "RawProof.header_of_verify" }]
+reading = "From an accepted proof alone there is a `Header` with this root, this leaf count and this inactive-peak count. The digests of a header are 32 bytes wide; the theorem gets that from the width checks of `fieldsValid`."
+
+[[claim]]
+group = "reads"
+source = "verification/qmdb/mmb/README.md"
+sentence = "Acceptance supplies an opening of those counts; equality of the selected current roots binds both counts to the committed database."
+backed_by = [{ file = "verification/lean/Qmdb/MmbHeader.lean", lean = "Header.binding" }]
+reading = "Two headers with one root have the same leaf count and the same inactive-peak count. With the row above, the counts that a prover sends are fixed by the root it is checked against. Part I trusted the size of the tree (risk R4)."
+
+[[claim]]
+group = "reads"
+source = "verification/lean/Qmdb/Ordered.lean"
+sentence = "Every accepted membership or exclusion claim equals the replayed state at its root."
+backed_by = [{ file = "verification/lean/Qmdb/Ordered.lean", lean = "accepted_read" }]
+reading = "`value` is `some v` for membership and `none` for exclusion. `lookup` replays the journal below the leaf count. The hypothesis `s : Snapshot K V enc` carries the writer's invariants: the activity bits mark exactly the latest update of each key that is not deleted, live successor links are adjacent, and a live commit is last and bounds the live locations. `Accepts` is the snapshot-relative check of `Active`, not the raw verifier."
+
+[[claim]]
+group = "reads"
+source = "verification/lean/Qmdb/Ordered.lean"
+sentence = "Every present replayed value has an accepted membership proof."
+backed_by = [{ file = "verification/lean/Qmdb/Ordered.lean", lean = "honest_member" }]
+reading = "Completeness of membership, in the same snapshot-relative sense."
+
+[[claim]]
+group = "reads"
+source = "verification/lean/Qmdb/Ordered.lean"
+sentence = "A live successor gap supplies an honest exclusion proof for every key in its interior."
+backed_by = [{ file = "verification/lean/Qmdb/Ordered.lean", lean = "honest_gap" }]
+reading = "Completeness of exclusion by a gap. It does not say that every absent key lies in the gap of some live update; that is a property of the writer."
+
+[[claim]]
+group = "reads"
+source = "verification/lean/Qmdb/Ordered.lean"
+sentence = "An empty snapshot's final commit supplies an honest exclusion proof for every key."
+backed_by = [{ file = "verification/lean/Qmdb/Ordered.lean", lean = "honest_empty" }]
+reading = "The commit is live and its floor is its own location, which is how production marks a database with no live key."
+
+[[claim]]
+group = "reads"
+source = "verification/qmdb/mmb/README.md"
+sentence = "The fixed encoding commits to the operation tag, ordered update fields, optional metadata, big-endian floor and zero padding."
+backed_by = [{ file = "verification/lean/Qmdb/Ordered/Encoding.lean", lean = "operationTerm_inj" }]
+reading = "`operationTerm` lays out the fixed codec for 32-byte keys and n-byte values as a term. The statement says that it is injective, which is all that `accepted_read` asks of an encoding. Nothing relates it to production's codec; step 10 shows the two side by side."
+
+[[claim]]
+group = "reads"
+source = "verification/qmdb/mmb/README.md"
+sentence = "The outer SHA-256 commitment binds their two roots in order by constructor injectivity."
+backed_by = [{ file = "verification/lean/Commonware/Symbolic/RootPair.lean", lean = "rootPair_binding" }]
+reading = "`rootPair a b` is the hash of the concatenation of two roots. Equal pairs have equal components, in order. This repository states nothing else about a checkpoint: how the pair is authenticated and which root answers which query is the consumer's."
+
+[[claim]]
+group = "reads"
+source = "verification/qmdb/mmb/README.md"
+sentence = "The one- and three-leaf examples construct the journal, bitmap, MMB layout and header and accept real compressed proof shapes for membership, singleton-gap exclusion and empty-commit exclusion."
+backed_by = [
+  { file = "verification/lean/Qmdb/Ordered/Examples.lean", lean = "empty_claim" },
+  { file = "verification/lean/Qmdb/Ordered/Examples.lean", lean = "singleton_claims" },
+]
+reading = "The assumptions of this part can be met: `empty` and `singleton` are a `Database`, which bundles a journal snapshot, a header and the pinned layout. On them the raw verifier accepts the three forms of claim through the extracted selectors. Two sizes only."
+
+[[claim]]
+group = "rust"
+source = "verification/qmdb/mmb/README.md"
+sentence = "Lean proves the selected operation and proof are exactly those used by the replay soundness theorem."
+backed_by = [{ file = "verification/lean/Qmdb/Ordered/Extraction.lean", lean = "accepts_iff" }]
+reading = "`Extraction.Accepts` runs the extracted `claim::membership` and `claim::exclusion` and opens the operation they return. `VerifyWith` is the definition that `accepted_read` is stated with. The selectors are production's `claim.rs`, compiled here against stand-in types (step 10)."
+
+[[claim]]
+group = "rust"
+source = "verification/lean/Qmdb/Bitmap.lean"
+sentence = "The fixed-width bitmap check agrees with the activity arithmetic extracted from Rust."
+backed_by = [{ file = "verification/lean/Qmdb/Bitmap.lean", lean = "rustActive_eq" }]
+reading = "`rustActive` calls the extracted `activity::get` on a 32-byte chunk with 256 bits. It returns `activeBit` for every 64-bit location and never fails."
+
+[[claim]]
+group = "rust"
+source = "verification/lean/Qmdb/CurrentRoot.lean"
+sentence = "The production hash builder accepts the wire literal used by the public MMB header."
+backed_by = [{ file = "verification/lean/Qmdb/CurrentRoot.lean", lean = "extracted_wire" }]
+reading = "The extracted `terms::current_root`, with `dyTerms` as its hash, returns `CurrentRoot.term`: the hash of the ops root, the grafted root and the optional pending and partial fields, in that order. `Header.root` is built from the same term."
+
+[[claim]]
+group = "rust"
+source = "verification/qmdb/mmb/README.md"
+sentence = "For every singleton range it agrees with the peak index selected by the plan."
+backed_by = [{ file = "verification/lean/Qmdb/Mmb/Blueprint.lean", lean = "rust_classifies" }]
+reading = "`classify_peak` is Lean that hax produced from a projection of the pinned fork's classification loop. For a range of one location it returns the group that `groupOf` gives the peak. This and the rows below are about projections: step 11 says what each leaves out."
+
+[[claim]]
+group = "rust"
+source = "verification/qmdb/mmb/README.md"
+sentence = "Lean checks the exact required length, the two length errors, each of the five returned segments, and agreement with the plan for a classified peak list with one sibling per level."
+backed_by = [
+  { file = "verification/lean/Qmdb/Mmb/Blueprint.lean", lean = "split_spec" },
+  { file = "verification/lean/Qmdb/Mmb/Blueprint.lean", lean = "split_plan" },
+]
+reading = "`split_spec`: the projected splitter accepts exactly one length of digest list and returns the offsets of `Offsets`. `split_plan`: for a blueprint that `Describes` the classification, that length is the plan's `count`. The projection replaces five vectors by their lengths."
+
+[[claim]]
+group = "rust"
+source = "verification/qmdb/mmb/README.md"
+sentence = "Peaks relates the physical size guard, inverse position lookup and complete peak iterator to the model."
+backed_by = [{ file = "verification/lean/Qmdb/Mmb/Children.lean", lean = "all_peaks_from_size" }]
+reading = "Started from the node count of a valid leaf count, the projected iterator yields the positions and heights of `located 0 (heights n)`, in order, and then ends. `Cursor` and `Yields` are the definitions to read."
+
+[[claim]]
+group = "rust"
+source = "verification/qmdb/mmb/README.md"
+sentence = "Children checks the physical child positions."
+backed_by = [{ file = "verification/lean/Qmdb/Mmb/Children.lean", lean = "physical_children" }]
+reading = "For a subtree of the planner, the projected `children` returns the positions of its two halves. `Subtree` is the definition to read."
+
+[[claim]]
+group = "rust"
+source = "verification/qmdb/mmb/README.md"
+sentence = "Dfs relates the extracted subtree reconstruction to the model, including its sibling cursor."
+backed_by = [{ file = "verification/lean/Qmdb/Mmb/Dfs.lean", lean = "reconstruct_peak" }]
+reading = "Run with a hasher that records its inputs, the projected `reconstruct_digest` on a range of one location consumes one item and one sibling for each level and returns the planner's `peakShape`. The projection removes node collection."
+
+[[claim]]
+group = "rust"
+source = "verification/qmdb/mmb/README.md"
+sentence = "Grafting checks the pending-chunk arithmetic and zero-bitmap decision."
+backed_by = [
+  { file = "verification/lean/Qmdb/Mmb/Grafting.lean", lean = "pinned_placement" },
+  { file = "verification/lean/Qmdb/Mmb/Grafting.lean", lean = "pinned_graft_chunk" },
+]
+reading = "`pinned_placement`: the projected count of grafted chunks is the planner's `graftedChunks`, and a pending chunk exists exactly when the planner says so. `pinned_graft_chunk`: the projected guard hashes the chunk with the subtree unless the chunk is all zero, and then returns the subtree alone."
+
+[[claim]]
+group = "rust"
+source = "verification/qmdb/mmb/README.md"
+sentence = "Bagging relates the forward inactive prefix and backward peak folds to the root preimage."
+backed_by = [{ file = "verification/lean/Qmdb/Mmb/Bagging.lean", lean = "compressed_eq" }]
+reading = "With a hasher that records its inputs, the projected bagger returns the planner's `merkleShape` over `bagPeaks`. The projection turns two iterator loops into recursion over a list."
+
+# Step 9: the model and what it assumes.
+
+[[panel]]
+id = "ck-raw"
+kind = "reading"
+title = "The check that a reader of a checkpoint runs, as a Lean definition"
+link = "This is the object of `RawProof.sound` and `header_of_verify`. Read it as a specification of the pinned `OperationProof::verify` for one location and 32-byte chunks. Step 11 says what ties it to that Rust."
+left = [
+  { file = "verification/lean/Qmdb/Mmb/Raw.lean", lean = "RawProof" },
+  { file = "verification/lean/Qmdb/Mmb/Raw.lean", lean = "RawProof.fieldsValid" },
+  { file = "verification/lean/Qmdb/Mmb/Raw.lean", lean = "RawProof.reconstruct" },
+  { file = "verification/lean/Qmdb/Mmb/Raw.lean", lean = "RawProof.verify" },
+]
+right = [{ prose = [
+  "`RawProof`: the decoded fields of one operation proof. The location, the leaf count, the inactive-peak count and the encoded operation are arguments of `verify`, not fields.",
+  "`fieldsValid`: the bit of the location is set in the claimed chunk; the digest list has the length that the plan requires; every digest is 32 bytes; the pending and trailing digests are present exactly when the leaf count says so, and when the location lies in one of them, the digest is the hash of the claimed chunk.",
+  "`reconstruct`: take the plan for these dimensions and this location, check the fields, and fill the plan's tree with them.",
+  "`verify`: the value of that tree equals the root. The root is the only trusted input.",
+  "The plan is always taken with the graft flag `true`. A proof whose chunk is all zero fails the bit check, so the other value of the flag is never needed.",
+] }]
+
+[[panel]]
+id = "ck-plan"
+kind = "reading"
+title = "The plan: which hash inputs lead from one location to the root"
+link = "`plan` fixes the shape of the root for one location from three numbers. `currentPaths` reads the two paths of an opening from it. `Mmb.Accepts`, the conclusion of `RawProof.sound`, is stated with `currentPaths`."
+left = [
+  { file = "verification/lean/Qmdb/Mmb/Plan.lean", lean = "Shape" },
+  { file = "verification/lean/Qmdb/Mmb/Plan.lean", lean = "plan" },
+  { file = "verification/lean/Qmdb/Mmb/Plan.lean", lean = "envelope" },
+  { file = "verification/lean/Qmdb/Mmb/Plan.lean", lean = "currentPaths" },
+]
+right = [{ prose = [
+  "A `Shape` is a program of hash calls over named inputs: the item, the bitmap chunk, sibling `i` of the digest list, the ops root, the two suffix digests and 8-byte words.",
+  "`plan`: the location is below the leaf count, the leaf count is at most the pinned maximum, and the inactive-peak count is at most the number of peaks. It finds the peak that holds the location and assembles the tree.",
+  "`envelope` is the outside of every tree: the hash of the ops root and the Merkle root, followed by the pending chunk and by the partial chunk with its bit count, when the leaf count has them. When the location lies in one of the two, its field is the hash of the bitmap chunk.",
+  "The Merkle root is `merkleShape`: the leaf count, then the inactive-peak count when it is not zero, then the bagged peaks. This is the format of the pinned fork. The root of this branch also hashes two domain bytes, so part I and part II are about different root formats.",
+  "Steps 11 and 12 are about whether this plan is what the pinned Rust computes.",
+] }]
+
+[[panel]]
+id = "ck-snapshot"
+kind = "reading"
+title = "What is assumed of the writer"
+link = "Every soundness statement of part II takes one of these structures as a hypothesis. Their proof fields are the assumptions of part II about the database that produced the root. No Rust is extracted for the writer, and no test compares a production database with them."
+left = [
+  { file = "verification/lean/Qmdb/Active.lean", lean = "Snapshot" },
+  { file = "verification/lean/Qmdb/Ordered.lean", lean = "Snapshot" },
+  { file = "verification/lean/Qmdb/Mmb.lean", lean = "Layout" },
+]
+right = [{ prose = [
+  "`Active.Snapshot`: a root, a leaf count, the encoded operation and the bitmap chunk of every location, and a path for each. `itemOpening` and `chunkOpening`: the root opens to them at those paths. `liveCovered`: a chunk with a set bit has a path.",
+  "`Ordered.Snapshot` adds the journal. `encoded`: the items are the encoded entries. `activeUpdate`: the bit of an update is set exactly when no later operation touches its key. `adjacent`: no live key lies strictly between a live key and its recorded successor. `commitBounds`: a live commit is the last entry, and no live location is below its floor.",
+  "`Mmb.Layout`: the snapshot's paths are the planner's, and where a grafted chunk is all zero, the field that a bitmap path would address holds an 8-byte node position. That is what keeps a prover from presenting a zero chunk's subtree as a chunk with a set bit.",
+  "`honest_snapshots_exist` of part I has no counterpart here for every size: the examples of step 8 build these structures for one leaf and for three.",
+  "What to ask: does production's writer maintain each field after every commit, including after pruning and a restart?",
+] }]
+
+[[panel]]
+id = "ck-journal"
+kind = "reading"
+title = "What a read should return: replaying the journal"
+link = "`lookup` is `replay` up to the leaf count. It is the reference that `accepted_read` compares a claim with, and it does not mention a bitmap, a root or a proof."
+left = [
+  { file = "verification/lean/Qmdb/Ordered/Journal.lean", lean = "Operation" },
+  { file = "verification/lean/Qmdb/Ordered/Journal.lean", lean = "Operation.write" },
+  { file = "verification/lean/Qmdb/Ordered/Journal.lean", lean = "replay" },
+  { file = "verification/lean/Qmdb/Ordered/Journal.lean", lean = "Between" },
+]
+right = [{ prose = [
+  "An entry updates a key with a value and the next live key, deletes a key, or commits with optional metadata and a floor.",
+  "`replay`: the last write to the key below the bound decides. An update gives its value, a delete gives none, and a commit leaves the key alone.",
+  "`Between start stop key`: the key lies strictly inside the arc from `start` to `stop`, which wraps around when `stop` is not above `start`. A single key that is its own successor excludes every other key.",
+  "The model has no pruning: `entry` is defined at every location, and the floor only bounds which locations may be live.",
+] }]
+
+# Step 10: production Rust shared with part II.
+
+[[panel]]
+id = "ck-claim-surroundings"
+kind = "rust-rust"
+strength = "trusted"
+title = "One file, two surroundings"
+link = "`claim.rs` is included by `#[path]`, so its text is production's. Its `use super::…` line is not: in production it names the types on the left, in the extracted crate the stand-ins on the right. A person compares them."
+left_label = "What claim.rs sees in production"
+left = [
+  { file = "storage/src/qmdb/current/ordered/proof.rs", from = "use crate::{", through = "mod claim;" },
+  { file = "storage/src/qmdb/any/operation/mod.rs", rust = "enum Operation" },
+  { file = "utils/src/range.rs", rust = "fn contains_cyclic", from = "pub fn contains_cyclic" },
+]
+right_label = "What it sees in the extracted crate"
+right = [
+  { file = "verification/symbolic/src/ordered.rs", rust = "trait Key" },
+  { file = "verification/symbolic/src/ordered.rs", rust = "fn contains_cyclic" },
+  { file = "verification/symbolic/src/ordered.rs", rust = "enum Operation" },
+  { file = "verification/symbolic/src/ordered.rs", rust = "enum ExclusionProof" },
+]
+notes = [
+  "The stand-in `Operation` has no `Delete`. The selectors never build one.",
+  "Production compares keys with `Ord`. The stand-in asks for `PartialEq` and a `less`, and Lean reads both from one `LinearOrder` (`Extraction.keys`).",
+  "Production's `contains_cyclic` takes any range bounds. The stand-in is its case for `&start..&end`: start included, end excluded. Both end in `cyclic::contains`, which is shared.",
+  "The stand-in `OperationProof` keeps the location and an opaque payload. What production does with the payload is `OperationProof::verify`, which part II models and does not extract from this branch.",
+]
+
+[[panel]]
+id = "ck-selectors"
+kind = "rust-model"
+strength = "proved"
+title = "Which operation a claim must authenticate"
+link = "`accepts_iff` relates the two sides through the extraction of `claim.rs`: running the extracted selectors and opening what they return is `VerifyWith`. It holds for any way of opening an operation, so the Merkle check is not part of it."
+left_label = "Production, shared by #[path]"
+left = [
+  { file = "storage/src/qmdb/current/ordered/proof/claim.rs", rust = "fn membership" },
+  { file = "storage/src/qmdb/current/ordered/proof/claim.rs", rust = "fn exclusion" },
+]
+right_label = "The model that accepted_read is stated with"
+right = [
+  { file = "verification/lean/Qmdb/Ordered.lean", lean = "VerifyWith" },
+  { file = "verification/lean/Qmdb/Ordered/Extraction.lean", lean = "accepts_iff", statement = true },
+]
+notes = [
+  "Membership: the operation is an update of the claimed key and value with the successor that the prover sent.",
+  "Exclusion by a gap: the claimed key is not the start of the gap and lies in the cyclic span from the start to its successor.",
+  "Exclusion by a commit: the operation is a commit whose floor is the location of the proof. Whether that location is the last one is left to the snapshot invariant `commitBounds`.",
+  "Two mutations of `claim.rs` are in `mutations.toml`; both break `Qmdb.Ordered.Extraction`.",
+]
+
+[[panel]]
+id = "ck-cyclic"
+kind = "rust-model"
+strength = "proved"
+title = "The cyclic interval test"
+link = "`extracted_inGap` equates the extracted decision with `inGap`, and `inGap_iff` equates `inGap` with `Between`, the relation that the snapshot invariant `adjacent` is stated with."
+left_label = "Production"
+left = [
+  { file = "utils/src/range/cyclic.rs", rust = "fn contains" },
+  { file = "storage/src/qmdb/current/ordered/proof/claim.rs", rust = "fn exclusion", from = "ExclusionProof::KeyValue", through = "Some((op_proof, Operation::Update" },
+]
+right_label = "Lean"
+right = [
+  { file = "verification/lean/Qmdb/Ordered/Journal.lean", lean = "inGap" },
+  { file = "verification/lean/Qmdb/Ordered/Journal.lean", lean = "extracted_inGap", statement = true },
+  { file = "verification/lean/Qmdb/Ordered/Journal.lean", lean = "inGap_iff", statement = true },
+]
+
+[[panel]]
+id = "ck-activity"
+kind = "rust-model"
+strength = "proved"
+title = "The activity bit of a location"
+link = "`rustActive_eq`: the extracted `activity::get`, called with a 32-byte chunk and 256 bits, returns `activeBit`. The caller on the left passes the chunk width that it validated; the model fixes it."
+left_label = "Production"
+left = [
+  { file = "storage/src/qmdb/current/proof/activity.rs", rust = "fn get" },
+  { file = "storage/src/qmdb/current/proof/activity.rs", rust = "fn is_set" },
+  { file = "storage/src/qmdb/current/proof/operation.rs", from = "if !activity::get(chunk, *self.loc, bits)", through = "return false;" },
+]
+right_label = "Lean"
+right = [
+  { file = "verification/lean/Qmdb/Active.lean", lean = "activeBit" },
+  { file = "verification/lean/Qmdb/Bitmap.lean", lean = "rustActive_eq", statement = true },
+]
+
+[[panel]]
+id = "ck-current-root"
+kind = "rust-model"
+strength = "proved"
+title = "The canonical root over the ops root, the grafted root and the two suffix chunks"
+link = "`extracted_wire`: the extracted `current_root` with `dyTerms` returns `CurrentRoot.term`. `Header.root` and the planner's `envelope` use the same four layouts."
+left_label = "Production"
+left = [
+  { file = "storage/src/merkle/hasher/terms.rs", rust = "fn current_root" },
+  { file = "storage/src/qmdb/current/db.rs", rust = "fn combine_roots" },
+]
+right_label = "Lean"
+right = [
+  { file = "verification/lean/Qmdb/CurrentRoot.lean", lean = "term" },
+  { file = "verification/lean/Qmdb/CurrentRoot.lean", lean = "extracted_wire", statement = true },
+]
+notes = [
+  "This is the root of this branch's `current` database. That the pinned fork combines its roots in the same way is covered by the trace comparison of step 12, not by this theorem.",
+]
+
+[[panel]]
+id = "ck-encoding"
+kind = "rust-trusted"
+strength = "none"
+title = "The fixed operation codec and its symbolic layout"
+link = "Nothing relates the two. `operationTerm` is a person's reading of the codec for 32-byte keys, and `operationTerm_inj` is about that reading. `accepted_read` holds for any injective encoding, so a wrong reading cannot make it false; it can make the encoding that a consumer plugs in differ from production's bytes."
+left_label = "Production"
+left = [{ file = "storage/src/qmdb/any/operation/fixed.rs", rust = "fn write_operation" }]
+right_label = "Lean"
+right = [
+  { file = "verification/lean/Qmdb/Ordered/Encoding.lean", lean = "operationTerm" },
+  { file = "verification/lean/Qmdb/Ordered/Encoding.lean", lean = "operationTerm_inj", statement = true },
+]
+
+# Step 11: the pinned fork.
+
+[[panel]]
+id = "ck-projection"
+kind = "reading"
+title = "How code of the pinned fork reaches Lean"
+link = "Each script reads functions of the pinned commit, rewrites them by text and gives the result to hax. The rewriting is by hand. A theorem of the rust group is about the rewritten function."
+left = [
+  { file = "verification/qmdb/mmb/extract-layout.py", from = "def source():", through = 'method.replace("digests.len()", "digests_len")' },
+  { file = "verification/qmdb/mmb/extract-bag.py", from = "def source():", through = "body = " },
+]
+right = [{ prose = [
+  "`extract-layout.py`: the classifier and `split_proof_digests`. Vectors become their lengths, and returned borrows become indices.",
+  "`extract-peaks.py`: the peak iterator, the inverse position lookup and `children`.",
+  "`extract-dfs.py`: `reconstruct_digest`, with node collection removed, and the graft guard.",
+  "`extract-bag.py`: `root_with_folded_peaks`, with its two iterator loops turned into recursion.",
+  "`qmdb/mmb/check.sh` runs the four scripts, and each fails when its output differs from the committed `Pinned*.lean`. That shows the files are reproducible from the pin. It does not show that a rewriting preserves meaning.",
+  "What to check: read each replacement and decide whether the pinned function still does the same thing for a proof of one location. The comparison of step 12 samples the whole verifier against the model and is the only evidence that covers the rewritings.",
+] }]
+
+[[panel]]
+id = "ck-classify"
+kind = "spec-generated"
+strength = "proved"
+title = "Which group a peak falls in"
+link = "`rust_classifies`: for a range of one location, the generated decision returns `groupOf` of the peak's index, the index of the peak that holds the location and the inactive-peak count."
+left = [{ file = "verification/lean/Qmdb/Mmb/PinnedLayout.lean", lean = "classify_peak" }]
+right = [
+  { file = "verification/lean/Qmdb/Mmb/Blueprint.lean", lean = "groupOf" },
+  { file = "verification/lean/Qmdb/Mmb/Blueprint.lean", lean = "rust_classifies", statement = true },
+]
+
+[[panel]]
+id = "ck-peaks"
+kind = "spec-generated"
+strength = "proved"
+title = "The peaks of a tree with n leaves"
+link = "`next_peak`: one call of the generated iterator returns the next height of `peakHeight` and its position. `all_peaks_from_size` chains the calls from the node count of a valid leaf count."
+left = [{ file = "verification/lean/Qmdb/Mmb/PinnedPeaks.lean", lean = "PeakIterator.next" }]
+right = [
+  { file = "verification/lean/Qmdb/Mmb/Plan.lean", lean = "peakHeight" },
+  { file = "verification/lean/Qmdb/Mmb/Plan.lean", lean = "heights" },
+  { file = "verification/lean/Qmdb/Mmb/Peaks.lean", lean = "next_peak", statement = true },
+]
+
+[[panel]]
+id = "ck-dfs"
+kind = "spec-generated"
+strength = "proved"
+title = "Rebuilding one peak from an item and its siblings"
+link = "`reconstruct_peak`: with a hasher that records its inputs, the generated traversal returns the planner's `peakShape` and advances the sibling cursor by the height."
+left = [{ file = "verification/lean/Qmdb/Mmb/Pinned.lean", lean = "Subtree.reconstruct_digest" }]
+right = [
+  { file = "verification/lean/Qmdb/Mmb/Plan.lean", lean = "peakShape" },
+  { file = "verification/lean/Qmdb/Mmb/Dfs.lean", lean = "reconstruct_peak", statement = true },
+]
+
+[[panel]]
+id = "ck-bag"
+kind = "spec-generated"
+strength = "proved"
+title = "Bagging the peaks into the Merkle root"
+link = "`compressed_eq`: with a hasher that records its inputs, the generated bagger returns `merkleShape` over `bagPeaks`, for every size of the compressed prefix and suffix."
+left = [{ file = "verification/lean/Qmdb/Mmb/PinnedBag.lean", lean = "root" }]
+right = [
+  { file = "verification/lean/Qmdb/Mmb/Plan.lean", lean = "merkleShape" },
+  { file = "verification/lean/Qmdb/Mmb/Plan.lean", lean = "bagPeaks" },
+  { file = "verification/lean/Qmdb/Mmb/Bagging.lean", lean = "compressed_eq", statement = true },
+]
+
+[[panel]]
+id = "ck-graft"
+kind = "spec-generated"
+strength = "proved"
+title = "Where a bitmap chunk enters the root"
+link = "`pinned_placement`: the generated count of grafted chunks is `graftedChunks`. `pinned_graft_chunk`: the generated guard leaves out a chunk that is all zero and hashes any other chunk in front of its subtree."
+left = [
+  { file = "verification/lean/Qmdb/Mmb/Pinned.lean", lean = "resolved" },
+  { file = "verification/lean/Qmdb/Mmb/Pinned.lean", lean = "graft" },
+]
+right = [
+  { file = "verification/lean/Qmdb/Mmb/Plan.lean", lean = "graftedChunks" },
+  { file = "verification/lean/Qmdb/CurrentRoot.lean", lean = "graft" },
+  { file = "verification/lean/Qmdb/Mmb/Grafting.lean", lean = "pinned_placement", statement = true },
+  { file = "verification/lean/Qmdb/Mmb/Grafting.lean", lean = "pinned_graft_chunk", statement = true },
+]
+
+# Step 12: the pinned verifier against the model.
+
+[[panel]]
+id = "ck-trace"
+kind = "rust-model"
+strength = "tested"
+title = "The pinned verifier and the Lean reconstruction on the same proofs"
+link = "`qmdb/mmb/check.sh` builds the left side inside an archive of the pinned commit and feeds what it prints to the right side. For each accepted proof the two must agree on both paths, on every hash input and on the verdict, and Lean must reject six altered proofs."
+left_label = "Rust: a hasher that records every input of the pinned verify"
+left = [{ file = "verification/qmdb/mmb/trace.rs", from = "impl Hasher for Trace", through = "fn hash_pair" }]
+right_label = "Lean: the comparison"
+right = [{ file = "verification/qmdb/mmb/Compare.lean", from = "let some (item, some chunk)", through = "Lean accepted a rejected Rust mutation" }]
+notes = [
+  "This is the only link between `RawProof.verify` and the pinned `OperationProof::verify` as a whole. It is a test: it samples leaf counts and locations, with one item, one chunk value and digests that the harness chooses.",
+  "Each side also checks six altered proofs: another item, another root, an extra digest, a missing digest, a trailing digest that is present or absent against the leaf count, and a zero chunk. `trace.rs` asserts that the pinned verifier rejects them and `Compare.lean` that the model does.",
+]
 
 # Facts that the prose of the guide states and no panel shows.
 
@@ -531,3 +1041,31 @@ text = "diff -r .lake/extraction"
 [[fact]]
 file = "verification/audit/probes/differential.rs"
 text = "fn probe_root_is_a_leaf_input()"
+
+[[fact]]
+file = "verification/qmdb/mmb/README.md"
+text = "Tempo pins klkvr/monorepo at `789e9e5d47288b4138183e51f8d3cf1beedd8561`."
+
+[[fact]]
+file = "verification/qmdb/mmb/check.sh"
+text = "pin=789e9e5d47288b4138183e51f8d3cf1beedd8561"
+
+[[fact]]
+file = "verification/qmdb/mmb/README.md"
+text = "It samples 932 accepted proofs at sizes from one to 777 leaves, including the 255/256/257 and 382/383/384 boundaries."
+
+[[fact]]
+file = "verification/lean/Qmdb/CheckpointAudit.lean"
+text = "#audit_axioms Qmdb.Active Qmdb.CurrentRoot Qmdb.Mmb Qmdb.Ordered Commonware.Symbolic"
+
+[[fact]]
+file = "verification/check.sh"
+text = "bash qmdb/mmb/check.sh"
+
+[[fact]]
+file = "verification/lean/Qmdb/Mmb/Plan.lean"
+text = "if leaves < 383 then 0 else (leaves - 383) / 256 + 1"
+
+[[fact]]
+file = "verification/lean/Qmdb/Assumptions.lean"
+text = "Commonware.Symbolic.Keccak,"
