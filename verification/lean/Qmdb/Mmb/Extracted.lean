@@ -3,6 +3,7 @@ import all DY.EquationalTheory.Hash
 public import Qmdb.Reconstruct
 public import Qmdb.Mmb.Children
 public import Qmdb.Mmb.Raw
+public import Qmdb.Mmb.RawHeader
 public import Qmdb.Bitmap
 
 /-! The extracted production verifier of a current operation proof over an MMB, related to the
@@ -1016,7 +1017,8 @@ structure Wide (f : current.Fields Bytes) : Prop where
 /-- The canonical current root over a Merkle root. -/
 theorem canonical_ok (f : current.Fields Bytes) (m : Bytes) (nb : Std.U64) :
     current.canonical dyTerms () f m nb = RustM.ok (CurrentRoot.term f.ops_root m
-      (optionOf f.pending) ((optionOf f.partial).map fun d => (part (.Bytes (Verifier.be nb)), d))) := by
+      (optionOf f.pending)
+      ((optionOf f.partial).map fun d => (part (.Bytes (Verifier.be nb)), d))) := by
   cases hp : f.pending <;> cases ht : f.partial <;>
     simp [current.canonical, hp, ht, optionOf, CurrentRoot.extracted]
 
@@ -1336,10 +1338,12 @@ theorem reconstruct_refines (f : current.Fields Bytes) (loc : Std.U64) (chunk : 
   have merkleVal : val (fields (rawOf f chunk) item)
       (merkleShape f.leaves.val f.inactive.val (foldTarget i f.inactive.val
         ((List.range ((if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val))).map
-      fun j => Shape.atom (.sibling j)) (peakShape (true && decide (loc.val / 256 < graftedChunks f.leaves.val)) h (loc.val - off)
+      fun j => Shape.atom (.sibling j))
+        (peakShape (true && decide (loc.val / 256 < graftedChunks f.leaves.val)) h (loc.val - off)
       off ((if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val) +
         ((f.inactive.val - (i + 1)) +
-          (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0)))) ((List.range ((f.inactive.val - (i + 1)) +
+          (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0))))
+            ((List.range ((f.inactive.val - (i + 1)) +
         (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0))).map
       fun j => Shape.atom (.sibling ((if min i f.inactive.val = 0 then 0 else 1) +
         (i - f.inactive.val) + j))))) = merkle := by
@@ -1364,11 +1368,14 @@ theorem reconstruct_refines (f : current.Fields Bytes) (loc : Std.U64) (chunk : 
       rw [hp] at tailInfo
       exact ⟨tailInfo.1, by simp [fields, RawProof.get, rawOf, hp], tailInfo.2.2⟩
   have ev := envelope_val (fields (rawOf f chunk) item) f.ops_root chunk rfl (fun _ => rfl) rfl
-    f.leaves.val f.inactive.val loc.val (foldTarget i f.inactive.val ((List.range ((if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val))).map
-      fun j => Shape.atom (.sibling j)) (peakShape (true && decide (loc.val / 256 < graftedChunks f.leaves.val)) h (loc.val - off)
+    f.leaves.val f.inactive.val loc.val (foldTarget i f.inactive.val
+      ((List.range ((if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val))).map
+      fun j => Shape.atom (.sibling j))
+        (peakShape (true && decide (loc.val / 256 < graftedChunks f.leaves.val)) h (loc.val - off)
       off ((if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val) +
         ((f.inactive.val - (i + 1)) +
-          (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0)))) ((List.range ((f.inactive.val - (i + 1)) +
+          (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0))))
+            ((List.range ((f.inactive.val - (i + 1)) +
         (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0))).map
       fun j => Shape.atom (.sibling ((if min i f.inactive.val = 0 then 0 else 1) +
         (i - f.inactive.val) + j))))
@@ -1393,7 +1400,8 @@ theorem reconstruct_refines (f : current.Fields Bytes) (loc : Std.U64) (chunk : 
       cases hp : optionOf f.partial with
       | none => rw [hp] at tailInfo; exact absurd tailInfo nz
       | some d => rfl
-    have leftA : ∀ e ∈ ((List.range ((if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val))).map
+    have leftA : ∀ e ∈
+        ((List.range ((if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val))).map
       fun j => Shape.atom (.sibling j)), e.available (rawOf f chunk) = true := by
       intro e he
       simp only [List.mem_map, List.mem_range] at he
@@ -1415,11 +1423,13 @@ theorem reconstruct_refines (f : current.Fields Bytes) (loc : Std.U64) (chunk : 
         ((f.inactive.val - (i + 1)) +
           (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0)))
       (by simp only [rawOf]; omega)
-    have foldA := available_foldTarget (rawOf f chunk) i f.inactive.val ((List.range ((if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val))).map
+    have foldA := available_foldTarget (rawOf f chunk) i f.inactive.val
+      ((List.range ((if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val))).map
       fun j => Shape.atom (.sibling j)) ((List.range ((f.inactive.val - (i + 1)) +
         (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0))).map
       fun j => Shape.atom (.sibling ((if min i f.inactive.val = 0 then 0 else 1) +
-        (i - f.inactive.val) + j))) (peakShape (true && decide (loc.val / 256 < graftedChunks f.leaves.val)) h (loc.val - off)
+        (i - f.inactive.val) + j)))
+          (peakShape (true && decide (loc.val / 256 < graftedChunks f.leaves.val)) h (loc.val - off)
       off ((if min i f.inactive.val = 0 then 0 else 1) + (i - f.inactive.val) +
         ((f.inactive.val - (i + 1)) +
           (if max (i + 1) f.inactive.val < (heights f.leaves.val).length then 1 else 0)))) (by
@@ -1493,6 +1503,26 @@ theorem verify_operation_refines (f : current.Fields Bytes) (loc : Std.U64)
     have same : r = root := by simpa [dyTerms] using k
     subst same
     exact reconstruct_refines f loc chunk chunks one item r wide bit hrec
+
+/-- Soundness of the production verifier: an operation it accepts at `loc` opens the trusted
+root along the paths `Plan` assigns to `loc`, as does its bitmap chunk, whose bit for `loc` is
+set. -/
+theorem verify_operation_sound (f : current.Fields Bytes) (loc : Std.U64) (chunk : Active.Chunk)
+    (item : Slice Std.U8) (root : Bytes) (wide : Wide f)
+    (acc : current.verify_operation mmbGeometry dyTerms () () qmdb.BACKWARD_FOLD true f loc
+      (chunkSlice chunk) item root = RustM.ok true) :
+    ∃ w, Mmb.Accepts root f.leaves.val f.inactive.val loc.val (part (.Bytes item)) w :=
+  RawProof.sound (verify_operation_refines f loc chunk item root wide acc)
+
+/-- The production verifier binds the tree's dimensions: an accepted proof opens the trusted root
+to a header with the proof's leaf and inactive-peak counts. -/
+theorem verify_operation_header (f : current.Fields Bytes) (loc : Std.U64)
+    (chunk : Active.Chunk) (item : Slice Std.U8) (root : Bytes) (wide : Wide f)
+    (acc : current.verify_operation mmbGeometry dyTerms () () qmdb.BACKWARD_FOLD true f loc
+      (chunkSlice chunk) item root = RustM.ok true) :
+    ∃ h : Header, h.root = root ∧ h.leaves.toNat = f.leaves.val ∧
+      h.inactive.toNat = f.inactive.val :=
+  RawProof.header_of_verify (verify_operation_refines f loc chunk item root wide acc)
 
 end
 end Qmdb.Mmb.Extracted

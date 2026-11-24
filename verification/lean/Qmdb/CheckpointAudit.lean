@@ -4,6 +4,7 @@ import Commonware.Symbolic.RootPair
 import Qmdb.Bitmap
 import Qmdb.Mmb.Children
 import Qmdb.Mmb.RawHeader
+import Qmdb.Mmb.Extracted
 import Qmdb.Ordered.Encoding
 import Qmdb.Ordered.Examples
 
