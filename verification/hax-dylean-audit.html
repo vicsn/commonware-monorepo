@@ -121,15 +121,15 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <div class="table"><table>
 <thead><tr><th scope="col">Link</th><th scope="col">What must hold</th><th scope="col">Strength today</th><th scope="col">Step</th></tr></thead>
 <tbody>
-<tr><th scope="row">L0</th><td>The refactor made for the proof preserved production behaviour.</td><td><span class="chip tested">tested</span> the old traversal is kept and compared with the new one</td><td>2</td></tr>
-<tr><th scope="row">L1</th><td>The files the proof sees are the files production compiles.</td><td><span class="chip shared">same code</span> included by <code>#[path]</code></td><td>2</td></tr>
-<tr><th scope="row">L2</th><td>The verification-only client behaves like production’s verifier.</td><td><span class="chip tested">tested</span> with known divergences</td><td>3</td></tr>
-<tr><th scope="row">L3</th><td>The generated Lean means what the Rust does.</td><td><span class="chip assumed">assumed</span> A1</td><td>4</td></tr>
-<tr><th scope="row">L4</th><td>The handwritten Lean readings of Rust traits are faithful.</td><td><span class="chip trusted">trusted</span></td><td>5</td></tr>
-<tr><th scope="row">L5</th><td>The application can supply the snapshot that the theorems assume.</td><td><span class="chip tested">tested</span> for honest openings</td><td>6</td></tr>
-<tr><th scope="row">L6</th><td>The protocol model and the way it uses DyLean are adequate.</td><td><span class="chip trusted">trusted</span></td><td>6</td></tr>
-<tr><th scope="row">L7</th><td>The README’s claims are what the Lean statements say.</td><td><span class="chip trusted">trusted</span> a reading</td><td>1</td></tr>
-<tr><th scope="row">L8</th><td>The proofs are checked by Lean with no escape hatch.</td><td><span class="chip proved">proved</span> by the build</td><td>7</td></tr>
+<tr><th scope="row">L0</th><td>The refactor made for the proof preserved production behaviour.</td><td><span class="chip tested">tested</span> the old traversal is kept and compared with the new one</td><td><a href="#step-2">2</a></td></tr>
+<tr><th scope="row">L1</th><td>The files the proof sees are the files production compiles.</td><td><span class="chip shared">same code</span> included by <code>#[path]</code></td><td><a href="#step-2">2</a></td></tr>
+<tr><th scope="row">L2</th><td>The verification-only client behaves like production’s verifier.</td><td><span class="chip tested">tested</span> with known divergences</td><td><a href="#step-3">3</a></td></tr>
+<tr><th scope="row">L3</th><td>The generated Lean means what the Rust does.</td><td><span class="chip assumed">assumed</span> A1</td><td><a href="#step-4">4</a></td></tr>
+<tr><th scope="row">L4</th><td>The handwritten Lean readings of Rust traits are faithful.</td><td><span class="chip trusted">trusted</span></td><td><a href="#step-5">5</a></td></tr>
+<tr><th scope="row">L5</th><td>The application can supply the snapshot that the theorems assume.</td><td><span class="chip tested">tested</span> for honest openings</td><td><a href="#step-6">6</a></td></tr>
+<tr><th scope="row">L6</th><td>The protocol model and the way it uses DyLean are adequate.</td><td><span class="chip trusted">trusted</span></td><td><a href="#step-6">6</a></td></tr>
+<tr><th scope="row">L7</th><td>The README’s claims are what the Lean statements say.</td><td><span class="chip trusted">trusted</span> a reading</td><td><a href="#step-1">1</a></td></tr>
+<tr><th scope="row">L8</th><td>The proofs are checked by Lean with no escape hatch.</td><td><span class="chip proved">proved</span> by the build</td><td><a href="#step-7">7</a></td></tr>
 </tbody></table></div>
 <p>The labels: <span class="chip proved">proved</span> a named Lean lemma states the link and Lean checks it. <span class="chip tested">tested</span> a test samples it. <span class="chip trusted">trusted</span> a person must read both sides; nothing checks it. <span class="chip assumed">assumed</span> one of A1 to A4. <span class="chip shared">same code</span> one side calls or includes the other. <span class="chip none">no link</span> the two sides should agree and nothing relates them.</p>
 <p><b>Order.</b> Start step 7 first and let it run: it builds the toolchain and takes the longest. Then work through steps 0 to 6 in order. Steps 3, 5 and 6 are where a person’s judgement matters most. The times are rough and add up to about a day.</p>
@@ -159,15 +159,15 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <div class="table"><table>
 <thead><tr><th scope="col">Link</th><th scope="col">What must hold</th><th scope="col">Strength today</th><th scope="col">Step</th></tr></thead>
 <tbody>
-<tr><th scope="row">M1</th><td>The production files that part II extracts mean the same in the extracted crate as in production.</td><td><span class="chip shared">same code</span> for the rules, geometry, reconstruction and layout files; <span class="chip trusted">trusted</span> for <code>claim.rs</code>, which is compiled against stand-in types</td><td>10</td></tr>
-<tr><th scope="row">M2</th><td>The generated Lean means what the Rust does.</td><td><span class="chip assumed">assumed</span> A1</td><td>4, 11</td></tr>
-<tr><th scope="row">M3</th><td>Production’s verifier and codec delegate to the shared files without changing what they compute.</td><td><span class="chip tested">tested</span> reference tests against the code they replaced, and the conformance fixtures</td><td>10, 11</td></tr>
-<tr><th scope="row">M4</th><td>Each extracted piece computes what the specification says at that place.</td><td><span class="chip proved">proved</span></td><td>10, 11</td></tr>
-<tr><th scope="row">M5</th><td>Production’s verifier, as a whole, refines <code>RawProof.verify</code>.</td><td><span class="chip proved">proved</span> for digests of SHA-256 width and 32-byte chunks</td><td>11</td></tr>
-<tr><th scope="row">M6</th><td>The writer keeps what the statements assume of a snapshot.</td><td><span class="chip none">no link</span> two examples show that the assumptions can be met</td><td>9</td></tr>
-<tr><th scope="row">M7</th><td>The statements are combined into a guarantee about a read.</td><td><span class="chip none">no link</span> here; it is the consumer’s proof</td><td>8</td></tr>
-<tr><th scope="row">M8</th><td>The claims of the README and of the doc comments are what the Lean statements say.</td><td><span class="chip trusted">trusted</span> a reading</td><td>8</td></tr>
-<tr><th scope="row">M9</th><td>The proofs are checked by Lean with no escape hatch.</td><td><span class="chip proved">proved</span> by the build</td><td>12</td></tr>
+<tr><th scope="row">M1</th><td>The production files that part II extracts mean the same in the extracted crate as in production.</td><td><span class="chip shared">same code</span> for the rules, geometry, reconstruction and layout files; <span class="chip trusted">trusted</span> for <code>claim.rs</code>, which is compiled against stand-in types</td><td><a href="#step-10">10</a></td></tr>
+<tr><th scope="row">M2</th><td>The generated Lean means what the Rust does.</td><td><span class="chip assumed">assumed</span> A1</td><td><a href="#step-4">4</a>, <a href="#step-11">11</a></td></tr>
+<tr><th scope="row">M3</th><td>Production’s verifier and codec delegate to the shared files without changing what they compute.</td><td><span class="chip tested">tested</span> reference tests against the code they replaced, and the conformance fixtures</td><td><a href="#step-10">10</a>, <a href="#step-11">11</a></td></tr>
+<tr><th scope="row">M4</th><td>Each extracted piece computes what the specification says at that place.</td><td><span class="chip proved">proved</span></td><td><a href="#step-10">10</a>, <a href="#step-11">11</a></td></tr>
+<tr><th scope="row">M5</th><td>Production’s verifier, as a whole, refines <code>RawProof.verify</code>.</td><td><span class="chip proved">proved</span> for digests of SHA-256 width and 32-byte chunks</td><td><a href="#step-11">11</a></td></tr>
+<tr><th scope="row">M6</th><td>The writer keeps what the statements assume of a snapshot.</td><td><span class="chip none">no link</span> two examples show that the assumptions can be met</td><td><a href="#step-9">9</a></td></tr>
+<tr><th scope="row">M7</th><td>The statements are combined into a guarantee about a read.</td><td><span class="chip none">no link</span> here; it is the consumer’s proof</td><td><a href="#step-8">8</a></td></tr>
+<tr><th scope="row">M8</th><td>The claims of the README and of the doc comments are what the Lean statements say.</td><td><span class="chip trusted">trusted</span> a reading</td><td><a href="#step-8">8</a></td></tr>
+<tr><th scope="row">M9</th><td>The proofs are checked by Lean with no escape hatch.</td><td><span class="chip proved">proved</span> by the build</td><td><a href="#step-12">12</a></td></tr>
 </tbody></table></div>
 <p><b>Order.</b> Read step 0 of part I first. Then steps 8 to 12 in order; steps 9 and 11 are where a person’s judgement matters most. Part II adds about a day.</p>
 </section>
