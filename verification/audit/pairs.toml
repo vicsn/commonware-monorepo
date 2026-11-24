@@ -968,7 +968,7 @@ text = "theorem maxHeight_eq : maxHeight = 62"
 
 [[fact]]
 file = "verification/symbolic/src/inclusion/tests.rs"
-text = "assert_eq!(1u64 << inclusion::MAX_HEIGHT, mmr::Family::MAX_LEAVES.as_u64());"
+text = "1u64 << inclusion::MAX_HEIGHT,"
 
 [[fact]]
 file = "storage/src/qmdb/mod.rs"

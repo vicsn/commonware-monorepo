@@ -237,7 +237,10 @@ fn verifiers_agree_with_production() {
 #[test]
 fn client_rejects_heights_above_the_bound() {
     // The bound is production's limit on the leaves of an MMR, as a height.
-    assert_eq!(1u64 << inclusion::MAX_HEIGHT, mmr::Family::MAX_LEAVES.as_u64());
+    assert_eq!(
+        1u64 << inclusion::MAX_HEIGHT,
+        mmr::Family::MAX_LEAVES.as_u64()
+    );
     let message = vec![1];
     for height in [inclusion::MAX_HEIGHT + 1, u32::MAX] {
         assert!(

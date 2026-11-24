@@ -7,12 +7,12 @@
 //! interval comparisons instantiate the bounded half-open case of `contains_cyclic`.
 
 use crate::{
+    BACKWARD_FOLD,
     current::{self, Fields},
     cyclic,
     geometry::Mmb,
     layout::{self, Widths, Writer},
     terms::Terms,
-    BACKWARD_FOLD,
 };
 use core::ops::Range;
 
@@ -197,3 +197,6 @@ where
         None => false,
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -7,12 +7,12 @@
 //! peaks, and the bound on the height.
 
 use crate::{
+    BACKWARD_FOLD,
     client::Messages,
     geometry::Mmr,
     mmr_geometry,
     reconstruct::{self, Single, StandardNodes},
     terms::Terms,
-    BACKWARD_FOLD,
 };
 
 /// Largest height whose `2^height` leaves fit production's `mmr::Family::MAX_LEAVES`.

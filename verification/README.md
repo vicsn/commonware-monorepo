@@ -36,10 +36,11 @@ terms and clients.
     `cryptography/src/handshake/sake/rules.rs`.
   - [client.rs](symbolic/src/client.rs): what every client shares.
   - A module for each target whose client production does not state in full,
-    [inclusion.rs](symbolic/src/inclusion.rs) and [bls.rs](symbolic/src/bls.rs), with differential tests
-    against production. The steps of the SAKE handshake are production's own.
-  - [reads.rs](symbolic/src/reads.rs): stand-in types beside which production's
-    `storage/src/qmdb/current/ordered/proof/claim.rs` is included for the ordered reads.
+    [inclusion.rs](symbolic/src/inclusion.rs), [reads.rs](symbolic/src/reads.rs) and
+    [bls.rs](symbolic/src/bls.rs), each with differential tests against production. `reads.rs`
+    also holds the stand-in types beside which production's
+    `storage/src/qmdb/current/ordered/proof/claim.rs` is included. The steps of the SAKE handshake
+    are production's own.
   - [concrete.rs](symbolic/src/concrete.rs): SHA-256 and BLS12-381 instances for those tests.
   - `proofs/lean/CommonwareSymbolic/`: the generated extraction.
 - [lean/](lean): the Lean package, on Lean's module system.
