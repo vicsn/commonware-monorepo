@@ -202,7 +202,7 @@ theorem dfs
         l.val = subtreePosition s k ∧ r.val = subtreePosition (s + 2 ^ k) k)
     (leafH : ∀ p a, nodes.leaf_digest x p a = RustM.ok (Verifier.leafTerm p a))
     (nodeH : ∀ (p : Std.U64) (h : Std.U32) (st : Std.U64) (l r : Bytes),
-      st.val ≤ loc.val → loc.val < st.val + 2 ^ h.val → h.val ≤ 62 →
+      st.val ≤ loc.val → loc.val < st.val + 2 ^ h.val → h.val ≤ 62 → 2 ^ h.val ∣ st.val →
       nodes.node_digest x p h st l r = RustM.ok
         (if g && h.val = 8 then Hash.hash (Concat.concat (Active.literal raw.chunk)
           (Verifier.nodeTerm p l r)) else Verifier.nodeTerm p l r)) (k : Nat) :
@@ -266,7 +266,8 @@ theorem dfs
             (Verifier.nodeTerm p l r)) else Verifier.nodeTerm p l r) := by
       simp only [traversal.Opening.Insts.Commonware_symbolicTraversalBackend.node, ilog,
         bind_ok, hx]
-      rw [nodeH p hh st l r (by omega) (by rw [hhv]; omega) (by omega), hhv]
+      rw [nodeH p hh st l r (by omega) (by rw [hhv]; omega) (by omega)
+        (by rw [hhv, hst]; exact tree.aligned), hhv]
     have collectB (o' : Opening (N := N)) (lp rp : Std.U64) (l r : Bytes) :
         traversal.Opening.Insts.Commonware_symbolicTraversalBackend.collect nodes single element
           noCollect o' lp l rp r = RustM.ok o' := by
@@ -324,6 +325,179 @@ theorem dfs
             RawProof.get, c₁v, Nat.sub_add_eq]
 
 end Dfs
+
+/-! ## The nodes of a current proof -/
+
+/-- The production MMB nodes, hashing with `dyTerms`. -/
+abbrev mmbNodes :=
+  reconstruct.StandardNodes.Insts.Commonware_symbolicTraversalNodes mmbGeometry dyTerms
+
+/-- The nodes a current proof reconstructs over: the MMB nodes grafted with bitmap chunks. -/
+abbrev GraftedNodes := grafting.Grafted (reconstruct.StandardNodes geometry.Mmb Unit) Unit
+  current.Chunk
+
+/-- The production grafting of the MMB nodes. -/
+abbrev grafted := grafting.Grafted.Insts.Commonware_symbolicTraversalNodes mmbNodes dyTerms
+  current.Chunk.Insts.CoreConvertAsRefSliceU8
+
+theorem grafted_children (x : GraftedNodes) (n : Nat) (s k : Nat) (p : Std.U64) (h : Std.U32)
+    (tree : Peaks.Subtree n s (k + 1)) (hp : p.val = subtreePosition s (k + 1))
+    (hh : h.val = k + 1) :
+    ∃ l r : Std.U64, grafted.children x p h = RustM.ok (l, r) ∧
+      l.val = subtreePosition s k ∧ r.val = subtreePosition (s + 2 ^ k) k := by
+  obtain ⟨l, r, ok, lv, rv, -, -⟩ := Peaks.physical_children tree p h hp hh
+  refine ⟨l, r, ?_, lv, rv⟩
+  simp [grafting.Grafted.Insts.Commonware_symbolicTraversalNodes.children,
+    reconstruct.StandardNodes.Insts.Commonware_symbolicTraversalNodes.children,
+    geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks.children, ok]
+
+theorem grafted_leaf (x : GraftedNodes) (p : Std.U64) (a : Slice Std.U8) :
+    grafted.leaf_digest x p a = RustM.ok (Verifier.leafTerm p a) := by
+  simp [grafting.Grafted.Insts.Commonware_symbolicTraversalNodes.leaf_digest,
+    reconstruct.StandardNodes.Insts.Commonware_symbolicTraversalNodes.leaf_digest,
+    Verifier.leaf_eq]
+
+/-- `is_zero` from index `i` on: whether every later byte is zero. -/
+theorem is_zero_loop_ok (c : Slice Std.U8) (k : Nat) : ∀ i : Std.Usize,
+    c.val.length - i.val = k → i.val ≤ c.val.length →
+    grafting.is_zero_loop c i =
+      RustM.ok (decide (∀ j (hj : j < c.val.length), i.val ≤ j → c.val[j] = 0#u8)) := by
+  induction k with
+  | zero =>
+    intro i hk hi
+    have done : i.val = c.val.length := by omega
+    have eq : i = Slice.len c := UScalar.eq_of_val_eq (by simp [done])
+    have step : grafting.is_zero_loop.body c i = RustM.ok (.done true) := by
+      simp [grafting.is_zero_loop.body, len_ok, eq]
+    unfold grafting.is_zero_loop
+    rw [loop_done _ _ _ step]
+    have all : ∀ j (hj : j < c.val.length), i.val ≤ j → c.val[j] = 0#u8 :=
+      fun j hj lo => absurd lo (by omega)
+    simpa using all
+  | succ k ih =>
+    intro i hk hi
+    have more : i.val < c.val.length := by omega
+    have ne : ¬ i = Slice.len c := fun h => by
+      have := congrArg UScalar.val h; simp at this; omega
+    have get := Verifier.index_ok c i more
+    by_cases zero : c.val[i.val] = 0#u8
+    · obtain ⟨i₁, hi₁, i₁v⟩ := add_ok i 1#usize (by scalar_tac)
+      have i₁v' : i₁.val = i.val + 1 := by simpa using i₁v
+      have rest := ih i₁ (by omega) (by omega)
+      have step : grafting.is_zero_loop.body c i = RustM.ok (.cont i₁) := by
+        simp [grafting.is_zero_loop.body, len_ok, ne, get, zero, hi₁]
+      unfold grafting.is_zero_loop at rest ⊢
+      rw [loop_cont _ _ _ step, rest]
+      congr 2
+      apply propext
+      constructor
+      · intro all j hj lo
+        by_cases at_i : j = i.val
+        · subst at_i; exact zero
+        · exact all j hj (by omega)
+      · intro all j hj lo
+        exact all j hj (by omega)
+    · have zero' : ¬ (c.val[i.val]).val = 0 := fun h => zero (UScalar.eq_of_val_eq (by simp [h]))
+      have step : grafting.is_zero_loop.body c i = RustM.ok (.done false) := by
+        simp [grafting.is_zero_loop.body, len_ok, ne, get, zero']
+      unfold grafting.is_zero_loop
+      rw [loop_done _ _ _ step]
+      congr 1
+      simp only [Bool.false_eq, decide_eq_false_iff_not, not_forall]
+      exact ⟨i.val, more, le_refl _, zero⟩
+
+/-- A 32-byte chunk as the byte slice production reads. -/
+abbrev chunkSlice (chunk : Active.Chunk) : Slice Std.U8 := Active.Chunk.asSlice chunk
+
+theorem is_zero_ok (chunk : Active.Chunk) :
+    grafting.is_zero (chunkSlice chunk) =
+      RustM.ok (decide (chunk = Vector.replicate 32 0)) := by
+  simp only [grafting.is_zero]
+  rw [is_zero_loop_ok _ _ 0#usize rfl (by simp)]
+  congr 1
+  simp only [chunkSlice, Active.Chunk.asSlice, Slice.from_val, decide_eq_decide]
+  constructor
+  · intro all
+    apply Vector.ext
+    intro j hj
+    have := all j (by simp; omega) (Nat.zero_le _)
+    simp at this
+    have v : (chunk[j]).toBitVec.toNat = 0 := congrArg UScalar.val this
+    apply UInt8.toBitVec_inj.mp
+    apply BitVec.eq_of_toNat_eq
+    simpa using v
+  · rintro rfl j hj -
+    simp only [Vector.toList_replicate, List.map_replicate, List.getElem_replicate]
+    rfl
+
+/-- The chunk bytes as `Plan` reads them are the bytes production hashes. -/
+theorem part_chunk (chunk : Active.Chunk) :
+    part (.Bytes (chunkSlice chunk)) = Active.literal chunk := by
+  simp only [part, Active.literal, chunkSlice, Active.Chunk.asSlice]
+  congr 1
+  apply ByteArray.ext
+  have back (b : UInt8) : UInt8.ofNat (UScalar.val (⟨b.toBitVec⟩ : Std.U8)) = b := by
+    apply UInt8.toBitVec_inj.mp
+    apply BitVec.eq_of_toNat_eq
+    simp [UScalar.val]
+  simp [toByteArray, Function.comp_def, back, Vector.toList]
+
+/-- A node of the production grafted nodes over one chunk, on the path to `loc`: the plain MMB
+node, or at height 8 the node grafted with the chunk when that chunk is graftable and nonzero. -/
+theorem grafted_node (chunk : Active.Chunk) (chunks : Slice current.Chunk)
+    (one : chunks.val = [chunkSlice chunk]) (startChunk graftable loc : Std.U64)
+    (hsc : startChunk.val = loc.val / 256) (p : Std.U64) (h : Std.U32) (st : Std.U64)
+    (l r : Bytes) (lo : st.val ≤ loc.val) (hi : loc.val < st.val + 2 ^ h.val) (low : h.val ≤ 62)
+    (aligned : 2 ^ h.val ∣ st.val) :
+    grafted.node_digest ⟨⟨(), ()⟩, (), 8#u32, startChunk, chunks, graftable⟩ p h st l r =
+      RustM.ok (if (decide (loc.val / 256 < graftable.val) &&
+          !decide (chunk = Vector.replicate 32 0)) && h.val = 8 then
+        Hash.hash (Concat.concat (Active.literal chunk) (Verifier.nodeTerm p l r))
+        else Verifier.nodeTerm p l r) := by
+  have plain : reconstruct.StandardNodes.Insts.Commonware_symbolicTraversalNodes.node_digest
+      mmbGeometry dyTerms ⟨(), ()⟩ p h st l r = RustM.ok (Verifier.nodeTerm p l r) := by
+    simp [reconstruct.StandardNodes.Insts.Commonware_symbolicTraversalNodes.node_digest,
+      Verifier.node_eq]
+  by_cases eight : h = 8#u32
+  case neg =>
+    have ne : h.val ≠ 8 := fun e => eight (UScalar.eq_of_val_eq (by simp [e]))
+    simp [grafting.Grafted.Insts.Commonware_symbolicTraversalNodes.node_digest, plain, eight, ne]
+  subst eight
+  have hv : (8#u32 : Std.U32).val = 8 := rfl
+  rw [hv] at hi aligned
+  obtain ⟨c, hc, cv, -, -⟩ := ok_of_partialSpec (UScalar.ShiftRight_spec st 8#u32)
+    (by intro e; cases e <;> simp) (by simp)
+  have cval : c.val = loc.val / 256 := by
+    rw [cv, hv, Nat.shiftRight_eq_div_pow]
+    obtain ⟨q, hq⟩ := aligned
+    rw [hq] at lo hi ⊢
+    simp at lo hi ⊢
+    omega
+  have cs : startChunk.val ≤ c.val := by omega
+  by_cases late : loc.val / 256 < graftable.val
+  case neg =>
+    have over : graftable.val ≤ c.val := by omega
+    simp [grafting.Grafted.Insts.Commonware_symbolicTraversalNodes.node_digest, plain,
+      grafting.graft, hc, over, late]
+  have under : ¬ graftable.val ≤ c.val := by omega
+  have notBelow : ¬ c.val < startChunk.val := by omega
+  obtain ⟨loc₀, hl, lv⟩ := sub_ok c startChunk (by omega)
+  have zero₀ : loc₀.val = 0 := by omega
+  have castZero : (UScalar.cast .Usize loc₀).val = 0 := by simp [zero₀]
+  have get : Slice.index_usize chunks (UScalar.cast .Usize loc₀) = RustM.ok (chunkSlice chunk) := by
+    rw [Verifier.index_ok chunks _ (by simp [castZero, Slice.length, one])]
+    simp [castZero, one]
+  by_cases nz : chunk = Vector.replicate 32 0
+  · simp [grafting.Grafted.Insts.Commonware_symbolicTraversalNodes.node_digest, plain,
+      grafting.graft, hc, under, notBelow, hl, len_ok, lift, one, zero₀, get,
+      current.Chunk.Insts.CoreConvertAsRefSliceU8.as_ref, grafting.grafted_leaf, is_zero_ok,
+      nz, late]
+  · simp only [grafting.Grafted.Insts.Commonware_symbolicTraversalNodes.node_digest, plain,
+      bind_ok]
+    simp [grafting.graft, hc, under, notBelow, hl, len_ok, lift, one, zero₀, get,
+      current.Chunk.Insts.CoreConvertAsRefSliceU8.as_ref, grafting.grafted_leaf, is_zero_ok,
+      nz, late, CoreModels.core.array.Array.as_slice,
+      CoreModels.rust_primitives.slice.array_as_slice, dyTerms, chain, part_chunk]
 
 end
 end Qmdb.Mmb.Extracted
