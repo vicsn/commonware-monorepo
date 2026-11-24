@@ -590,5 +590,106 @@ theorem val_merkle (get : Field → Bytes) (hd : get .domain = domainBytes)
     simp [merkleShape, z, zc, rootTerm, val, Shape.fill, Expr.value, hd, hw, chain, domain_eq,
       word_eq, ws, be_same]
 
+/-! ## The checks of a current proof over one chunk -/
+
+/-- A chunk of 32 bytes holds 256 bits. -/
+theorem chunk_bits_ok : current.chunk_bits 32#usize = RustM.ok (.Some 256#u64) := by
+  have wide : 2 ^ 32 ≤ 2 ^ System.Platform.numBits :=
+    Nat.pow_le_pow_right (by decide) (by cases System.Platform.numBits_eq <;> simp [*])
+  have maxv : (core.num.Usize.MAX).val = 2 ^ System.Platform.numBits - 1 := by
+    simp [core.num.Usize.MAX, Usize.max, Usize.numBits]
+  obtain ⟨q, hq, qv⟩ := UScalar.div_spec core.num.Usize.MAX (y := 8#usize) (by decide)
+  have qbig : ¬ q.val < 32 := by rw [qv, maxv]; simp; omega
+  obtain ⟨b, hb, bv⟩ := mul_ok (32#usize : Std.Usize) 8#usize (by scalar_tac)
+  have cast : (UScalar.cast .U64 b) = 256#u64 := UScalar.eq_of_val_eq (by
+    simp [UScalar.cast_val_eq] at bv ⊢; rw [bv])
+  obtain ⟨m, hm, mv⟩ := sub_ok (256#u64 : Std.U64) 1#u64 (by decide)
+  have bv' : b.val = 256 := by simpa using bv
+  have mv' : m.val = 255 := by simpa using mv
+  obtain ⟨top, ht, tv, -, -⟩ := ok_of_partialSpec (U64.ShiftLeft_IScalar_spec 1#u64 62#i32)
+    (by intro e; cases e <;> simp) (by simp)
+  have tv' : top.val = 2 ^ 62 := by
+    rw [tv]; simp [U64.size, Nat.shiftLeft_eq, IScalar.toNat, U64.numBits]
+  simp [current.chunk_bits, hq, hb, lift, cast, qbig, hm, ht, bv', mv', tv']
+
+theorem chunk_len (chunk : Active.Chunk) : Slice.len (chunkSlice chunk) = 32#usize :=
+  UScalar.eq_of_val_eq (by simp [chunkSlice, Active.Chunk.asSlice])
+
+/-- The bitmap chunks of one chunk all have its size. -/
+theorem sized_one (chunk : Active.Chunk) (chunks : Slice current.Chunk)
+    (one : chunks.val = [chunkSlice chunk]) :
+    current.sized current.Chunk.Insts.CoreConvertAsRefSliceU8 chunks 32#usize =
+      RustM.ok true := by
+  have lenOne : Slice.len chunks = 1#usize := UScalar.eq_of_val_eq (by simp [one])
+  have ne : ¬ (0#usize : Std.Usize) = 1#usize := by decide
+  have get := Verifier.index_ok chunks 0#usize (by simp [Slice.length, one])
+  obtain ⟨i₁, hi₁, i₁v⟩ := add_ok (0#usize : Std.Usize) 1#usize (by scalar_tac)
+  have i₁one : i₁ = 1#usize := UScalar.eq_of_val_eq (by simpa using i₁v)
+  subst i₁one
+  have size : (chunkSlice chunk).val.length = 32 := by simp [chunkSlice, Active.Chunk.asSlice]
+  have step₀ : current.sized_loop.body current.Chunk.Insts.CoreConvertAsRefSliceU8 chunks
+      32#usize 0#usize = RustM.ok (.cont 1#usize) := by
+    simp [current.sized_loop.body, len_ok, lenOne, ne, get, one,
+      current.Chunk.Insts.CoreConvertAsRefSliceU8.as_ref, size, hi₁]
+  have step₁ : current.sized_loop.body current.Chunk.Insts.CoreConvertAsRefSliceU8 chunks
+      32#usize 1#usize = RustM.ok (.done true) := by
+    simp [current.sized_loop.body, len_ok, lenOne]
+  simp only [current.sized, current.sized_loop]
+  rw [loop_cont _ _ _ step₀, loop_done _ _ _ step₁]
+
+/-- One chunk covers one operation exactly when the operation lies in the tree and below the
+size bound. -/
+theorem covered_one (chunk : Active.Chunk) (chunks : Slice current.Chunk)
+    (one : chunks.val = [chunkSlice chunk]) (maxLeaves leaves loc : Std.U64)
+    (positive : 1 ≤ maxLeaves.val) :
+    current.covered current.Chunk.Insts.CoreConvertAsRefSliceU8 maxLeaves leaves loc 1#u64
+      256#u64 chunks 32#usize =
+      RustM.ok (decide (loc.val < maxLeaves.val ∧ loc.val < leaves.val)) := by
+  have nz : ¬ (1#u64 : Std.U64) = 0#u64 := by decide
+  have lenOne : Slice.len chunks = 1#usize := UScalar.eq_of_val_eq (by simp [one])
+  have nonempty : CoreModels.core.slice.Slice.is_empty chunks = RustM.ok false := by
+    simp [CoreModels.core.slice.Slice.is_empty, len_ok, lenOne]
+  have fewer : ¬ (1#u64 : Std.U64) > maxLeaves := by scalar_tac
+  obtain ⟨room, hroom, roomv⟩ := sub_ok maxLeaves 1#u64 (by simpa using positive)
+  by_cases late : loc.val < maxLeaves.val
+  case neg =>
+    have past : room.val < loc.val := by simp at roomv; omega
+    simp [current.covered, nz, nonempty, fewer, hroom, past, late]
+  have before : ¬ room.val < loc.val := by simp at roomv; omega
+  obtain ⟨e, he, ev⟩ := add_ok loc 1#u64 (by scalar_tac)
+  by_cases inside : loc.val < leaves.val
+  case neg =>
+    have over : leaves.val < e.val := by simp at ev; omega
+    simp [current.covered, nz, nonempty, fewer, hroom, he, over, inside]
+  have notOver : ¬ leaves.val < e.val := by simp at ev; omega
+  obtain ⟨l, hl, lv⟩ := sub_ok e 1#u64 (by simp at ev ⊢; omega)
+  have lv' : l = loc := UScalar.eq_of_val_eq (by simp at ev lv; omega)
+  subst lv'
+  obtain ⟨q, hq, qv⟩ := UScalar.div_spec l (y := 256#u64) (by decide)
+  obtain ⟨z, hz, zv⟩ := sub_ok q q (le_refl _)
+  have zz : z.val = 0 := by rw [zv]; simp
+  obtain ⟨o, ho, ov⟩ := add_ok z 1#u64 (by rw [zz]; simp [U64.max, U64.numBits])
+  have ov' : o.val = 1 := by rw [ov, zz]; rfl
+  simp [current.covered, nz, nonempty, fewer, hroom, before, he, notOver, hl, hq, hz, ho, len_ok,
+    lenOne, lift, ov', sized_one chunk chunks one, late, inside]
+
+/-- The leaf count at which an MMB's height-8 node first exists. -/
+theorem birth_eight : mmbGeometry.birth_offset () 8#u32 = RustM.ok 383#u64 := by
+  have z : ¬ (8#u32 : Std.U32) = 0#u32 := by decide
+  obtain ⟨i, hi, iv⟩ := sub_ok (8#u32 : Std.U32) 1#u32 (by decide)
+  have seven : i.val = 7 := by simpa using iv
+  obtain ⟨half, hh, hv⟩ := pow_ok i (by omega)
+  have halfv : half.val = 128 := by rw [hv, seven]; rfl
+  have mul : CoreModels.core.num.U64.checked_mul half 3#u64 =
+      RustM.ok (.Some ⟨BitVec.ofNat 64 384⟩) := by
+    simp [CoreModels.core.num.U64.checked_mul, CoreModels.core.num.U64.overflowing_mul,
+      rust_primitives.arithmetic.overflowing_mul_u64, uoverflowing_mul, halfv]
+  obtain ⟨r, hr, rv⟩ := sub_ok (⟨BitVec.ofNat 64 384⟩ : Std.U64) 1#u64 (by decide)
+  have r383 : r = 383#u64 := UScalar.eq_of_val_eq (by simp at rv; rw [rv]; decide)
+  subst r383
+  simp [geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks.birth_offset,
+    mmb_geometry.birth_offset, z, hi, seven, hh, mul, CoreModels.core.option.Option.expect, hr,
+    massert, core.num.U64.BITS]
+
 end
 end Qmdb.Mmb.Extracted
