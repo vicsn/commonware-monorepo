@@ -42,7 +42,7 @@ name = "verifier ignores unused siblings"
 file = "storage/src/merkle/proof/reconstruct.rs"
 original = "    if opening.cursor() != digests.len() {\n        return Err(Error::ExtraDigests);\n    }\n"
 mutated = ""
-fails = "Qmdb.Verifier"
+fails = "Qmdb.Reconstruct"
 
 [[mutation]]
 name = "client skips verification"
@@ -64,3 +64,59 @@ file = "storage/src/qmdb/current/ordered/proof/claim.rs"
 original = "key,\n        value,\n        next_key: next.clone(),"
 mutated = "key: next.clone(),\n        value,\n        next_key: key,"
 fails = "Qmdb.Ordered.Extraction"
+
+[[mutation]]
+name = "current proof skips the activity bit"
+file = "storage/src/qmdb/current/proof/rules.rs"
+original = "    if !activity::get(chunk, location, bits) {\n        return false;\n    }\n"
+mutated = ""
+fails = "Qmdb.Mmb.Extracted"
+
+[[mutation]]
+name = "current proof accepts a missing partial chunk digest"
+file = "storage/src/qmdb/current/proof/rules.rs"
+original = "        None => next_bit == 0,"
+mutated = "        None => true,"
+fails = "Qmdb.Mmb.Extracted"
+
+[[mutation]]
+name = "grafting hashes an all-zero chunk"
+file = "storage/src/qmdb/current/grafting/rules.rs"
+original = "    if is_zero(chunk) {"
+mutated = "    if !is_zero(chunk) {"
+fails = "Qmdb.Mmb.Extracted"
+
+[[mutation]]
+name = "graftable count off by one"
+file = "storage/src/qmdb/current/grafting/rules.rs"
+original = "    (leaves - first_birth) / (1u64 << grafting_height) + 1"
+mutated = "    (leaves - first_birth) / (1u64 << grafting_height)"
+fails = "Qmdb.Mmb.Extracted"
+
+[[mutation]]
+name = "update written with the delete tag"
+file = "storage/src/qmdb/any/operation/layout.rs"
+original = "            writer.byte(UPDATE_CONTEXT);"
+mutated = "            writer.byte(DELETE_CONTEXT);"
+fails = "Qmdb.Ordered.Encoding"
+
+[[mutation]]
+name = "MMB children swapped"
+file = "storage/src/merkle/mmb/geometry.rs"
+original = "(parent_leaf - 3 * base, parent_leaf - base)"
+mutated = "(parent_leaf - base, parent_leaf - 3 * base)"
+fails = "Qmdb.Mmb.ChildGeometry"
+
+[[mutation]]
+name = "MMB peak heights ignore the delayed merge"
+file = "storage/src/merkle/mmb/geometry.rs"
+original = "let height = (i as u64) + (((n_val + 1) >> i) & 1);"
+mutated = "let height = i as u64;"
+fails = "Qmdb.Mmb.Peaks"
+
+[[mutation]]
+name = "backward bagging swaps fold operands"
+file = "storage/src/merkle/hasher/terms.rs"
+original = "bag = fold(terms, &peak, &bag);"
+mutated = "bag = fold(terms, &bag, &peak);"
+fails = "Qmdb.Reconstruct"
