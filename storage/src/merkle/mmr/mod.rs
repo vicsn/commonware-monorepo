@@ -71,6 +71,7 @@
 //! ```
 
 pub mod batch;
+pub(crate) mod geometry;
 pub mod iterator;
 pub mod mem;
 pub mod proof;
@@ -106,13 +107,13 @@ pub type Error = merkle::Error<Family>;
 pub struct Family;
 
 impl merkle::Family for Family {
-    const DOMAIN: u8 = 0;
+    const DOMAIN: u8 = geometry::DOMAIN;
 
     /// Maximum valid position: the largest MMR size for 2^62 leaves is `2^63 - 1`.
     const MAX_NODES: Position = Position::new(0x7FFFFFFFFFFFFFFF); // (1 << 63) - 1
 
     /// Maximum valid location: the largest leaf count is `2^62`.
-    const MAX_LEAVES: Location = Location::new(0x4000_0000_0000_0000); // 2^62
+    const MAX_LEAVES: Location = Location::new(geometry::MAX_LEAVES); // 2^62
 
     fn location_to_position(loc: Location) -> Position {
         let loc = *loc;
@@ -177,7 +178,8 @@ impl merkle::Family for Family {
     }
 
     fn children(pos: Position, height: u32) -> (Position, Position) {
-        (pos - (1 << height), pos - 1)
+        let (left, right) = geometry::children(*pos, height);
+        (Position::new(left), Position::new(right))
     }
 
     fn parent_heights(leaves: Location) -> impl Iterator<Item = u32> {
@@ -243,7 +245,7 @@ impl merkle::Family for Family {
     }
 
     fn birth_offset(height: u32) -> u64 {
-        1u64.checked_shl(height).expect("height excessively large")
+        geometry::birth_offset(height)
     }
 }
 

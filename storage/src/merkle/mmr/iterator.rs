@@ -4,7 +4,7 @@
 
 use crate::merkle::{
     Family as _,
-    mmr::{Family, Position},
+    mmr::{Family, Location, Position, geometry},
 };
 
 /// A PeakIterator returns a (position, height) tuple for each peak in an MMR with the given size,
@@ -15,34 +15,18 @@ use crate::merkle::{
 /// [(14, 3), (17, 1), (18, 0)]
 /// ```
 #[derive(Default)]
-pub struct PeakIterator {
-    size: Position, // number of nodes in the MMR at the point the iterator was initialized
-    node_pos: Position, // position of the current node
-    two_h: u64,     // 2^(height+1) of the current node
-}
+pub struct PeakIterator(geometry::Peaks);
 
 impl PeakIterator {
     /// Return a new PeakIterator over the peaks of a MMR with the given number of nodes.
     ///
     /// # Panics
     ///
-    /// Iteration will panic if size is not a valid MMR size. If used on untrusted input, call
+    /// Panics if size is not a valid MMR size. If used on untrusted input, call
     /// `Position::is_valid_size` first.
     pub fn new(size: Position) -> Self {
-        if size == 0 {
-            return Self::default();
-        }
-        // Compute the position at which to start the search for peaks. This starting position will
-        // not be in the MMR unless it happens to be a single perfect binary tree, but that's OK as
-        // we will descend leftward until we find the first peak.
-        let start = u64::MAX >> size.leading_zeros();
-        assert_ne!(start, u64::MAX, "size overflow");
-        let two_h = 1 << start.trailing_ones();
-        Self {
-            size,
-            node_pos: Position::new(start - 1),
-            two_h,
-        }
+        let leaves = Location::try_from(size).expect("size is not a valid MMR size");
+        Self(geometry::Peaks::new(*leaves))
     }
 
     /// Returns the largest valid MMR size that is no greater than the given size.
@@ -93,20 +77,9 @@ impl Iterator for PeakIterator {
     type Item = (Position, u32); // (peak, height)
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.two_h > 1 {
-            if self.node_pos < self.size {
-                // found a peak
-                let peak_item = (self.node_pos, self.two_h.trailing_zeros() - 1);
-                // move to the right sibling
-                self.node_pos += self.two_h - 1;
-                assert!(self.node_pos >= self.size); // sibling shouldn't be in the MMR if MMR is valid
-                return Some(peak_item);
-            }
-            // descend to the left child
-            self.two_h >>= 1;
-            self.node_pos -= self.two_h;
-        }
-        None
+        self.0
+            .next()
+            .map(|(position, height)| (Position::new(position), height))
     }
 }
 
@@ -132,6 +105,45 @@ pub(crate) const fn pos_to_height(pos: Position) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The size-based peak search the leaf-count iterator replaced.
+    fn reference_peaks(size: u64) -> Vec<(u64, u32)> {
+        let mut peaks = Vec::new();
+        if size == 0 {
+            return peaks;
+        }
+        let start = u64::MAX >> size.leading_zeros();
+        let mut two_h = 1u64 << start.trailing_ones();
+        let mut node_pos = start - 1;
+        while two_h > 1 {
+            if node_pos < size {
+                peaks.push((node_pos, two_h.trailing_zeros() - 1));
+                node_pos += two_h - 1;
+                continue;
+            }
+            two_h >>= 1;
+            node_pos -= two_h;
+        }
+        peaks
+    }
+
+    #[test]
+    fn peaks_match_reference() {
+        let large = (0..64).flat_map(|shift| {
+            let base = 1u64 << shift.min(62);
+            [base - 1, base, base + 1, base | (base >> 1)]
+        });
+        for leaves in (0u64..=5000).chain(large) {
+            if leaves > geometry::MAX_LEAVES {
+                continue;
+            }
+            let size = Position::try_from(Location::new(leaves)).unwrap();
+            let peaks: Vec<_> = PeakIterator::new(size)
+                .map(|(position, height)| (*position, height))
+                .collect();
+            assert_eq!(peaks, reference_peaks(*size), "leaves={leaves}");
+        }
+    }
     use crate::merkle::{
         Bagging::ForwardFold,
         mmr::{Location, StandardHasher as Standard, mem::Mmr},

@@ -120,6 +120,7 @@
 //! ```
 
 pub mod batch;
+pub(crate) mod geometry;
 pub mod iterator;
 pub mod mem;
 pub mod proof;
@@ -156,39 +157,21 @@ pub type Error = merkle::Error<Family>;
 pub struct Family;
 
 impl merkle::Family for Family {
-    const DOMAIN: u8 = 1;
+    const DOMAIN: u8 = geometry::DOMAIN;
 
     /// Maximum valid position (node count): `2^63 - 2` (the size for `2^62 + 30` leaves).
-    const MAX_NODES: Position = Position::new(0x7FFF_FFFF_FFFF_FFFE);
+    const MAX_NODES: Position = Position::new(geometry::MAX_NODES);
 
     /// Maximum valid location (leaf count): `2^62 + 30`.
-    const MAX_LEAVES: Location = Location::new(0x4000_0000_0000_001E);
+    const MAX_LEAVES: Location = Location::new(geometry::MAX_LEAVES);
 
     fn location_to_position(loc: Location) -> Position {
-        let loc = loc.as_u64();
         // 2*N - ilog2(N+1) for MMB
-        Position::new(2 * loc - (loc + 1).ilog2() as u64)
+        Position::new(geometry::location_to_position(*loc))
     }
 
     fn position_to_location(pos: Position) -> Option<Location> {
-        let pos = pos.as_u64();
-        // Solve 2*N - ilog2(N+1) = pos for N.
-        // Starting estimate: N ~ (pos + ilog2(N+1)) / 2 ~ pos/2. One refinement gives accuracy
-        // within -1 if the input is a valid leaf position, so the loop body runs at most twice.
-        let mut n = pos / 2;
-        n = (pos + (n + 1).ilog2() as u64) / 2;
-        loop {
-            let leaf_pos = 2 * n - (n + 1).ilog2() as u64;
-            if leaf_pos == pos {
-                return Some(Location::new(n));
-            }
-            if leaf_pos > pos {
-                // pos is not a leaf position (it falls between two leaf positions, so it's a
-                // parent).
-                return None;
-            }
-            n += 1;
-        }
+        geometry::position_to_location(*pos).map(Location::new)
     }
 
     fn to_nearest_size(size: Position) -> Position {
@@ -232,16 +215,7 @@ impl merkle::Family for Family {
     }
 
     fn birth_offset(height: u32) -> u64 {
-        if height == 0 {
-            return 1;
-        }
-
-        // Appending the last leaf brings the count to `2^h` past the leftmost leaf, and the merge
-        // lags it by `2^(h-1) - 1` leaves.
-        let half = 1u64
-            .checked_shl(height - 1)
-            .expect("height excessively large");
-        half.checked_mul(3).expect("height excessively large") - 1
+        geometry::birth_offset(height)
     }
 
     fn leftmost_leaf(pos: Position, height: u32) -> Location {

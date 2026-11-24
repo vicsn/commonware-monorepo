@@ -459,8 +459,162 @@ def terms.empty_root
       (Array.make 2#usize [ terms.Part.Bytes s, terms.Part.Bytes s1 ])
   TermsInst.hash terms1 s2
 
+/-- [commonware_symbolic::terms::fold_prefix]: loop body 0:
+    Source: 'src/../../../storage/src/merkle/hasher/terms.rs', lines 105:4-117:1 -/
+@[rust_loop_body]
+def terms.fold_prefix_loop.body
+  {T : Type _} {C : Type _} {Clause0_Digest : Type _} (TermsInst : terms.Terms
+  T Clause0_Digest) (CursorInst : terms.Cursor C Clause0_Digest) (terms1 : T)
+  (to_fold : Std.Usize) (peaks : C) (acc : Clause0_Digest) (folded : Std.Usize)
+  :
+  RustM (ControlFlow (C × Clause0_Digest × Std.Usize) ((core.option.Option
+    Clause0_Digest) × C))
+  := do
+  if folded >= to_fold
+  then ok (done (core.option.Option.Some acc, peaks))
+  else
+    let (o, peaks1) ← CursorInst.next peaks
+    match o with
+    | core.option.Option.None => ok (done (core.option.Option.None, peaks1))
+    | core.option.Option.Some peak =>
+      let acc1 ← terms.fold TermsInst terms1 acc peak
+      let folded1 ← folded + 1#usize
+      ok (cont (peaks1, acc1, folded1))
+
+/-- [commonware_symbolic::terms::fold_prefix]: loop 0:
+    Source: 'src/../../../storage/src/merkle/hasher/terms.rs', lines 105:4-117:1 -/
+@[rust_loop]
+def terms.fold_prefix_loop
+  {T : Type _} {C : Type _} {Clause0_Digest : Type _} (TermsInst : terms.Terms
+  T Clause0_Digest) (CursorInst : terms.Cursor C Clause0_Digest) (terms1 : T)
+  (to_fold : Std.Usize) (peaks : C) (acc : Clause0_Digest) (folded : Std.Usize)
+  :
+  RustM ((core.option.Option Clause0_Digest) × C)
+  := do
+  loop
+    (fun (peaks1, acc1, folded1) => terms.fold_prefix_loop.body TermsInst
+      CursorInst terms1 to_fold peaks1 acc1 folded1)
+    (peaks, acc, folded)
+
+/-- [commonware_symbolic::terms::fold_prefix]:
+    Source: 'src/../../../storage/src/merkle/hasher/terms.rs', lines 97:0-117:1 -/
+@[reducible]
+def terms.fold_prefix
+  {T : Type _} {C : Type _} {Clause0_Digest : Type _} (TermsInst : terms.Terms
+  T Clause0_Digest) (CursorInst : terms.Cursor C Clause0_Digest) (terms1 : T)
+  (first : Clause0_Digest) (to_fold : Std.Usize) (peaks : C) :
+  RustM ((core.option.Option Clause0_Digest) × C)
+  := do
+  terms.fold_prefix_loop TermsInst CursorInst terms1 to_fold peaks first
+    1#usize
+
+/-- [commonware_symbolic::terms::bagged_root]: loop body 0:
+    Source: 'src/../../../storage/src/merkle/hasher/terms.rs', lines 155:16-157:17 -/
+@[rust_loop_body]
+def terms.bagged_root_loop0.body
+  {T : Type _} {C : Type _} {Clause0_Digest : Type _} (TermsInst : terms.Terms
+  T Clause0_Digest) (CursorInst : terms.Cursor C Clause0_Digest) (terms1 : T)
+  (peaks : C) (bag : Clause0_Digest) :
+  RustM (ControlFlow (C × Clause0_Digest) (C × Clause0_Digest))
+  := do
+  let (o, peaks1) ← CursorInst.next_back peaks
+  match o with
+  | core.option.Option.None => ok (done (peaks1, bag))
+  | core.option.Option.Some peak =>
+    let bag1 ← terms.fold TermsInst terms1 peak bag
+    ok (cont (peaks1, bag1))
+
+/-- [commonware_symbolic::terms::bagged_root]: loop 0:
+    Source: 'src/../../../storage/src/merkle/hasher/terms.rs', lines 155:16-157:17 -/
+@[rust_loop]
+def terms.bagged_root_loop0
+  {T : Type _} {C : Type _} {Clause0_Digest : Type _} (TermsInst : terms.Terms
+  T Clause0_Digest) (CursorInst : terms.Cursor C Clause0_Digest) (peaks : C)
+  (terms1 : T) (bag : Clause0_Digest) :
+  RustM (C × Clause0_Digest)
+  := do
+  loop
+    (fun (peaks1, bag1) => terms.bagged_root_loop0.body TermsInst CursorInst
+      terms1 peaks1 bag1)
+    (peaks, bag)
+
+/-- [commonware_symbolic::terms::bagged_root]: loop body 1:
+    Source: 'src/../../../storage/src/merkle/hasher/terms.rs', lines 162:8-164:9 -/
+@[rust_loop_body]
+def terms.bagged_root_loop1.body
+  {T : Type _} {C : Type _} {Clause0_Digest : Type _} (TermsInst : terms.Terms
+  T Clause0_Digest) (CursorInst : terms.Cursor C Clause0_Digest) (terms1 : T)
+  (peaks : C) (acc : Clause0_Digest) :
+  RustM (ControlFlow (C × Clause0_Digest) (C × Clause0_Digest))
+  := do
+  let (o, peaks1) ← CursorInst.next peaks
+  match o with
+  | core.option.Option.None => ok (done (peaks1, acc))
+  | core.option.Option.Some peak =>
+    let acc1 ← terms.fold TermsInst terms1 acc peak
+    ok (cont (peaks1, acc1))
+
+/-- [commonware_symbolic::terms::bagged_root]: loop 1:
+    Source: 'src/../../../storage/src/merkle/hasher/terms.rs', lines 162:8-164:9 -/
+@[rust_loop]
+def terms.bagged_root_loop1
+  {T : Type _} {C : Type _} {Clause0_Digest : Type _} (TermsInst : terms.Terms
+  T Clause0_Digest) (CursorInst : terms.Cursor C Clause0_Digest) (peaks : C)
+  (terms1 : T) (acc : Clause0_Digest) :
+  RustM (C × Clause0_Digest)
+  := do
+  loop
+    (fun (peaks1, acc1) => terms.bagged_root_loop1.body TermsInst CursorInst
+      terms1 peaks1 acc1)
+    (peaks, acc)
+
+/-- [commonware_symbolic::terms::bagged_root]:
+    Source: 'src/../../../storage/src/merkle/hasher/terms.rs', lines 128:0-168:1 -/
+def terms.bagged_root
+  {T : Type _} {C : Type _} {Clause0_Digest : Type _} (TermsInst : terms.Terms
+  T Clause0_Digest) (CursorInst : terms.Cursor C Clause0_Digest) (terms1 : T)
+  (domain : Array Std.U8 2#usize) (backward : Bool) (leaves : Std.U64)
+  (to_fold : Std.Usize) (committed : Std.U64) (peaks : C) :
+  RustM ((core.option.Option Clause0_Digest) × C)
+  := do
+  let (o, peaks1) ← CursorInst.next peaks
+  match o with
+  | core.option.Option.None =>
+    if to_fold = 0#usize
+    then
+      if committed = 0#u64
+      then
+        let t ← terms.empty_root TermsInst terms1 domain leaves
+        ok (core.option.Option.Some t, peaks1)
+      else ok (core.option.Option.None, peaks1)
+    else ok (core.option.Option.None, peaks1)
+  | core.option.Option.Some first =>
+    let (o1, peaks2) ←
+      terms.fold_prefix TermsInst CursorInst terms1 first to_fold peaks1
+    match o1 with
+    | core.option.Option.None => ok (core.option.Option.None, peaks2)
+    | core.option.Option.Some acc =>
+      if backward
+      then
+        let (o2, peaks3) ← CursorInst.next_back peaks2
+        match o2 with
+        | core.option.Option.None =>
+          let t ← terms.root TermsInst terms1 domain leaves committed acc
+          ok (core.option.Option.Some t, peaks3)
+        | core.option.Option.Some last =>
+          let (peaks4, bag) ←
+            terms.bagged_root_loop0 TermsInst CursorInst peaks3 terms1 last
+          let bag1 ← terms.fold TermsInst terms1 acc bag
+          let t ← terms.root TermsInst terms1 domain leaves committed bag1
+          ok (core.option.Option.Some t, peaks4)
+      else
+        let (peaks3, bag) ←
+          terms.bagged_root_loop1 TermsInst CursorInst peaks2 terms1 acc
+        let t ← terms.root TermsInst terms1 domain leaves committed bag
+        ok (core.option.Option.Some t, peaks3)
+
 /-- [commonware_symbolic::terms::current_root]:
-    Source: 'src/../../../storage/src/merkle/hasher/terms.rs', lines 84:0-109:1 -/
+    Source: 'src/../../../storage/src/merkle/hasher/terms.rs', lines 172:0-197:1 -/
 def terms.current_root
   {T : Type _} {Clause0_Digest : Type _} (TermsInst : terms.Terms T
   Clause0_Digest) (terms1 : T) (ops : Clause0_Digest)
@@ -511,8 +665,713 @@ def terms.current_root
             ])
       TermsInst.hash terms1 s1
 
+/-- [commonware_symbolic::mmb_geometry::DOMAIN]
+    Source: 'src/../../../storage/src/merkle/mmb/geometry.rs', lines 7:0-7:32 -/
+@[global_simps, irreducible] def mmb_geometry.DOMAIN : Std.U8 := 1#u8
+
+/-- [commonware_symbolic::mmb_geometry::MAX_NODES]
+    Source: 'src/../../../storage/src/merkle/mmb/geometry.rs', lines 10:0-10:56 -/
+@[global_simps, irreducible]
+def mmb_geometry.MAX_NODES : Std.U64 := 9223372036854775806#u64
+
+/-- [commonware_symbolic::mmb_geometry::MAX_LEAVES]
+    Source: 'src/../../../storage/src/merkle/mmb/geometry.rs', lines 13:0-13:57 -/
+@[global_simps, irreducible]
+def mmb_geometry.MAX_LEAVES : Std.U64 := 4611686018427387934#u64
+
+/-- [commonware_symbolic::mmb_geometry::location_to_position]:
+    Source: 'src/../../../storage/src/merkle/mmb/geometry.rs', lines 16:0-18:1 -/
+def mmb_geometry.location_to_position (loc : Std.U64) : RustM Std.U64 := do
+  let i ← 2#u64 * loc
+  let i1 ← loc + 1#u64
+  let i2 ← core.num.U64.ilog2 i1
+  let i3 ← lift (UScalar.cast .U64 i2)
+  i - i3
+
+/-- [commonware_symbolic::mmb_geometry::position_to_location]: loop body 0:
+    Source: 'src/../../../storage/src/merkle/mmb/geometry.rs', lines 27:4-38:1 -/
+@[rust_loop_body]
+def mmb_geometry.position_to_location_loop.body
+  (pos : Std.U64) (n : Std.U64) :
+  RustM (ControlFlow Std.U64 (core.option.Option Std.U64))
+  := do
+  let i ← 2#u64 * n
+  let i1 ← n + 1#u64
+  let i2 ← core.num.U64.ilog2 i1
+  let i3 ← lift (UScalar.cast .U64 i2)
+  let leaf_pos ← i - i3
+  if leaf_pos = pos
+  then ok (done (core.option.Option.Some n))
+  else
+    if leaf_pos > pos
+    then ok (done core.option.Option.None)
+    else ok (cont i1)
+
+/-- [commonware_symbolic::mmb_geometry::position_to_location]: loop 0:
+    Source: 'src/../../../storage/src/merkle/mmb/geometry.rs', lines 27:4-38:1 -/
+@[rust_loop]
+def mmb_geometry.position_to_location_loop
+  (pos : Std.U64) (n : Std.U64) : RustM (core.option.Option Std.U64) := do
+  loop
+    (fun n1 => mmb_geometry.position_to_location_loop.body pos n1)
+    n
+
+/-- [commonware_symbolic::mmb_geometry::position_to_location]:
+    Source: 'src/../../../storage/src/merkle/mmb/geometry.rs', lines 21:0-38:1 -/
+def mmb_geometry.position_to_location
+  (pos : Std.U64) : RustM (core.option.Option Std.U64) := do
+  let n ← pos / 2#u64
+  let i ← n + 1#u64
+  let i1 ← core.num.U64.ilog2 i
+  let i2 ← lift (UScalar.cast .U64 i1)
+  let i3 ← pos + i2
+  let n1 ← i3 / 2#u64
+  mmb_geometry.position_to_location_loop pos n1
+
+/-- [commonware_symbolic::mmb_geometry::birth_offset]:
+    Source: 'src/../../../storage/src/merkle/mmb/geometry.rs', lines 46:0-56:1 -/
+def mmb_geometry.birth_offset (height : Std.U32) : RustM Std.U64 := do
+  if height = 0#u32
+  then ok 1#u64
+  else
+    let i ← height - 1#u32
+    massert (i < core.num.U64.BITS)
+    let half ← 1#u64 <<< i
+    let o ← core.num.U64.checked_mul half 3#u64
+    let i1 ← core.option.Option.expect o (toStr "height excessively large")
+    i1 - 1#u64
+
+/-- [commonware_symbolic::mmb_geometry::{impl core::default::Default for commonware_symbolic::mmb_geometry::Peaks}::default]:
+    Source: 'src/../../../storage/src/merkle/mmb/geometry.rs', lines 61:9-61:16
+    Visibility: public -/
+def mmb_geometry.Peaks.Insts.CoreDefaultDefault.default
+  : RustM mmb_geometry.Peaks := do
+  let i ← core.U64.Insts.CoreDefaultDefault.default
+  let i1 ← core.U32.Insts.CoreDefaultDefault.default
+  ok { n := i, current_i := i1, remaining := i1, start_leaf_cursor := i }
+
+/-- Trait implementation: [commonware_symbolic::mmb_geometry::{impl core::default::Default for commonware_symbolic::mmb_geometry::Peaks}]
+    Source: 'src/../../../storage/src/merkle/mmb/geometry.rs', lines 61:9-61:16 -/
+@[reducible]
+def mmb_geometry.Peaks.Insts.CoreDefaultDefault : core.default.Default
+  mmb_geometry.Peaks := {
+  default := mmb_geometry.Peaks.Insts.CoreDefaultDefault.default
+}
+
+/-- [commonware_symbolic::mmb_geometry::{commonware_symbolic::mmb_geometry::Peaks}::new]:
+    Source: 'src/../../../storage/src/merkle/mmb/geometry.rs', lines 75:4-89:5 -/
+def mmb_geometry.Peaks.new (n : Std.U64) : RustM mmb_geometry.Peaks := do
+  if n = 0#u64
+  then mmb_geometry.Peaks.Insts.CoreDefaultDefault.default
+  else
+    let i ← n + 1#u64
+    let num_peaks ← core.num.U64.ilog2 i
+    let i1 ← num_peaks - 1#u32
+    ok
+      { n, current_i := i1, remaining := num_peaks, start_leaf_cursor := 0#u64
+      }
+
+/-- [commonware_symbolic::mmb_geometry::{commonware_symbolic::mmb_geometry::Peaks}::leaves]:
+    Source: 'src/../../../storage/src/merkle/mmb/geometry.rs', lines 92:4-94:5 -/
+def mmb_geometry.Peaks.leaves (self : mmb_geometry.Peaks) : RustM Std.U64 := do
+  ok self.n
+
+/-- [commonware_symbolic::mmb_geometry::{commonware_symbolic::mmb_geometry::Peaks}::remaining]:
+    Source: 'src/../../../storage/src/merkle/mmb/geometry.rs', lines 97:4-99:5 -/
+def mmb_geometry.Peaks.impl.remaining
+  (self : mmb_geometry.Peaks) : RustM Std.U32 := do
+  ok self.remaining
+
+/-- [commonware_symbolic::mmb_geometry::peak_birth_leaf]:
+    Source: 'src/../../../storage/src/merkle/mmb/geometry.rs', lines 207:0-213:1 -/
+def mmb_geometry.peak_birth_leaf
+  (last_leaf : Std.U64) (height : Std.U32) : RustM Std.U64 := do
+  if height = 0#u32
+  then ok last_leaf
+  else
+    let i ← height - 1#u32
+    let i1 ← 1#u64 <<< i
+    let i2 ← last_leaf + i1
+    i2 - 1#u64
+
+/-- [commonware_symbolic::mmb_geometry::birthed_node_pos]:
+    Source: 'src/../../../storage/src/merkle/mmb/geometry.rs', lines 153:0-159:1 -/
+def mmb_geometry.birthed_node_pos
+  (birth_leaf : Std.U64) (is_leaf : Bool) : RustM Std.U64 := do
+  if is_leaf
+  then mmb_geometry.location_to_position birth_leaf
+  else let i ← mmb_geometry.location_to_position birth_leaf
+       i + 1#u64
+
+/-- [commonware_symbolic::mmb_geometry::{commonware_symbolic::mmb_geometry::Peaks}::next]:
+    Source: 'src/../../../storage/src/merkle/mmb/geometry.rs', lines 102:4-126:5 -/
+def mmb_geometry.Peaks.next
+  (self : mmb_geometry.Peaks) :
+  RustM ((core.option.Option (Std.U64 × Std.U32)) × mmb_geometry.Peaks)
+  := do
+  if self.remaining = 0#u32
+  then ok (core.option.Option.None, self)
+  else
+    let i ← lift (UScalar.cast .U64 self.current_i)
+    let i1 ← self.n + 1#u64
+    let i2 ← i1 >>> self.current_i
+    let i3 ← lift (i2 &&& 1#u64)
+    let height ← i + i3
+    let leaves_in_peak ← 1#u64 <<< height
+    let i4 ← self.start_leaf_cursor + leaves_in_peak
+    let last_leaf ← i4 - 1#u64
+    let i5 ← core.num.U32.wrapping_sub self.current_i 1#u32
+    let i6 ← self.remaining - 1#u32
+    let i7 ← lift (UScalar.cast .U32 height)
+    let n_birth ← mmb_geometry.peak_birth_leaf last_leaf i7
+    let i8 ← mmb_geometry.birthed_node_pos n_birth (height = 0#u64)
+    let i9 ← lift (UScalar.cast .U32 height)
+    ok (core.option.Option.Some (i8, i9),
+      { self with current_i := i5, remaining := i6, start_leaf_cursor := i4 })
+
+/-- [commonware_symbolic::mmb_geometry::child_leaves]:
+    Source: 'src/../../../storage/src/merkle/mmb/geometry.rs', lines 132:0-139:1 -/
+def mmb_geometry.child_leaves
+  (parent_leaf : Std.U64) (height : Std.U32) : RustM (Std.U64 × Std.U64) := do
+  if height = 1#u32
+  then let i ← parent_leaf - 1#u64
+       ok (i, parent_leaf)
+  else
+    let i ← height - 2#u32
+    let base ← 1#u64 <<< i
+    let i1 ← 3#u64 * base
+    let i2 ← parent_leaf - i1
+    let i3 ← parent_leaf - base
+    ok (i2, i3)
+
+/-- [commonware_symbolic::mmb_geometry::parent_birth_leaf]:
+    Source: 'src/../../../storage/src/merkle/mmb/geometry.rs', lines 165:0-180:1 -/
+def mmb_geometry.parent_birth_leaf
+  (pos : Std.U64) : RustM (core.option.Option Std.U64) := do
+  if pos < 2#u64
+  then ok core.option.Option.None
+  else
+    let o ← mmb_geometry.position_to_location pos
+    let b ← core.option.Option.is_some o
+    if b
+    then ok core.option.Option.None
+    else let i ← pos - 1#u64
+         mmb_geometry.position_to_location i
+
+/-- [commonware_symbolic::mmb_geometry::children]:
+    Source: 'src/../../../storage/src/merkle/mmb/geometry.rs', lines 190:0-201:1 -/
+def mmb_geometry.children
+  (pos : Std.U64) (height : Std.U32) : RustM (Std.U64 × Std.U64) := do
+  massert (height > 0#u32)
+  let o ← mmb_geometry.parent_birth_leaf pos
+  let s ←
+    core.option.Option.expect o (toStr "pos is not a valid parent position")
+  let (left_leaf, right_leaf) ← mmb_geometry.child_leaves s height
+  let left ← mmb_geometry.birthed_node_pos left_leaf (height = 1#u32)
+  let right ← mmb_geometry.birthed_node_pos right_leaf (height = 1#u32)
+  ok (left, right)
+
+/-- [commonware_symbolic::mmr_geometry::DOMAIN]
+    Source: 'src/../../../storage/src/merkle/mmr/geometry.rs', lines 7:0-7:32 -/
+@[global_simps, irreducible] def mmr_geometry.DOMAIN : Std.U8 := 0#u8
+
+/-- [commonware_symbolic::mmr_geometry::MAX_LEAVES]
+    Source: 'src/../../../storage/src/merkle/mmr/geometry.rs', lines 10:0-10:57 -/
+@[global_simps, irreducible]
+def mmr_geometry.MAX_LEAVES : Std.U64 := 4611686018427387904#u64
+
+/-- [commonware_symbolic::mmr_geometry::children]:
+    Source: 'src/../../../storage/src/merkle/mmr/geometry.rs', lines 14:0-16:1 -/
+def mmr_geometry.children
+  (pos : Std.U64) (height : Std.U32) : RustM (Std.U64 × Std.U64) := do
+  let i ← 1#u64 <<< height
+  let i1 ← pos - i
+  let i2 ← pos - 1#u64
+  ok (i1, i2)
+
+/-- [commonware_symbolic::mmr_geometry::birth_offset]:
+    Source: 'src/../../../storage/src/merkle/mmr/geometry.rs', lines 23:0-26:1 -/
+def mmr_geometry.birth_offset (height : Std.U32) : RustM Std.U64 := do
+  massert (height < core.num.U64.BITS)
+  1#u64 <<< height
+
+/-- [commonware_symbolic::mmr_geometry::{impl core::default::Default for commonware_symbolic::mmr_geometry::Peaks}::default]:
+    Source: 'src/../../../storage/src/merkle/mmr/geometry.rs', lines 32:9-32:16
+    Visibility: public -/
+def mmr_geometry.Peaks.Insts.CoreDefaultDefault.default
+  : RustM mmr_geometry.Peaks := do
+  let i ← core.U64.Insts.CoreDefaultDefault.default
+  let i1 ← core.U32.Insts.CoreDefaultDefault.default
+  ok { leaves := i, height := i1, nodes := i }
+
+/-- Trait implementation: [commonware_symbolic::mmr_geometry::{impl core::default::Default for commonware_symbolic::mmr_geometry::Peaks}]
+    Source: 'src/../../../storage/src/merkle/mmr/geometry.rs', lines 32:9-32:16 -/
+@[reducible]
+def mmr_geometry.Peaks.Insts.CoreDefaultDefault : core.default.Default
+  mmr_geometry.Peaks := {
+  default := mmr_geometry.Peaks.Insts.CoreDefaultDefault.default
+}
+
+/-- [commonware_symbolic::mmr_geometry::{commonware_symbolic::mmr_geometry::Peaks}::new]:
+    Source: 'src/../../../storage/src/merkle/mmr/geometry.rs', lines 44:4-50:5 -/
+def mmr_geometry.Peaks.new (leaves : Std.U64) : RustM mmr_geometry.Peaks := do
+  ok { leaves, height := core.num.U64.BITS, nodes := 0#u64 }
+
+/-- [commonware_symbolic::mmr_geometry::{commonware_symbolic::mmr_geometry::Peaks}::next]: loop body 0:
+    Source: 'src/../../../storage/src/merkle/mmr/geometry.rs', lines 54:8-64:5 -/
+@[rust_loop_body]
+def mmr_geometry.Peaks.next_loop.body
+  (self : mmr_geometry.Peaks) :
+  RustM (ControlFlow mmr_geometry.Peaks ((core.option.Option (Std.U64 ×
+    Std.U32)) × Std.U64 × Std.U32 × Std.U64))
+  := do
+  if self.height > 0#u32
+  then
+    let i ← self.height - 1#u32
+    let i1 ← self.leaves >>> i
+    let i2 ← lift (i1 &&& 1#u64)
+    if i2 = 1#u64
+    then
+      let i3 ← i + 1#u32
+      let i4 ← 1#u64 <<< i3
+      let size ← i4 - 1#u64
+      let i5 ← self.nodes + size
+      let peak ← i5 - 1#u64
+      ok (done (core.option.Option.Some (peak, i), self.leaves, i, i5))
+    else ok (cont { self with height := i })
+  else
+    ok (done (core.option.Option.None, self.leaves, self.height, self.nodes))
+
+/-- [commonware_symbolic::mmr_geometry::{commonware_symbolic::mmr_geometry::Peaks}::next]: loop 0:
+    Source: 'src/../../../storage/src/merkle/mmr/geometry.rs', lines 54:8-64:5 -/
+@[rust_loop]
+def mmr_geometry.Peaks.next_loop
+  (self : mmr_geometry.Peaks) :
+  RustM ((core.option.Option (Std.U64 × Std.U32)) × Std.U64 × Std.U32 ×
+    Std.U64)
+  := do
+  loop
+    (fun self1 => mmr_geometry.Peaks.next_loop.body self1)
+    self
+
+/-- [commonware_symbolic::mmr_geometry::{commonware_symbolic::mmr_geometry::Peaks}::next]:
+    Source: 'src/../../../storage/src/merkle/mmr/geometry.rs', lines 53:4-64:5 -/
+def mmr_geometry.Peaks.next
+  (self : mmr_geometry.Peaks) :
+  RustM ((core.option.Option (Std.U64 × Std.U32)) × mmr_geometry.Peaks)
+  := do
+  let (o, i, i1, i2) ← mmr_geometry.Peaks.next_loop self
+  ok (o, { leaves := i, height := i1, nodes := i2 })
+
+/-- [commonware_symbolic::reconstruct::{commonware_symbolic::reconstruct::StandardNodes<'a, G, T>}::new]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 66:4-68:5 -/
+def reconstruct.StandardNodes.new
+  {G : Type _} {T : Type _} (geometry1 : G) (terms1 : T) :
+  RustM (reconstruct.StandardNodes G T)
+  := do
+  ok { geometry := geometry1, terms := terms1 }
+
+/-- [commonware_symbolic::reconstruct::{impl commonware_symbolic::traversal::Nodes<Clause1_Digest> for commonware_symbolic::reconstruct::StandardNodes<'_0, G, T>}::node_digest]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 82:4-91:5 -/
+def
+  reconstruct.StandardNodes.Insts.Commonware_symbolicTraversalNodes.node_digest
+  {G : Type _} {T : Type _} {Clause0_Peaks : Type _} {Clause1_Digest : Type _}
+  (GeometryInst : reconstruct.Geometry G Clause0_Peaks) (termsTermsInst :
+  terms.Terms T Clause1_Digest) (self : reconstruct.StandardNodes G T)
+  (position : Std.U64) (_height : Std.U32) (_start : Std.U64)
+  (left : Clause1_Digest) (right : Clause1_Digest) :
+  RustM Clause1_Digest
+  := do
+  terms.node_digest termsTermsInst self.terms position left right
+
+/-- [commonware_symbolic::reconstruct::{impl commonware_symbolic::traversal::Nodes<Clause1_Digest> for commonware_symbolic::reconstruct::StandardNodes<'_0, G, T>}::leaf_digest]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 78:4-80:5 -/
+def
+  reconstruct.StandardNodes.Insts.Commonware_symbolicTraversalNodes.leaf_digest
+  {G : Type _} {T : Type _} {Clause0_Peaks : Type _} {Clause1_Digest : Type _}
+  (GeometryInst : reconstruct.Geometry G Clause0_Peaks) (termsTermsInst :
+  terms.Terms T Clause1_Digest) (self : reconstruct.StandardNodes G T)
+  (position : Std.U64) (element : Slice Std.U8) :
+  RustM Clause1_Digest
+  := do
+  terms.leaf_digest termsTermsInst self.terms position element
+
+/-- [commonware_symbolic::reconstruct::{impl commonware_symbolic::traversal::Nodes<Clause1_Digest> for commonware_symbolic::reconstruct::StandardNodes<'_0, G, T>}::children]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 74:4-76:5 -/
+def reconstruct.StandardNodes.Insts.Commonware_symbolicTraversalNodes.children
+  {G : Type _} {T : Type _} {Clause0_Peaks : Type _} {Clause1_Digest : Type _}
+  (GeometryInst : reconstruct.Geometry G Clause0_Peaks) (termsTermsInst :
+  terms.Terms T Clause1_Digest) (self : reconstruct.StandardNodes G T)
+  (position : Std.U64) (height : Std.U32) :
+  RustM (Std.U64 × Std.U64)
+  := do
+  GeometryInst.children self.geometry position height
+
+/-- Trait implementation: [commonware_symbolic::reconstruct::{impl commonware_symbolic::traversal::Nodes<Clause1_Digest> for commonware_symbolic::reconstruct::StandardNodes<'_0, G, T>}]
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 71:0-92:1 -/
+@[reducible]
+def reconstruct.StandardNodes.Insts.Commonware_symbolicTraversalNodes {G :
+  Type _} {T : Type _} {Clause0_Peaks : Type _} {Clause1_Digest : Type _}
+  (GeometryInst : reconstruct.Geometry G Clause0_Peaks) (termsTermsInst :
+  terms.Terms T Clause1_Digest) : traversal.Nodes (reconstruct.StandardNodes G
+  T) Clause1_Digest := {
+  coremarkerCopyInst := termsTermsInst.coremarkerCopyInst
+  children :=
+    reconstruct.StandardNodes.Insts.Commonware_symbolicTraversalNodes.children
+    GeometryInst termsTermsInst
+  leaf_digest :=
+    reconstruct.StandardNodes.Insts.Commonware_symbolicTraversalNodes.leaf_digest
+    GeometryInst termsTermsInst
+  node_digest :=
+    reconstruct.StandardNodes.Insts.Commonware_symbolicTraversalNodes.node_digest
+    GeometryInst termsTermsInst
+}
+
+/-- [commonware_symbolic::reconstruct::{impl core::convert::AsRef<[u8]> for commonware_symbolic::reconstruct::Element<'_0>}::as_ref]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 98:4-100:5
+    Visibility: public -/
+def reconstruct.Element.Insts.CoreConvertAsRefSliceU8.as_ref
+  (self : reconstruct.Element) : RustM (Slice Std.U8) := do
+  ok self
+
+/-- Trait implementation: [commonware_symbolic::reconstruct::{impl core::convert::AsRef<[u8]> for commonware_symbolic::reconstruct::Element<'_0>}]
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 97:0-101:1 -/
+@[reducible]
+def reconstruct.Element.Insts.CoreConvertAsRefSliceU8 : core.convert.AsRef
+  reconstruct.Element (Slice Std.U8) := {
+  as_ref := reconstruct.Element.Insts.CoreConvertAsRefSliceU8.as_ref
+}
+
+/-- [commonware_symbolic::reconstruct::{commonware_symbolic::reconstruct::Single<'a>}::new]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 108:4-110:5 -/
+def reconstruct.Single.new
+  (element : Slice Std.U8) : RustM reconstruct.Single := do
+  ok (core.option.Option.Some element)
+
+/-- [commonware_symbolic::reconstruct::{impl core::iter::traits::iterator::Iterator<commonware_symbolic::reconstruct::Element<'a>> for commonware_symbolic::reconstruct::Single<'a>}::next]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 116:4-124:5
+    Visibility: public -/
+def reconstruct.Single.Insts.CoreIterTraitsIteratorIteratorElement.next
+  (self : reconstruct.Single) :
+  RustM ((core.option.Option reconstruct.Element) × reconstruct.Single)
+  := do
+  match self with
+  | core.option.Option.None =>
+    ok (core.option.Option.None, core.option.Option.None)
+  | core.option.Option.Some element =>
+    ok (core.option.Option.Some element, core.option.Option.None)
+
+/-- Trait implementation: [commonware_symbolic::reconstruct::{impl core::iter::traits::iterator::Iterator<commonware_symbolic::reconstruct::Element<'a>> for commonware_symbolic::reconstruct::Single<'a>}]
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 113:0-125:1 -/
+@[reducible]
+def reconstruct.Single.Insts.CoreIterTraitsIteratorIteratorElement :
+  core.iter.traits.iterator.Iterator reconstruct.Single reconstruct.Element
+  := {
+  next := reconstruct.Single.Insts.CoreIterTraitsIteratorIteratorElement.next
+}
+
+/-- [commonware_symbolic::reconstruct::{commonware_symbolic::reconstruct::Ends<'a, D>}::new]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 136:4-142:5 -/
+def reconstruct.Ends.new
+  {D : Type _} (digests : Slice D) : RustM (reconstruct.Ends D) := do
+  let i ← core.slice.Slice.len digests
+  ok { digests, front := 0#usize, back := i }
+
+/-- [commonware_symbolic::reconstruct::{impl commonware_symbolic::terms::Cursor<D> for commonware_symbolic::reconstruct::Ends<'_0, D>}::next_back]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 158:4-165:5 -/
+def reconstruct.Ends.Insts.Commonware_symbolicTermsCursor.next_back
+  {D : Type _} (coremarkerCopyInst : core.marker.Copy D)
+  (self : reconstruct.Ends D) :
+  RustM ((core.option.Option D) × (reconstruct.Ends D))
+  := do
+  if self.front < self.back
+  then
+    let i ← self.back - 1#usize
+    let t ← Slice.index_usize self.digests i
+    ok (core.option.Option.Some t, { self with back := i })
+  else ok (core.option.Option.None, self)
+
+/-- [commonware_symbolic::reconstruct::{impl commonware_symbolic::terms::Cursor<D> for commonware_symbolic::reconstruct::Ends<'_0, D>}::next]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 148:4-156:5 -/
+def reconstruct.Ends.Insts.Commonware_symbolicTermsCursor.next
+  {D : Type _} (coremarkerCopyInst : core.marker.Copy D)
+  (self : reconstruct.Ends D) :
+  RustM ((core.option.Option D) × (reconstruct.Ends D))
+  := do
+  if self.front < self.back
+  then
+    let digest ← Slice.index_usize self.digests self.front
+    let i ← self.front + 1#usize
+    ok (core.option.Option.Some digest, { self with front := i })
+  else ok (core.option.Option.None, self)
+
+/-- Trait implementation: [commonware_symbolic::reconstruct::{impl commonware_symbolic::terms::Cursor<D> for commonware_symbolic::reconstruct::Ends<'_0, D>}]
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 145:0-166:1 -/
+@[reducible]
+def reconstruct.Ends.Insts.Commonware_symbolicTermsCursor {D : Type _}
+  (coremarkerCopyInst : core.marker.Copy D) : terms.Cursor (reconstruct.Ends D)
+  D := {
+  next := reconstruct.Ends.Insts.Commonware_symbolicTermsCursor.next
+    coremarkerCopyInst
+  next_back := reconstruct.Ends.Insts.Commonware_symbolicTermsCursor.next_back
+    coremarkerCopyInst
+}
+
+/-- [commonware_symbolic::reconstruct::siblings]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 170:0-180:1 -/
+def reconstruct.siblings
+  (width : Std.U64) (start : Std.U64) (range_start : Std.U64)
+  (range_end : Std.U64) :
+  RustM Std.Usize
+  := do
+  let i ← start + width
+  if i <= range_start
+  then ok 1#usize
+  else
+    if start >= range_end
+    then ok 1#usize
+    else
+      if width = 1#u64
+      then ok 0#usize
+      else
+        let half ← width / 2#u64
+        let i1 ← reconstruct.siblings half start range_start range_end
+        let i2 ← start + half
+        let i3 ← reconstruct.siblings half i2 range_start range_end
+        i1 + i3
+partial_fixpoint
+
+/-- [commonware_symbolic::reconstruct::{commonware_symbolic::reconstruct::Layout}::new]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 203:4-234:5 -/
+def reconstruct.Layout.new
+  (before : Std.Usize) (overlapping : Std.Usize) (after : Std.Usize)
+  (inactive : Std.Usize) (backward : Bool) :
+  RustM (core.option.Option reconstruct.Layout)
+  := do
+  let i ← before + overlapping
+  let i1 ← i + after
+  if inactive > i1
+  then ok core.option.Option.None
+  else
+    if backward
+    then
+      let individual ← core.num.Usize.saturating_sub inactive i
+      let fold ← if inactive < before
+                   then ok inactive
+                   else ok before
+      if individual < after
+      then
+        ok (core.option.Option.Some
+          { before, overlapping, after, fold, individual_after := individual })
+      else
+        ok (core.option.Option.Some
+          { before, overlapping, after, fold, individual_after := after })
+    else
+      ok (core.option.Option.Some
+        { before, overlapping, after, fold := before, individual_after := after
+        })
+
+/-- [commonware_symbolic::reconstruct::{commonware_symbolic::reconstruct::Layout}::fold_digests]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 237:4-239:5 -/
+def reconstruct.Layout.fold_digests
+  (self : reconstruct.Layout) : RustM Std.Usize := do
+  if self.fold = 0#usize
+  then ok 0#usize
+  else ok 1#usize
+
+/-- [commonware_symbolic::reconstruct::{commonware_symbolic::reconstruct::Layout}::suffix_digests]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 242:4-248:5 -/
+def reconstruct.Layout.suffix_digests
+  (self : reconstruct.Layout) : RustM Std.Usize := do
+  if self.individual_after < self.after
+  then ok 1#usize
+  else ok 0#usize
+
+/-- [commonware_symbolic::reconstruct::{commonware_symbolic::reconstruct::Layout}::prefix_start]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 251:4-253:5 -/
+def reconstruct.Layout.prefix_start
+  (self : reconstruct.Layout) : RustM Std.Usize := do
+  reconstruct.Layout.fold_digests self
+
+/-- [commonware_symbolic::reconstruct::{commonware_symbolic::reconstruct::Layout}::after_start]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 256:4-258:5 -/
+def reconstruct.Layout.after_start
+  (self : reconstruct.Layout) : RustM Std.Usize := do
+  let i ← reconstruct.Layout.prefix_start self
+  let i1 ← self.before - self.fold
+  i + i1
+
+/-- [commonware_symbolic::reconstruct::{commonware_symbolic::reconstruct::Layout}::suffix_start]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 261:4-263:5 -/
+def reconstruct.Layout.suffix_start
+  (self : reconstruct.Layout) : RustM Std.Usize := do
+  let i ← reconstruct.Layout.after_start self
+  i + self.individual_after
+
+/-- [commonware_symbolic::reconstruct::{commonware_symbolic::reconstruct::Layout}::siblings_start]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 266:4-268:5 -/
+def reconstruct.Layout.siblings_start
+  (self : reconstruct.Layout) : RustM Std.Usize := do
+  let i ← reconstruct.Layout.suffix_start self
+  let i1 ← reconstruct.Layout.suffix_digests self
+  i + i1
+
+/-- [commonware_symbolic::reconstruct::{commonware_symbolic::reconstruct::Layout}::inactive_after_fold]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 272:4-277:5 -/
+def reconstruct.Layout.inactive_after_fold
+  (self : reconstruct.Layout) (inactive : Std.Usize) : RustM Std.Usize := do
+  if self.fold = 0#usize
+  then ok inactive
+  else let i ← core.num.Usize.saturating_sub inactive self.fold
+       i + 1#usize
+
+/-- [commonware_symbolic::reconstruct::missing]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 281:0-286:1 -/
+def reconstruct.missing
+  (error : traversal.Error) : RustM reconstruct.Error := do
+  match error with
+  | traversal.Error.MissingElements => ok reconstruct.Error.MissingElements
+  | traversal.Error.MissingDigests => ok reconstruct.Error.MissingDigests
+
+/-- [commonware_symbolic::traversal::{impl commonware_symbolic::traversal::Backend<Clause0_Digest> for commonware_symbolic::traversal::Opening<'_0, N, E, C, Clause0_Digest>}::collect]:
+    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 198:4-207:5 -/
+def traversal.Opening.Insts.Commonware_symbolicTraversalBackend.collect
+  {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _}
+  {Clause1_Item : Type _} (NodesInst : traversal.Nodes N Clause0_Digest)
+  (coreitertraitsiteratorIteratorInst : core.iter.traits.iterator.Iterator E
+  Clause1_Item) (coreconvertAsRefClause1_ItemSliceU8Inst : core.convert.AsRef
+  Clause1_Item (Slice Std.U8)) (CollectInst : traversal.Collect C
+  Clause0_Digest) (self : traversal.Opening N E C Clause0_Digest)
+  (left_position : Std.U64) (left : Clause0_Digest) (right_position : Std.U64)
+  (right : Clause0_Digest) :
+  RustM (traversal.Opening N E C Clause0_Digest)
+  := do
+  let t ←
+    CollectInst.collect self.collected left_position left right_position right
+  ok { self with collected := t }
+
+/-- [commonware_symbolic::traversal::{impl commonware_symbolic::traversal::Backend<Clause0_Digest> for commonware_symbolic::traversal::Opening<'_0, N, E, C, Clause0_Digest>}::node]:
+    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 186:4-196:5 -/
+def traversal.Opening.Insts.Commonware_symbolicTraversalBackend.node
+  {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _}
+  {Clause1_Item : Type _} (NodesInst : traversal.Nodes N Clause0_Digest)
+  (coreitertraitsiteratorIteratorInst : core.iter.traits.iterator.Iterator E
+  Clause1_Item) (coreconvertAsRefClause1_ItemSliceU8Inst : core.convert.AsRef
+  Clause1_Item (Slice Std.U8)) (CollectInst : traversal.Collect C
+  Clause0_Digest) (self : traversal.Opening N E C Clause0_Digest)
+  (position : Std.U64) (width : Std.U64) (start : Std.U64)
+  (left : Clause0_Digest) (right : Clause0_Digest) :
+  RustM Clause0_Digest
+  := do
+  let i ← core.num.U64.ilog2 width
+  NodesInst.node_digest self.nodes position i start left right
+
+/-- [commonware_symbolic::traversal::{impl commonware_symbolic::traversal::Backend<Clause0_Digest> for commonware_symbolic::traversal::Opening<'_0, N, E, C, Clause0_Digest>}::leaf]:
+    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 179:4-184:5 -/
+def traversal.Opening.Insts.Commonware_symbolicTraversalBackend.leaf
+  {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _}
+  {Clause1_Item : Type _} (NodesInst : traversal.Nodes N Clause0_Digest)
+  (coreitertraitsiteratorIteratorInst : core.iter.traits.iterator.Iterator E
+  Clause1_Item) (coreconvertAsRefClause1_ItemSliceU8Inst : core.convert.AsRef
+  Clause1_Item (Slice Std.U8)) (CollectInst : traversal.Collect C
+  Clause0_Digest) (self : traversal.Opening N E C Clause0_Digest)
+  (position : Std.U64) :
+  RustM ((core.result.Result Clause0_Digest traversal.Error) ×
+    (traversal.Opening N E C Clause0_Digest))
+  := do
+  let (o, t) ← coreitertraitsiteratorIteratorInst.next self.elements
+  match o with
+  | core.option.Option.None =>
+    ok (core.result.Result.Err traversal.Error.MissingElements,
+      { self with elements := t })
+  | core.option.Option.Some element =>
+    let s ← coreconvertAsRefClause1_ItemSliceU8Inst.as_ref element
+    let t1 ← NodesInst.leaf_digest self.nodes position s
+    ok (core.result.Result.Ok t1, { self with elements := t })
+
+/-- [commonware_symbolic::traversal::{impl commonware_symbolic::traversal::Backend<Clause0_Digest> for commonware_symbolic::traversal::Opening<'_0, N, E, C, Clause0_Digest>}::sibling]:
+    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 169:4-177:5 -/
+def traversal.Opening.Insts.Commonware_symbolicTraversalBackend.sibling
+  {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _}
+  {Clause1_Item : Type _} (NodesInst : traversal.Nodes N Clause0_Digest)
+  (coreitertraitsiteratorIteratorInst : core.iter.traits.iterator.Iterator E
+  Clause1_Item) (coreconvertAsRefClause1_ItemSliceU8Inst : core.convert.AsRef
+  Clause1_Item (Slice Std.U8)) (CollectInst : traversal.Collect C
+  Clause0_Digest) (self : traversal.Opening N E C Clause0_Digest) :
+  RustM ((core.result.Result Clause0_Digest traversal.Error) ×
+    (traversal.Opening N E C Clause0_Digest))
+  := do
+  let o ←
+    core.slice.Slice.get (core.Usize.Insts.CoreSliceIndexSliceIndexSliceT
+      Clause0_Digest) self.siblings self.cursor
+  match o with
+  | core.option.Option.None =>
+    ok (core.result.Result.Err traversal.Error.MissingDigests, self)
+  | core.option.Option.Some digest =>
+    let i ← self.cursor + 1#usize
+    ok (core.result.Result.Ok digest, { self with cursor := i })
+
+/-- [commonware_symbolic::traversal::{impl commonware_symbolic::traversal::Backend<Clause0_Digest> for commonware_symbolic::traversal::Opening<'_0, N, E, C, Clause0_Digest>}::children]:
+    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 165:4-167:5 -/
+def traversal.Opening.Insts.Commonware_symbolicTraversalBackend.children
+  {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _}
+  {Clause1_Item : Type _} (NodesInst : traversal.Nodes N Clause0_Digest)
+  (coreitertraitsiteratorIteratorInst : core.iter.traits.iterator.Iterator E
+  Clause1_Item) (coreconvertAsRefClause1_ItemSliceU8Inst : core.convert.AsRef
+  Clause1_Item (Slice Std.U8)) (CollectInst : traversal.Collect C
+  Clause0_Digest) (self : traversal.Opening N E C Clause0_Digest)
+  (position : Std.U64) (width : Std.U64) :
+  RustM (Std.U64 × Std.U64)
+  := do
+  let i ← core.num.U64.ilog2 width
+  NodesInst.children self.nodes position i
+
+/-- Trait implementation: [commonware_symbolic::traversal::{impl commonware_symbolic::traversal::Backend<Clause0_Digest> for commonware_symbolic::traversal::Opening<'_0, N, E, C, Clause0_Digest>}]
+    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 157:0-208:1 -/
+@[reducible]
+def traversal.Opening.Insts.Commonware_symbolicTraversalBackend {N : Type _} {E
+  : Type _} {C : Type _} {Clause0_Digest : Type _} {Clause1_Item : Type _}
+  (NodesInst : traversal.Nodes N Clause0_Digest)
+  (coreitertraitsiteratorIteratorInst : core.iter.traits.iterator.Iterator E
+  Clause1_Item) (coreconvertAsRefClause1_ItemSliceU8Inst : core.convert.AsRef
+  Clause1_Item (Slice Std.U8)) (CollectInst : traversal.Collect C
+  Clause0_Digest) : traversal.Backend (traversal.Opening N E C Clause0_Digest)
+  Clause0_Digest := {
+  coremarkerCopyInst := NodesInst.coremarkerCopyInst
+  children :=
+    traversal.Opening.Insts.Commonware_symbolicTraversalBackend.children
+    NodesInst coreitertraitsiteratorIteratorInst
+    coreconvertAsRefClause1_ItemSliceU8Inst CollectInst
+  sibling :=
+    traversal.Opening.Insts.Commonware_symbolicTraversalBackend.sibling
+    NodesInst coreitertraitsiteratorIteratorInst
+    coreconvertAsRefClause1_ItemSliceU8Inst CollectInst
+  leaf := traversal.Opening.Insts.Commonware_symbolicTraversalBackend.leaf
+    NodesInst coreitertraitsiteratorIteratorInst
+    coreconvertAsRefClause1_ItemSliceU8Inst CollectInst
+  node := traversal.Opening.Insts.Commonware_symbolicTraversalBackend.node
+    NodesInst coreitertraitsiteratorIteratorInst
+    coreconvertAsRefClause1_ItemSliceU8Inst CollectInst
+  collect :=
+    traversal.Opening.Insts.Commonware_symbolicTraversalBackend.collect
+    NodesInst coreitertraitsiteratorIteratorInst
+    coreconvertAsRefClause1_ItemSliceU8Inst CollectInst
+}
+
+/-- [commonware_symbolic::traversal::{commonware_symbolic::traversal::Opening<'a, N, E, C, Clause0_Digest>}::peak]:
+    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 141:4-146:5 -/
+def traversal.Opening.peak
+  {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _} (NodesInst :
+  traversal.Nodes N Clause0_Digest) (CollectInst : traversal.Collect C
+  Clause0_Digest) (self : traversal.Opening N E C Clause0_Digest)
+  (position : Std.U64) (digest : Clause0_Digest) :
+  RustM (traversal.Opening N E C Clause0_Digest)
+  := do
+  let t ← CollectInst.peak self.collected position digest
+  ok { self with collected := t }
+
 /-- [commonware_symbolic::traversal::reconstruct]:
-    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 32:0-59:1 -/
+    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 39:0-66:1 -/
 def traversal.reconstruct
   {B : Type _} {Clause0_Digest : Type _} (BackendInst : traversal.Backend B
   Clause0_Digest) (backend : B) (position : Std.U64) (width : Std.U64)
@@ -546,40 +1405,195 @@ def traversal.reconstruct
             let backend3 ←
               BackendInst.collect backend2 left_position value right_position
                 value1
-            let t ← BackendInst.node backend3 position value value1
+            let t ←
+              BackendInst.node backend3 position width start value value1
             ok (core.result.Result.Ok t, backend3)
           | core.result.Result.Err _ => ok (r1, backend2)
         | core.result.Result.Err _ => ok (r, backend1)
 partial_fixpoint
 
-/-- [commonware_symbolic::traversal::{impl commonware_symbolic::traversal::Collect<D> for ()}::collect]:
-    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 85:4-85:56 -/
-def Tuple.Insts.Commonware_symbolicTraversalCollect.collect
-  {D : Type _} (_ : Unit) (i : Std.U64) (t : D) (i1 : Std.U64) (t1 : D) :
-  RustM Unit
+/-- [commonware_symbolic::reconstruct::list_peaks]: loop body 0:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 312:4-342:5 -/
+@[rust_loop_body]
+def reconstruct.list_peaks_loop.body
+  {G : Type _} {N : Type _} {E : Type _} {C : Type _} {Clause0_Peaks : Type _}
+  {Clause1_Digest : Type _} {Clause2_Item : Type _} (GeometryInst :
+  reconstruct.Geometry G Clause0_Peaks) (traversalNodesInst : traversal.Nodes N
+  Clause1_Digest) (coreitertraitsiteratorIteratorInst :
+  core.iter.traits.iterator.Iterator E Clause2_Item)
+  (coreconvertAsRefClause2_ItemSliceU8Inst : core.convert.AsRef Clause2_Item
+  (Slice Std.U8)) (traversalCollectInst : traversal.Collect C Clause1_Digest)
+  (layout1 : reconstruct.Layout) (digests : Slice Clause1_Digest)
+  (start : Std.U64) («end» : Std.U64) (peaks : Clause0_Peaks) (t : N)
+  (t1 : E) (s : Slice Clause1_Digest) (i : Std.Usize) (t2 : C)
+  (peak_digests : alloc.vec.Vec Clause1_Digest) (index : Std.Usize)
+  (leaf_start : Std.U64) :
+  RustM (ControlFlow (Clause0_Peaks × N × E × (Slice Clause1_Digest) ×
+    Std.Usize × C × (alloc.vec.Vec Clause1_Digest) × Std.Usize × Std.U64)
+    ((core.result.Result Unit reconstruct.Error) × (traversal.Opening N E C
+    Clause1_Digest) × (alloc.vec.Vec Clause1_Digest)))
   := do
-  ok ()
+  let (o, peaks1) ← GeometryInst.PeaksInst.next peaks
+  match o with
+  | core.option.Option.None =>
+    ok (done (core.result.Result.Ok (),
+      { nodes := t, elements := t1, siblings := s, cursor := i, collected := t2
+      }, peak_digests))
+  | core.option.Option.Some peak =>
+    let (position, height) := peak
+    let width ← 1#u64 <<< height
+    if index < layout1.before
+    then
+      let (t3, t4, s1, i1, t5, peak_digests1) ←
+        if index >= layout1.fold
+        then
+          do
+          let i2 ← reconstruct.Layout.prefix_start layout1
+          let i3 ← index - layout1.fold
+          let i4 ← i2 + i3
+          let digest ← Slice.index_usize digests i4
+          let opening ←
+            traversal.Opening.peak traversalNodesInst traversalCollectInst
+              {
+                nodes := t,
+                elements := t1,
+                siblings := s,
+                cursor := i,
+                collected := t2
+              } position digest
+          let peak_digests2 ← alloc.vec.Vec.push peak_digests digest
+          ok (opening.nodes, opening.elements, opening.siblings,
+            opening.cursor, opening.collected, peak_digests2)
+        else ok (t, t1, s, i, t2, peak_digests)
+      let leaf_start1 ← leaf_start + width
+      let index1 ← index + 1#usize
+      ok (cont (peaks1, t3, t4, s1, i1, t5, peak_digests1, index1,
+        leaf_start1))
+    else
+      let i1 ← layout1.before + layout1.overlapping
+      if index < i1
+      then
+        let (r, opening) ←
+          traversal.reconstruct
+            (traversal.Opening.Insts.Commonware_symbolicTraversalBackend
+            traversalNodesInst coreitertraitsiteratorIteratorInst
+            coreconvertAsRefClause2_ItemSliceU8Inst traversalCollectInst)
+            {
+              nodes := t,
+              elements := t1,
+              siblings := s,
+              cursor := i,
+              collected := t2
+            } position width leaf_start start «end»
+        match r with
+        | core.result.Result.Ok digest =>
+          let opening1 ←
+            traversal.Opening.peak traversalNodesInst traversalCollectInst
+              opening position digest
+          let peak_digests1 ← alloc.vec.Vec.push peak_digests digest
+          let leaf_start1 ← leaf_start + width
+          let index1 ← index + 1#usize
+          ok (cont (peaks1, opening1.nodes, opening1.elements,
+            opening1.siblings, opening1.cursor, opening1.collected,
+            peak_digests1, index1, leaf_start1))
+        | core.result.Result.Err error =>
+          let e ← reconstruct.missing error
+          ok (done (core.result.Result.Err e, opening, peak_digests))
+      else
+        let i2 ← index - layout1.before
+        let offset ← i2 - layout1.overlapping
+        let (t3, t4, s1, i3, t5, peak_digests1) ←
+          if offset < layout1.individual_after
+          then
+            do
+            let i4 ← reconstruct.Layout.after_start layout1
+            let i5 ← i4 + offset
+            let digest ← Slice.index_usize digests i5
+            let opening ←
+              traversal.Opening.peak traversalNodesInst traversalCollectInst
+                {
+                  nodes := t,
+                  elements := t1,
+                  siblings := s,
+                  cursor := i,
+                  collected := t2
+                } position digest
+            let peak_digests2 ← alloc.vec.Vec.push peak_digests digest
+            ok (opening.nodes, opening.elements, opening.siblings,
+              opening.cursor, opening.collected, peak_digests2)
+          else ok (t, t1, s, i, t2, peak_digests)
+        let leaf_start1 ← leaf_start + width
+        let index1 ← index + 1#usize
+        ok (cont (peaks1, t3, t4, s1, i3, t5, peak_digests1, index1,
+          leaf_start1))
 
-/-- Trait implementation: [commonware_symbolic::traversal::{impl commonware_symbolic::traversal::Collect<D> for ()}]
-    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 84:0-86:1 -/
-@[reducible]
-def Tuple.Insts.Commonware_symbolicTraversalCollect (D : Type _) :
-  traversal.Collect Unit D := {
-  collect := Tuple.Insts.Commonware_symbolicTraversalCollect.collect
-}
-
-/-- [commonware_symbolic::traversal::{commonware_symbolic::traversal::Opening<'a, N, E, C, Clause0_Digest>}::new]:
-    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 100:4-114:5 -/
-def traversal.Opening.new
-  {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _} (NodesInst :
-  traversal.Nodes N Clause0_Digest) (nodes : N) (elements : E)
-  (siblings : Slice Clause0_Digest) (cursor : Std.Usize) (collected : C) :
-  RustM (traversal.Opening N E C Clause0_Digest)
+/-- [commonware_symbolic::reconstruct::list_peaks]: loop 0:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 312:4-342:5 -/
+@[rust_loop]
+def reconstruct.list_peaks_loop
+  {G : Type _} {N : Type _} {E : Type _} {C : Type _} {Clause0_Peaks : Type _}
+  {Clause1_Digest : Type _} {Clause2_Item : Type _} (GeometryInst :
+  reconstruct.Geometry G Clause0_Peaks) (traversalNodesInst : traversal.Nodes N
+  Clause1_Digest) (coreitertraitsiteratorIteratorInst :
+  core.iter.traits.iterator.Iterator E Clause2_Item)
+  (coreconvertAsRefClause2_ItemSliceU8Inst : core.convert.AsRef Clause2_Item
+  (Slice Std.U8)) (traversalCollectInst : traversal.Collect C Clause1_Digest)
+  (peaks : Clause0_Peaks) (layout1 : reconstruct.Layout)
+  (digests : Slice Clause1_Digest) (start : Std.U64) («end» : Std.U64)
+  (t : N) (t1 : E) (s : Slice Clause1_Digest) (i : Std.Usize) (t2 : C)
+  (peak_digests : alloc.vec.Vec Clause1_Digest) (index : Std.Usize)
+  (leaf_start : Std.U64) :
+  RustM ((core.result.Result Unit reconstruct.Error) × (traversal.Opening N E
+    C Clause1_Digest) × (alloc.vec.Vec Clause1_Digest))
   := do
-  ok { nodes, elements, siblings, cursor, collected }
+  loop
+    (fun (peaks1, t3, t4, s1, i1, t5, peak_digests1, index1, leaf_start1) =>
+      reconstruct.list_peaks_loop.body GeometryInst traversalNodesInst
+      coreitertraitsiteratorIteratorInst
+      coreconvertAsRefClause2_ItemSliceU8Inst traversalCollectInst layout1
+      digests start «end» peaks1 t3 t4 s1 i1 t5 peak_digests1 index1
+      leaf_start1)
+    (peaks, t, t1, s, i, t2, peak_digests, index, leaf_start)
+
+/-- [commonware_symbolic::reconstruct::list_peaks]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 293:0-343:1 -/
+def reconstruct.list_peaks
+  {G : Type _} {N : Type _} {E : Type _} {C : Type _} {Clause0_Peaks : Type _}
+  {Clause1_Digest : Type _} {Clause2_Item : Type _} (GeometryInst :
+  reconstruct.Geometry G Clause0_Peaks) (traversalNodesInst : traversal.Nodes N
+  Clause1_Digest) (coreitertraitsiteratorIteratorInst :
+  core.iter.traits.iterator.Iterator E Clause2_Item)
+  (coreconvertAsRefClause2_ItemSliceU8Inst : core.convert.AsRef Clause2_Item
+  (Slice Std.U8)) (traversalCollectInst : traversal.Collect C Clause1_Digest)
+  (geometry1 : G) (layout1 : reconstruct.Layout) (leaves : Std.U64)
+  (digests : Slice Clause1_Digest) (start : Std.U64) («end» : Std.U64)
+  (opening : traversal.Opening N E C Clause1_Digest)
+  (peak_digests : alloc.vec.Vec Clause1_Digest) :
+  RustM ((core.result.Result Unit reconstruct.Error) × (traversal.Opening N E
+    C Clause1_Digest) × (alloc.vec.Vec Clause1_Digest))
+  := do
+  let peaks ← GeometryInst.peaks geometry1 leaves
+  reconstruct.list_peaks_loop GeometryInst traversalNodesInst
+    coreitertraitsiteratorIteratorInst coreconvertAsRefClause2_ItemSliceU8Inst
+    traversalCollectInst peaks layout1 digests start «end» opening.nodes
+    opening.elements opening.siblings opening.cursor opening.collected
+    peak_digests 0#usize 0#u64
+
+/-- [commonware_symbolic::traversal::{commonware_symbolic::traversal::Opening<'a, N, E, C, Clause0_Digest>}::exhausted]:
+    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 149:4-154:5 -/
+def traversal.Opening.exhausted
+  {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _}
+  {Clause1_Item : Type _} (NodesInst : traversal.Nodes N Clause0_Digest)
+  (coreitertraitsiteratorIteratorInst : core.iter.traits.iterator.Iterator E
+  Clause1_Item) (self : traversal.Opening N E C Clause0_Digest) :
+  RustM (Bool × (traversal.Opening N E C Clause0_Digest))
+  := do
+  let (o, t) ← coreitertraitsiteratorIteratorInst.next self.elements
+  let b ← core.option.Option.is_none o
+  ok (b, { self with elements := t })
 
 /-- [commonware_symbolic::traversal::{commonware_symbolic::traversal::Opening<'a, N, E, C, Clause0_Digest>}::cursor]:
-    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 117:4-119:5 -/
+    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 136:4-138:5 -/
 def traversal.Opening.impl.cursor
   {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _} (NodesInst :
   traversal.Nodes N Clause0_Digest)
@@ -588,127 +1602,509 @@ def traversal.Opening.impl.cursor
   := do
   ok self.cursor
 
-/-- [commonware_symbolic::traversal::{impl commonware_symbolic::traversal::Backend<Clause0_Digest> for commonware_symbolic::traversal::Opening<'_0, N, E, C, Clause0_Digest>}::collect]:
-    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 155:4-164:5 -/
-def traversal.Opening.Insts.Commonware_symbolicTraversalBackend.collect
-  {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _}
-  {Clause1_Item : Type _} (NodesInst : traversal.Nodes N Clause0_Digest)
-  (coreitertraitsiteratorIteratorInst : core.iter.traits.iterator.Iterator E
-  Clause1_Item) (coreconvertAsRefClause1_ItemSliceU8Inst : core.convert.AsRef
-  Clause1_Item (Slice Std.U8)) (CollectInst : traversal.Collect C
-  Clause0_Digest) (self : traversal.Opening N E C Clause0_Digest)
-  (left_position : Std.U64) (left : Clause0_Digest) (right_position : Std.U64)
-  (right : Clause0_Digest) :
+/-- [commonware_symbolic::traversal::{commonware_symbolic::traversal::Opening<'a, N, E, C, Clause0_Digest>}::new]:
+    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 119:4-133:5 -/
+def traversal.Opening.new
+  {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _} (NodesInst :
+  traversal.Nodes N Clause0_Digest) (nodes : N) (elements : E)
+  (siblings : Slice Clause0_Digest) (cursor : Std.Usize) (collected : C) :
   RustM (traversal.Opening N E C Clause0_Digest)
   := do
-  let t ←
-    CollectInst.collect self.collected left_position left right_position right
-  ok { self with collected := t }
+  ok { nodes, elements, siblings, cursor, collected }
 
-/-- [commonware_symbolic::traversal::{impl commonware_symbolic::traversal::Backend<Clause0_Digest> for commonware_symbolic::traversal::Opening<'_0, N, E, C, Clause0_Digest>}::node]:
-    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 151:4-153:5 -/
-def traversal.Opening.Insts.Commonware_symbolicTraversalBackend.node
-  {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _}
-  {Clause1_Item : Type _} (NodesInst : traversal.Nodes N Clause0_Digest)
-  (coreitertraitsiteratorIteratorInst : core.iter.traits.iterator.Iterator E
-  Clause1_Item) (coreconvertAsRefClause1_ItemSliceU8Inst : core.convert.AsRef
-  Clause1_Item (Slice Std.U8)) (CollectInst : traversal.Collect C
-  Clause0_Digest) (self : traversal.Opening N E C Clause0_Digest)
-  (position : Std.U64) (left : Clause0_Digest) (right : Clause0_Digest) :
+/-- [commonware_symbolic::reconstruct::reconstruct]: loop body 0:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 420:4-432:5 -/
+@[rust_loop_body]
+def reconstruct.reconstruct_loop.body
+  {G : Type _} {Clause0_Peaks : Type _} (GeometryInst : reconstruct.Geometry G
+  Clause0_Peaks) (start : Std.U64) («end» : Std.U64) (peaks : Clause0_Peaks)
+  (before : Std.Usize) (overlapping : Std.Usize) (after : Std.Usize)
+  (path_siblings : Std.Usize) (leaf_start : Std.U64) :
+  RustM (ControlFlow (Clause0_Peaks × Std.Usize × Std.Usize × Std.Usize ×
+    Std.Usize × Std.U64) (Std.Usize × Std.Usize × Std.Usize × Std.Usize))
+  := do
+  let (o, peaks1) ← GeometryInst.PeaksInst.next peaks
+  match o with
+  | core.option.Option.None =>
+    ok (done (before, overlapping, after, path_siblings))
+  | core.option.Option.Some p =>
+    let (_, height) := p
+    let width ← 1#u64 <<< height
+    let leaf_end ← leaf_start + width
+    if leaf_end <= start
+    then
+      let before1 ← before + 1#usize
+      ok (cont (peaks1, before1, overlapping, after, path_siblings, leaf_end))
+    else
+      if leaf_start >= «end»
+      then
+        let after1 ← after + 1#usize
+        ok (cont (peaks1, before, overlapping, after1, path_siblings,
+          leaf_end))
+      else
+        let overlapping1 ← overlapping + 1#usize
+        let i ← reconstruct.siblings width leaf_start start «end»
+        let path_siblings1 ← path_siblings + i
+        ok (cont (peaks1, before, overlapping1, after, path_siblings1,
+          leaf_end))
+
+/-- [commonware_symbolic::reconstruct::reconstruct]: loop 0:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 420:4-432:5 -/
+@[rust_loop]
+def reconstruct.reconstruct_loop
+  {G : Type _} {Clause0_Peaks : Type _} (GeometryInst : reconstruct.Geometry G
+  Clause0_Peaks) (peaks : Clause0_Peaks) (start : Std.U64) («end» : Std.U64)
+  (before : Std.Usize) (overlapping : Std.Usize) (after : Std.Usize)
+  (path_siblings : Std.Usize) (leaf_start : Std.U64) :
+  RustM (Std.Usize × Std.Usize × Std.Usize × Std.Usize)
+  := do
+  loop
+    (fun (peaks1, before1, overlapping1, after1, path_siblings1, leaf_start1)
+      => reconstruct.reconstruct_loop.body GeometryInst start «end» peaks1
+      before1 overlapping1 after1 path_siblings1 leaf_start1)
+    (peaks, before, overlapping, after, path_siblings, leaf_start)
+
+/-- [commonware_symbolic::reconstruct::reconstruct]:
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 358:0-486:1 -/
+def reconstruct.reconstruct
+  {G : Type _} {T : Type _} {N : Type _} {E : Type _} {C : Type _}
+  {Clause0_Peaks : Type _} {Clause1_Digest : Type _} {Clause3_Item : Type _}
+  (GeometryInst : reconstruct.Geometry G Clause0_Peaks) (termsTermsInst :
+  terms.Terms T Clause1_Digest) (traversalNodesInst : traversal.Nodes N
+  Clause1_Digest) (coreitertraitsiteratorIteratorInst :
+  core.iter.traits.iterator.Iterator E Clause3_Item)
+  (coreconvertAsRefClause3_ItemSliceU8Inst : core.convert.AsRef Clause3_Item
+  (Slice Std.U8)) (traversalCollectInst : traversal.Collect C Clause1_Digest)
+  (geometry1 : G) (terms1 : T) (nodes : N) (domain : Array Std.U8 2#usize)
+  (backward : Bool) (leaves : Std.U64) (inactive : Std.Usize)
+  (digests : Slice Clause1_Digest) (start : Std.U64) (count : Std.U64)
+  (elements : E) (collected : C) :
+  RustM (core.result.Result Clause1_Digest reconstruct.Error)
+  := do
+  let max_leaves ← GeometryInst.max_leaves geometry1
+  if count = 0#u64
+  then
+    let (o, _) ← coreitertraitsiteratorIteratorInst.next elements
+    let b ← core.option.Option.is_some o
+    if b
+    then ok (core.result.Result.Err reconstruct.Error.ExtraDigests)
+    else
+      if start = 0#u64
+      then
+        if inactive != 0#usize
+        then ok (core.result.Result.Err reconstruct.Error.InvalidProof)
+        else
+          if leaves != 0#u64
+          then ok (core.result.Result.Err reconstruct.Error.MissingElements)
+          else
+            let b1 ← core.slice.Slice.is_empty digests
+            if b1
+            then
+              let t ← terms.empty_root termsTermsInst terms1 domain leaves
+              ok (core.result.Result.Ok t)
+            else ok (core.result.Result.Err reconstruct.Error.ExtraDigests)
+      else ok (core.result.Result.Err reconstruct.Error.MissingElements)
+  else
+    if start >= max_leaves
+    then ok (core.result.Result.Err reconstruct.Error.InvalidStartLoc)
+    else
+      let i ← max_leaves - start
+      if count > i
+      then ok (core.result.Result.Err reconstruct.Error.InvalidEndLoc)
+      else
+        let «end» ← start + count
+        if «end» > leaves
+        then ok (core.result.Result.Err reconstruct.Error.InvalidEndLoc)
+        else
+          if leaves > max_leaves
+          then ok (core.result.Result.Err reconstruct.Error.InvalidSize)
+          else
+            let peaks ← GeometryInst.peaks geometry1 leaves
+            let (before, overlapping, after, path_siblings) ←
+              reconstruct.reconstruct_loop GeometryInst peaks start «end»
+                0#usize 0#usize 0#usize 0#usize 0#u64
+            let o ←
+              reconstruct.Layout.new before overlapping after inactive backward
+            match o with
+            | core.option.Option.None =>
+              ok (core.result.Result.Err reconstruct.Error.InvalidSize)
+            | core.option.Option.Some layout1 =>
+              let first_sibling ← reconstruct.Layout.siblings_start layout1
+              let required ← first_sibling + path_siblings
+              let i1 ← core.slice.Slice.len digests
+              if i1 < required
+              then ok (core.result.Result.Err reconstruct.Error.MissingDigests)
+              else
+                if i1 > required
+                then ok (core.result.Result.Err reconstruct.Error.ExtraDigests)
+                else
+                  let peak_digests ← alloc.vec.Vec.new Clause1_Digest
+                  let i2 ← reconstruct.Layout.fold_digests layout1
+                  let peak_digests1 ←
+                    if i2 = 1#usize
+                    then
+                      do
+                      let t ← Slice.index_usize digests 0#usize
+                      alloc.vec.Vec.push peak_digests t
+                    else ok peak_digests
+                  let opening ←
+                    traversal.Opening.new traversalNodesInst nodes elements
+                      digests first_sibling collected
+                  let (r, opening1, peak_digests2) ←
+                    reconstruct.list_peaks GeometryInst traversalNodesInst
+                      coreitertraitsiteratorIteratorInst
+                      coreconvertAsRefClause3_ItemSliceU8Inst
+                      traversalCollectInst geometry1 layout1 leaves digests
+                      start «end» opening peak_digests1
+                  match r with
+                  | core.result.Result.Ok _ =>
+                    let i3 ← reconstruct.Layout.suffix_digests layout1
+                    let peak_digests3 ←
+                      if i3 = 1#usize
+                      then
+                        do
+                        let i4 ← reconstruct.Layout.suffix_start layout1
+                        let t ← Slice.index_usize digests i4
+                        alloc.vec.Vec.push peak_digests2 t
+                      else ok peak_digests2
+                    let (b, opening2) ←
+                      traversal.Opening.exhausted traversalNodesInst
+                        coreitertraitsiteratorIteratorInst opening1
+                    if b
+                    then
+                      let i4 ←
+                        traversal.Opening.impl.cursor traversalNodesInst
+                          opening2
+                      if i4 != i1
+                      then
+                        ok (core.result.Result.Err
+                          reconstruct.Error.ExtraDigests)
+                      else
+                        let i5 ←
+                          reconstruct.Layout.inactive_after_fold layout1
+                            inactive
+                        let i6 ← lift (UScalar.cast .U64 inactive)
+                        let s ←
+                          alloc.vec.Vec.Insts.CoreOpsDerefDerefSlice.deref
+                            peak_digests3
+                        let e ← reconstruct.Ends.new s
+                        let (o1, _) ←
+                          terms.bagged_root termsTermsInst
+                            (reconstruct.Ends.Insts.Commonware_symbolicTermsCursor
+                            termsTermsInst.coremarkerCopyInst) terms1 domain
+                            backward leaves i5 i6 e
+                        match o1 with
+                        | core.option.Option.None =>
+                          ok (core.result.Result.Err
+                            reconstruct.Error.InvalidProof)
+                        | core.option.Option.Some root =>
+                          ok (core.result.Result.Ok root)
+                    else
+                      ok (core.result.Result.Err
+                        reconstruct.Error.ExtraDigests)
+                  | core.result.Result.Err error =>
+                    ok (core.result.Result.Err error)
+
+/-- [commonware_symbolic::traversal::{impl commonware_symbolic::traversal::Collect<D> for ()}::peak]:
+    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 104:4-104:39 -/
+def Tuple.Insts.Commonware_symbolicTraversalCollect.peak
+  {D : Type _} (_ : Unit) (i : Std.U64) (t : D) : RustM Unit := do
+  ok ()
+
+/-- [commonware_symbolic::traversal::{impl commonware_symbolic::traversal::Collect<D> for ()}::collect]:
+    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 102:4-102:56 -/
+def Tuple.Insts.Commonware_symbolicTraversalCollect.collect
+  {D : Type _} (_ : Unit) (i : Std.U64) (t : D) (i1 : Std.U64) (t1 : D) :
+  RustM Unit
+  := do
+  ok ()
+
+/-- Trait implementation: [commonware_symbolic::traversal::{impl commonware_symbolic::traversal::Collect<D> for ()}]
+    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 101:0-105:1 -/
+@[reducible]
+def Tuple.Insts.Commonware_symbolicTraversalCollect (D : Type _) :
+  traversal.Collect Unit D := {
+  collect := Tuple.Insts.Commonware_symbolicTraversalCollect.collect
+  peak := Tuple.Insts.Commonware_symbolicTraversalCollect.peak
+}
+
+/-- [commonware_symbolic::layout::{commonware_symbolic::layout::Widths}::delete]:
+    Source: 'src/../../../storage/src/qmdb/any/operation/layout.rs', lines 58:4-60:5 -/
+def layout.Widths.delete (self : layout.Widths) : RustM Std.Usize := do
+  1#usize + self.key
+
+/-- [commonware_symbolic::layout::{commonware_symbolic::layout::Widths}::update_operation]:
+    Source: 'src/../../../storage/src/qmdb/any/operation/layout.rs', lines 63:4-65:5 -/
+def layout.Widths.update_operation
+  (self : layout.Widths) : RustM Std.Usize := do
+  1#usize + self.update
+
+/-- [commonware_symbolic::layout::{commonware_symbolic::layout::Widths}::commit]:
+    Source: 'src/../../../storage/src/qmdb/any/operation/layout.rs', lines 68:4-70:5 -/
+def layout.Widths.commit (self : layout.Widths) : RustM Std.Usize := do
+  let i ← 1#usize + 1#usize
+  let i1 ← i + self.value
+  i1 + 8#usize
+
+/-- [commonware_symbolic::layout::{commonware_symbolic::layout::Widths}::total]:
+    Source: 'src/../../../storage/src/qmdb/any/operation/layout.rs', lines 73:4-82:5 -/
+def layout.Widths.total (self : layout.Widths) : RustM Std.Usize := do
+  let total ← layout.Widths.update_operation self
+  let i ← layout.Widths.commit self
+  let total1 ← if i > total
+                 then ok i
+                 else ok total
+  let i1 ← layout.Widths.delete self
+  if i1 > total1
+  then ok i1
+  else ok total1
+
+/-- [commonware_symbolic::tags::DELETE_CONTEXT]
+    Source: 'src/../../../storage/src/qmdb/operation/tags.rs', lines 12:0-12:33
+    Visibility: public -/
+@[global_simps, irreducible] def tags.DELETE_CONTEXT : Std.U8 := 2#u8
+
+/-- [commonware_symbolic::tags::UPDATE_CONTEXT]
+    Source: 'src/../../../storage/src/qmdb/operation/tags.rs', lines 9:0-9:33
+    Visibility: public -/
+@[global_simps, irreducible] def tags.UPDATE_CONTEXT : Std.U8 := 1#u8
+
+/-- [commonware_symbolic::tags::COMMIT_CONTEXT]
+    Source: 'src/../../../storage/src/qmdb/operation/tags.rs', lines 6:0-6:33
+    Visibility: public -/
+@[global_simps, irreducible] def tags.COMMIT_CONTEXT : Std.U8 := 0#u8
+
+/-- [commonware_symbolic::layout::write_fixed]:
+    Source: 'src/../../../storage/src/qmdb/any/operation/layout.rs', lines 88:0-118:1 -/
+def layout.write_fixed
+  {W : Type _} {Clause0_Key : Type _} {Clause0_Value : Type _} {Clause0_Update
+  : Type _} (WriterInst : layout.Writer W Clause0_Key Clause0_Value
+  Clause0_Update) (writer : W) (widths : layout.Widths)
+  (operation : layout.Operation Clause0_Key Clause0_Value Clause0_Update) :
+  RustM W
+  := do
+  let total ← layout.Widths.total widths
+  match operation with
+  | layout.Operation.Delete key =>
+    let writer1 ← WriterInst.byte writer tags.DELETE_CONTEXT
+    let writer2 ← WriterInst.key writer1 key
+    let i ← layout.Widths.delete widths
+    let i1 ← total - i
+    WriterInst.zeros writer2 i1
+  | layout.Operation.Update update =>
+    let writer1 ← WriterInst.byte writer tags.UPDATE_CONTEXT
+    let writer2 ← WriterInst.update writer1 update
+    let i ← layout.Widths.update_operation widths
+    let i1 ← total - i
+    WriterInst.zeros writer2 i1
+  | layout.Operation.Commit metadata floor =>
+    let writer1 ← WriterInst.byte writer tags.COMMIT_CONTEXT
+    let (writer2, widths1) ←
+      match metadata with
+      | core.option.Option.None =>
+        do
+        let i ← 1#usize + widths.value
+        let writer3 ← WriterInst.zeros writer1 i
+        ok (writer3, widths)
+      | core.option.Option.Some value =>
+        do
+        let writer3 ← WriterInst.byte writer1 1#u8
+        let writer4 ← WriterInst.value writer3 value
+        ok (writer4, widths)
+    let writer3 ← WriterInst.word writer2 floor
+    let i ← layout.Widths.commit widths1
+    let i1 ← total - i
+    WriterInst.zeros writer3 i1
+
+/-- [commonware_symbolic::layout::write_ordered_update]:
+    Source: 'src/../../../storage/src/qmdb/any/operation/layout.rs', lines 121:0-130:1 -/
+def layout.write_ordered_update
+  {W : Type _} {Clause0_Key : Type _} {Clause0_Value : Type _} {Clause0_Update
+  : Type _} (WriterInst : layout.Writer W Clause0_Key Clause0_Value
+  Clause0_Update) (writer : W) (key : Clause0_Key) (value : Clause0_Value)
+  (next_key : Clause0_Key) :
+  RustM W
+  := do
+  let writer1 ← WriterInst.key writer key
+  let writer2 ← WriterInst.value writer1 value
+  WriterInst.key writer2 next_key
+
+/-- [commonware_symbolic::grafting::graftable_chunks]:
+    Source: 'src/../../../storage/src/qmdb/current/grafting/rules.rs', lines 13:0-18:1 -/
+def grafting.graftable_chunks
+  (leaves : Std.U64) (grafting_height : Std.U32) (first_birth : Std.U64) :
+  RustM Std.U64
+  := do
+  if leaves < first_birth
+  then ok 0#u64
+  else
+    let i ← leaves - first_birth
+    let i1 ← 1#u64 <<< grafting_height
+    let i2 ← i / i1
+    i2 + 1#u64
+
+/-- [commonware_symbolic::grafting::is_zero]: loop body 0:
+    Source: 'src/../../../storage/src/qmdb/current/grafting/rules.rs', lines 24:4-33:1 -/
+@[rust_loop_body]
+def grafting.is_zero_loop.body
+  (chunk : Slice Std.U8) (index : Std.Usize) :
+  RustM (ControlFlow Std.Usize Bool)
+  := do
+  let i ← core.slice.Slice.len chunk
+  if index = i
+  then ok (done true)
+  else
+    let i1 ← Slice.index_usize chunk index
+    if i1 != 0#u8
+    then ok (done false)
+    else let index1 ← index + 1#usize
+         ok (cont index1)
+
+/-- [commonware_symbolic::grafting::is_zero]: loop 0:
+    Source: 'src/../../../storage/src/qmdb/current/grafting/rules.rs', lines 24:4-33:1 -/
+@[rust_loop]
+def grafting.is_zero_loop
+  (chunk : Slice Std.U8) (index : Std.Usize) : RustM Bool := do
+  loop
+    (fun index1 => grafting.is_zero_loop.body chunk index1)
+    index
+
+/-- [commonware_symbolic::grafting::is_zero]:
+    Source: 'src/../../../storage/src/qmdb/current/grafting/rules.rs', lines 22:0-33:1 -/
+@[reducible]
+def grafting.is_zero (chunk : Slice Std.U8) : RustM Bool := do
+  grafting.is_zero_loop chunk 0#usize
+
+/-- [commonware_symbolic::grafting::chunk_digest]:
+    Source: 'src/../../../storage/src/qmdb/current/grafting/rules.rs', lines 36:0-38:1 -/
+def grafting.chunk_digest
+  {T : Type _} {Clause0_Digest : Type _} (termsTermsInst : terms.Terms T
+  Clause0_Digest) (terms1 : T) (chunk : Slice Std.U8) :
   RustM Clause0_Digest
   := do
-  NodesInst.node_digest self.nodes position left right
+  let s ←
+    core.array.Array.as_slice (Array.make 1#usize [ terms.Part.Bytes chunk ])
+  termsTermsInst.hash terms1 s
 
-/-- [commonware_symbolic::traversal::{impl commonware_symbolic::traversal::Backend<Clause0_Digest> for commonware_symbolic::traversal::Opening<'_0, N, E, C, Clause0_Digest>}::leaf]:
-    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 144:4-149:5 -/
-def traversal.Opening.Insts.Commonware_symbolicTraversalBackend.leaf
-  {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _}
-  {Clause1_Item : Type _} (NodesInst : traversal.Nodes N Clause0_Digest)
-  (coreitertraitsiteratorIteratorInst : core.iter.traits.iterator.Iterator E
-  Clause1_Item) (coreconvertAsRefClause1_ItemSliceU8Inst : core.convert.AsRef
-  Clause1_Item (Slice Std.U8)) (CollectInst : traversal.Collect C
-  Clause0_Digest) (self : traversal.Opening N E C Clause0_Digest)
-  (position : Std.U64) :
-  RustM ((core.result.Result Clause0_Digest traversal.Error) ×
-    (traversal.Opening N E C Clause0_Digest))
+/-- [commonware_symbolic::grafting::grafted_leaf]:
+    Source: 'src/../../../storage/src/qmdb/current/grafting/rules.rs', lines 42:0-48:1 -/
+def grafting.grafted_leaf
+  {T : Type _} {Clause0_Digest : Type _} (termsTermsInst : terms.Terms T
+  Clause0_Digest) (terms1 : T) (chunk : Slice Std.U8)
+  (subtree : Clause0_Digest) :
+  RustM Clause0_Digest
   := do
-  let (o, t) ← coreitertraitsiteratorIteratorInst.next self.elements
-  match o with
-  | core.option.Option.None =>
-    ok (core.result.Result.Err traversal.Error.MissingElements,
-      { self with elements := t })
-  | core.option.Option.Some element =>
-    let s ← coreconvertAsRefClause1_ItemSliceU8Inst.as_ref element
-    let t1 ← NodesInst.leaf_digest self.nodes position s
-    ok (core.result.Result.Ok t1, { self with elements := t })
+  let b ← grafting.is_zero chunk
+  if b
+  then ok subtree
+  else
+    let s ←
+      core.array.Array.as_slice
+        (Array.make 2#usize [
+          terms.Part.Bytes chunk, terms.Part.Digest subtree
+          ])
+    termsTermsInst.hash terms1 s
 
-/-- [commonware_symbolic::traversal::{impl commonware_symbolic::traversal::Backend<Clause0_Digest> for commonware_symbolic::traversal::Opening<'_0, N, E, C, Clause0_Digest>}::sibling]:
-    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 134:4-142:5 -/
-def traversal.Opening.Insts.Commonware_symbolicTraversalBackend.sibling
-  {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _}
-  {Clause1_Item : Type _} (NodesInst : traversal.Nodes N Clause0_Digest)
-  (coreitertraitsiteratorIteratorInst : core.iter.traits.iterator.Iterator E
-  Clause1_Item) (coreconvertAsRefClause1_ItemSliceU8Inst : core.convert.AsRef
-  Clause1_Item (Slice Std.U8)) (CollectInst : traversal.Collect C
-  Clause0_Digest) (self : traversal.Opening N E C Clause0_Digest) :
-  RustM ((core.result.Result Clause0_Digest traversal.Error) ×
-    (traversal.Opening N E C Clause0_Digest))
+/-- [commonware_symbolic::grafting::graft]:
+    Source: 'src/../../../storage/src/qmdb/current/grafting/rules.rs', lines 55:0-73:1 -/
+def grafting.graft
+  {T : Type _} {C : Type _} {Clause0_Digest : Type _} (termsTermsInst :
+  terms.Terms T Clause0_Digest) (coreconvertAsRefCSliceU8Inst :
+  core.convert.AsRef C (Slice Std.U8)) (terms1 : T) (grafting_height : Std.U32)
+  (start_chunk : Std.U64) (chunks : Slice C) (graftable : Std.U64)
+  (start : Std.U64) (node : Clause0_Digest) :
+  RustM Clause0_Digest
   := do
-  let o ←
-    core.slice.Slice.get (core.Usize.Insts.CoreSliceIndexSliceIndexSliceT
-      Clause0_Digest) self.siblings self.cursor
-  match o with
-  | core.option.Option.None =>
-    ok (core.result.Result.Err traversal.Error.MissingDigests, self)
-  | core.option.Option.Some digest =>
-    let i ← self.cursor + 1#usize
-    ok (core.result.Result.Ok digest, { self with cursor := i })
+  let chunk ← start >>> grafting_height
+  if chunk >= graftable
+  then ok node
+  else
+    if chunk < start_chunk
+    then ok node
+    else
+      let «local» ← chunk - start_chunk
+      let i ← core.slice.Slice.len chunks
+      let i1 ← lift (UScalar.cast .U64 i)
+      if «local» >= i1
+      then ok node
+      else
+        let i2 ← lift (UScalar.cast .Usize «local»)
+        let t ← Slice.index_usize chunks i2
+        let s ← coreconvertAsRefCSliceU8Inst.as_ref t
+        grafting.grafted_leaf termsTermsInst terms1 s node
 
-/-- [commonware_symbolic::traversal::{impl commonware_symbolic::traversal::Backend<Clause0_Digest> for commonware_symbolic::traversal::Opening<'_0, N, E, C, Clause0_Digest>}::children]:
-    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 130:4-132:5 -/
-def traversal.Opening.Insts.Commonware_symbolicTraversalBackend.children
-  {N : Type _} {E : Type _} {C : Type _} {Clause0_Digest : Type _}
-  {Clause1_Item : Type _} (NodesInst : traversal.Nodes N Clause0_Digest)
-  (coreitertraitsiteratorIteratorInst : core.iter.traits.iterator.Iterator E
-  Clause1_Item) (coreconvertAsRefClause1_ItemSliceU8Inst : core.convert.AsRef
-  Clause1_Item (Slice Std.U8)) (CollectInst : traversal.Collect C
-  Clause0_Digest) (self : traversal.Opening N E C Clause0_Digest)
-  (position : Std.U64) (width : Std.U64) :
+/-- [commonware_symbolic::grafting::{commonware_symbolic::grafting::Grafted<'a, N, T, C>}::new]:
+    Source: 'src/../../../storage/src/qmdb/current/grafting/rules.rs', lines 88:4-104:5 -/
+def grafting.Grafted.new
+  {N : Type _} {T : Type _} {C : Type _} (nodes : N) (terms1 : T)
+  (grafting_height : Std.U32) (start_chunk : Std.U64) (chunks : Slice C)
+  (graftable : Std.U64) :
+  RustM (grafting.Grafted N T C)
+  := do
+  ok
+    { nodes, terms := terms1, grafting_height, start_chunk, chunks, graftable }
+
+/-- [commonware_symbolic::grafting::{impl commonware_symbolic::traversal::Nodes<Clause1_Digest> for commonware_symbolic::grafting::Grafted<'_0, N, T, C>}::node_digest]:
+    Source: 'src/../../../storage/src/qmdb/current/grafting/rules.rs', lines 123:4-144:5 -/
+def grafting.Grafted.Insts.Commonware_symbolicTraversalNodes.node_digest
+  {N : Type _} {T : Type _} {C : Type _} {Clause1_Digest : Type _}
+  (traversalNodesInst : traversal.Nodes N Clause1_Digest) (termsTermsInst :
+  terms.Terms T Clause1_Digest) (coreconvertAsRefCSliceU8Inst :
+  core.convert.AsRef C (Slice Std.U8)) (self : grafting.Grafted N T C)
+  (position : Std.U64) (height : Std.U32) (start : Std.U64)
+  (left : Clause1_Digest) (right : Clause1_Digest) :
+  RustM Clause1_Digest
+  := do
+  let node ←
+    traversalNodesInst.node_digest self.nodes position height start left right
+  if height != self.grafting_height
+  then ok node
+  else
+    grafting.graft termsTermsInst coreconvertAsRefCSliceU8Inst self.terms
+      self.grafting_height self.start_chunk self.chunks self.graftable start
+      node
+
+/-- [commonware_symbolic::grafting::{impl commonware_symbolic::traversal::Nodes<Clause1_Digest> for commonware_symbolic::grafting::Grafted<'_0, N, T, C>}::leaf_digest]:
+    Source: 'src/../../../storage/src/qmdb/current/grafting/rules.rs', lines 119:4-121:5 -/
+def grafting.Grafted.Insts.Commonware_symbolicTraversalNodes.leaf_digest
+  {N : Type _} {T : Type _} {C : Type _} {Clause1_Digest : Type _}
+  (traversalNodesInst : traversal.Nodes N Clause1_Digest) (termsTermsInst :
+  terms.Terms T Clause1_Digest) (coreconvertAsRefCSliceU8Inst :
+  core.convert.AsRef C (Slice Std.U8)) (self : grafting.Grafted N T C)
+  (position : Std.U64) (element : Slice Std.U8) :
+  RustM Clause1_Digest
+  := do
+  traversalNodesInst.leaf_digest self.nodes position element
+
+/-- [commonware_symbolic::grafting::{impl commonware_symbolic::traversal::Nodes<Clause1_Digest> for commonware_symbolic::grafting::Grafted<'_0, N, T, C>}::children]:
+    Source: 'src/../../../storage/src/qmdb/current/grafting/rules.rs', lines 115:4-117:5 -/
+def grafting.Grafted.Insts.Commonware_symbolicTraversalNodes.children
+  {N : Type _} {T : Type _} {C : Type _} {Clause1_Digest : Type _}
+  (traversalNodesInst : traversal.Nodes N Clause1_Digest) (termsTermsInst :
+  terms.Terms T Clause1_Digest) (coreconvertAsRefCSliceU8Inst :
+  core.convert.AsRef C (Slice Std.U8)) (self : grafting.Grafted N T C)
+  (position : Std.U64) (height : Std.U32) :
   RustM (Std.U64 × Std.U64)
   := do
-  let i ← core.num.U64.ilog2 width
-  NodesInst.children self.nodes position i
+  traversalNodesInst.children self.nodes position height
 
-/-- Trait implementation: [commonware_symbolic::traversal::{impl commonware_symbolic::traversal::Backend<Clause0_Digest> for commonware_symbolic::traversal::Opening<'_0, N, E, C, Clause0_Digest>}]
-    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 122:0-165:1 -/
+/-- Trait implementation: [commonware_symbolic::grafting::{impl commonware_symbolic::traversal::Nodes<Clause1_Digest> for commonware_symbolic::grafting::Grafted<'_0, N, T, C>}]
+    Source: 'src/../../../storage/src/qmdb/current/grafting/rules.rs', lines 107:0-145:1 -/
 @[reducible]
-def traversal.Opening.Insts.Commonware_symbolicTraversalBackend {N : Type _} {E
-  : Type _} {C : Type _} {Clause0_Digest : Type _} {Clause1_Item : Type _}
-  (NodesInst : traversal.Nodes N Clause0_Digest)
-  (coreitertraitsiteratorIteratorInst : core.iter.traits.iterator.Iterator E
-  Clause1_Item) (coreconvertAsRefClause1_ItemSliceU8Inst : core.convert.AsRef
-  Clause1_Item (Slice Std.U8)) (CollectInst : traversal.Collect C
-  Clause0_Digest) : traversal.Backend (traversal.Opening N E C Clause0_Digest)
-  Clause0_Digest := {
-  coremarkerCopyInst := NodesInst.coremarkerCopyInst
-  children :=
-    traversal.Opening.Insts.Commonware_symbolicTraversalBackend.children
-    NodesInst coreitertraitsiteratorIteratorInst
-    coreconvertAsRefClause1_ItemSliceU8Inst CollectInst
-  sibling :=
-    traversal.Opening.Insts.Commonware_symbolicTraversalBackend.sibling
-    NodesInst coreitertraitsiteratorIteratorInst
-    coreconvertAsRefClause1_ItemSliceU8Inst CollectInst
-  leaf := traversal.Opening.Insts.Commonware_symbolicTraversalBackend.leaf
-    NodesInst coreitertraitsiteratorIteratorInst
-    coreconvertAsRefClause1_ItemSliceU8Inst CollectInst
-  node := traversal.Opening.Insts.Commonware_symbolicTraversalBackend.node
-    NodesInst coreitertraitsiteratorIteratorInst
-    coreconvertAsRefClause1_ItemSliceU8Inst CollectInst
-  collect :=
-    traversal.Opening.Insts.Commonware_symbolicTraversalBackend.collect
-    NodesInst coreitertraitsiteratorIteratorInst
-    coreconvertAsRefClause1_ItemSliceU8Inst CollectInst
+def grafting.Grafted.Insts.Commonware_symbolicTraversalNodes {N : Type _} {T :
+  Type _} {C : Type _} {Clause1_Digest : Type _} (traversalNodesInst :
+  traversal.Nodes N Clause1_Digest) (termsTermsInst : terms.Terms T
+  Clause1_Digest) (coreconvertAsRefCSliceU8Inst : core.convert.AsRef C (Slice
+  Std.U8)) : traversal.Nodes (grafting.Grafted N T C) Clause1_Digest := {
+  coremarkerCopyInst := termsTermsInst.coremarkerCopyInst
+  children := grafting.Grafted.Insts.Commonware_symbolicTraversalNodes.children
+    traversalNodesInst termsTermsInst coreconvertAsRefCSliceU8Inst
+  leaf_digest :=
+    grafting.Grafted.Insts.Commonware_symbolicTraversalNodes.leaf_digest
+    traversalNodesInst termsTermsInst coreconvertAsRefCSliceU8Inst
+  node_digest :=
+    grafting.Grafted.Insts.Commonware_symbolicTraversalNodes.node_digest
+    traversalNodesInst termsTermsInst coreconvertAsRefCSliceU8Inst
 }
 
 /-- [commonware_symbolic::ordered::claim::membership]:
@@ -724,7 +2120,7 @@ def ordered.claim.membership
   ok (ordered.Operation.Update { key, value, next_key := t })
 
 /-- [commonware_symbolic::ordered::{impl core::clone::Clone for commonware_symbolic::ordered::Update<K, V, Clause1_Value>}::clone]:
-    Source: 'src/ordered.rs', lines 32:4-38:5
+    Source: 'src/ordered.rs', lines 43:4-49:5
     Visibility: public -/
 def ordered.Update.Insts.CoreCloneClone.clone
   {K : Type _} {V : Type _} {Clause1_Value : Type _} (KeyInst : ordered.Key K)
@@ -750,7 +2146,7 @@ def cyclic.contains
        else ok false
 
 /-- [commonware_symbolic::ordered::contains_cyclic]:
-    Source: 'src/ordered.rs', lines 17:0-23:1 -/
+    Source: 'src/ordered.rs', lines 28:0-34:1 -/
 def ordered.contains_cyclic
   {K : Type _} (KeyInst : ordered.Key K) (span : core.ops.range.Range K)
   (key : K) :
@@ -819,6 +2215,345 @@ def activity.get
   let i1 ← lift (UScalar.cast .Usize i)
   let i2 ← Slice.index_usize chunk i1
   activity.is_set i2 bit
+
+/-- [commonware_symbolic::current::chunk_bits]:
+    Source: 'src/../../../storage/src/qmdb/current/proof/rules.rs', lines 22:0-31:1 -/
+def current.chunk_bits
+  (chunk_size : Std.Usize) : RustM (core.option.Option Std.U64) := do
+  let i ← core.num.Usize.MAX / 8#usize
+  if chunk_size > i
+  then ok core.option.Option.None
+  else
+    let i1 ← chunk_size * 8#usize
+    let bits ← lift (UScalar.cast .U64 i1)
+    if bits = 0#u64
+    then ok core.option.Option.None
+    else
+      let i2 ← bits - 1#u64
+      let i3 ← lift (bits &&& i2)
+      if i3 != 0#u64
+      then ok core.option.Option.None
+      else
+        let i4 ← 1#u64 <<< 62#i32
+        if bits > i4
+        then ok core.option.Option.None
+        else ok (core.option.Option.Some bits)
+
+/-- [commonware_symbolic::current::sized]: loop body 0:
+    Source: 'src/../../../storage/src/qmdb/current/proof/rules.rs', lines 37:4-46:1 -/
+@[rust_loop_body]
+def current.sized_loop.body
+  {C : Type _} (coreconvertAsRefCSliceU8Inst : core.convert.AsRef C (Slice
+  Std.U8)) (chunks : Slice C) (chunk_size : Std.Usize) (index : Std.Usize) :
+  RustM (ControlFlow Std.Usize Bool)
+  := do
+  let i ← core.slice.Slice.len chunks
+  if index = i
+  then ok (done true)
+  else
+    let t ← Slice.index_usize chunks index
+    let s ← coreconvertAsRefCSliceU8Inst.as_ref t
+    let i1 ← core.slice.Slice.len s
+    if i1 != chunk_size
+    then ok (done false)
+    else let index1 ← index + 1#usize
+         ok (cont index1)
+
+/-- [commonware_symbolic::current::sized]: loop 0:
+    Source: 'src/../../../storage/src/qmdb/current/proof/rules.rs', lines 37:4-46:1 -/
+@[rust_loop]
+def current.sized_loop
+  {C : Type _} (coreconvertAsRefCSliceU8Inst : core.convert.AsRef C (Slice
+  Std.U8)) (chunks : Slice C) (chunk_size : Std.Usize) (index : Std.Usize) :
+  RustM Bool
+  := do
+  loop
+    (fun index1 => current.sized_loop.body coreconvertAsRefCSliceU8Inst chunks
+      chunk_size index1)
+    index
+
+/-- [commonware_symbolic::current::sized]:
+    Source: 'src/../../../storage/src/qmdb/current/proof/rules.rs', lines 35:0-46:1 -/
+@[reducible]
+def current.sized
+  {C : Type _} (coreconvertAsRefCSliceU8Inst : core.convert.AsRef C (Slice
+  Std.U8)) (chunks : Slice C) (chunk_size : Std.Usize) :
+  RustM Bool
+  := do
+  current.sized_loop coreconvertAsRefCSliceU8Inst chunks chunk_size 0#usize
+
+/-- [commonware_symbolic::current::covered]:
+    Source: 'src/../../../storage/src/qmdb/current/proof/rules.rs', lines 67:0-90:1 -/
+def current.covered
+  {C : Type _} (coreconvertAsRefCSliceU8Inst : core.convert.AsRef C (Slice
+  Std.U8)) (max_leaves : Std.U64) (leaves : Std.U64) (start : Std.U64)
+  (count : Std.U64) (bits : Std.U64) (chunks : Slice C)
+  (chunk_size : Std.Usize) :
+  RustM Bool
+  := do
+  if count = 0#u64
+  then ok false
+  else
+    let b ← core.slice.Slice.is_empty chunks
+    if b
+    then ok false
+    else
+      if count > max_leaves
+      then ok false
+      else
+        let i ← max_leaves - count
+        if start > i
+        then ok false
+        else
+          let «end» ← start + count
+          if «end» > leaves
+          then ok false
+          else
+            let i1 ← «end» - 1#u64
+            let i2 ← i1 / bits
+            let i3 ← start / bits
+            let i4 ← i2 - i3
+            let i5 ← i4 + 1#u64
+            let i6 ← core.slice.Slice.len chunks
+            let i7 ← lift (UScalar.cast .U64 i6)
+            if i5 != i7
+            then ok false
+            else current.sized coreconvertAsRefCSliceU8Inst chunks chunk_size
+
+/-- [commonware_symbolic::current::smaller]:
+    Source: 'src/../../../storage/src/qmdb/current/proof/rules.rs', lines 93:0-95:1 -/
+def current.smaller (a : Std.U64) (b : Std.U64) : RustM Std.U64 := do
+  if a < b
+  then ok a
+  else ok b
+
+/-- [commonware_symbolic::current::partial_matches]:
+    Source: 'src/../../../storage/src/qmdb/current/proof/rules.rs', lines 100:0-120:1 -/
+def current.partial_matches
+  {T : Type _} {C : Type _} {Clause0_Digest : Type _} (termsTermsInst :
+  terms.Terms T Clause0_Digest) (coreconvertAsRefCSliceU8Inst :
+  core.convert.AsRef C (Slice Std.U8)) (terms1 : T)
+  («partial» : core.option.Option Clause0_Digest) (next_bit : Std.U64)
+  (end_chunk : Std.U64) (complete : Std.U64) (chunks : Slice C) :
+  RustM Bool
+  := do
+  match «partial» with
+  | core.option.Option.None => ok (next_bit = 0#u64)
+  | core.option.Option.Some partial1 =>
+    if next_bit = 0#u64
+    then ok false
+    else
+      if end_chunk != complete
+      then ok true
+      else
+        let i ← core.slice.Slice.len chunks
+        let i1 ← i - 1#usize
+        let t ← Slice.index_usize chunks i1
+        let s ← coreconvertAsRefCSliceU8Inst.as_ref t
+        let t1 ← grafting.chunk_digest termsTermsInst terms1 s
+        termsTermsInst.corecmpPartialEqInst.eq partial1 t1
+
+/-- [commonware_symbolic::current::pending_matches]:
+    Source: 'src/../../../storage/src/qmdb/current/proof/rules.rs', lines 124:0-149:1 -/
+def current.pending_matches
+  {T : Type _} {C : Type _} {Clause0_Digest : Type _} (termsTermsInst :
+  terms.Terms T Clause0_Digest) (coreconvertAsRefCSliceU8Inst :
+  core.convert.AsRef C (Slice Std.U8)) (terms1 : T)
+  (pending : core.option.Option Clause0_Digest) (graftable : Std.U64)
+  (complete : Std.U64) (start_chunk : Std.U64) (end_chunk : Std.U64)
+  (chunks : Slice C) :
+  RustM Bool
+  := do
+  match pending with
+  | core.option.Option.None => let i ← complete - graftable
+                               ok (i != 1#u64)
+  | core.option.Option.Some pending1 =>
+    let i ← complete - graftable
+    if i != 1#u64
+    then ok false
+    else
+      if graftable < start_chunk
+      then ok true
+      else
+        if graftable > end_chunk
+        then ok true
+        else
+          let i1 ← graftable - start_chunk
+          let «local» ← lift (UScalar.cast .Usize i1)
+          let i2 ← core.slice.Slice.len chunks
+          if «local» >= i2
+          then ok false
+          else
+            let t ← Slice.index_usize chunks «local»
+            let s ← coreconvertAsRefCSliceU8Inst.as_ref t
+            let t1 ← grafting.chunk_digest termsTermsInst terms1 s
+            termsTermsInst.corecmpPartialEqInst.eq pending1 t1
+
+/-- [commonware_symbolic::current::canonical]:
+    Source: 'src/../../../storage/src/qmdb/current/proof/rules.rs', lines 153:0-179:1 -/
+def current.canonical
+  {T : Type _} {Clause0_Digest : Type _} (termsTermsInst : terms.Terms T
+  Clause0_Digest) (terms1 : T) (proof : current.Fields Clause0_Digest)
+  (merkle : Clause0_Digest) (next_bit : Std.U64) :
+  RustM Clause0_Digest
+  := do
+  match proof.pending with
+  | core.option.Option.None =>
+    match proof.partial with
+    | core.option.Option.None =>
+      terms.current_root termsTermsInst terms1 proof.ops_root merkle
+        core.option.Option.None core.option.Option.None
+    | core.option.Option.Some «partial» =>
+      terms.current_root termsTermsInst terms1 proof.ops_root merkle
+        core.option.Option.None (core.option.Option.Some (next_bit,
+        «partial»))
+  | core.option.Option.Some _ =>
+    match proof.partial with
+    | core.option.Option.None =>
+      terms.current_root termsTermsInst terms1 proof.ops_root merkle
+        proof.pending core.option.Option.None
+    | core.option.Option.Some «partial» =>
+      terms.current_root termsTermsInst terms1 proof.ops_root merkle
+        proof.pending (core.option.Option.Some (next_bit, «partial»))
+
+/-- [commonware_symbolic::current::reconstruct]:
+    Source: 'src/../../../storage/src/qmdb/current/proof/rules.rs', lines 193:0-286:1 -/
+def current.reconstruct
+  {G : Type _} {T : Type _} {E : Type _} {C : Type _} {R : Type _}
+  {Clause0_Peaks : Type _} {Clause1_Digest : Type _} {Clause2_Item : Type _}
+  (reconstructGeometryInst : reconstruct.Geometry G Clause0_Peaks)
+  (termsTermsInst : terms.Terms T Clause1_Digest)
+  (coreitertraitsiteratorIteratorInst : core.iter.traits.iterator.Iterator E
+  Clause2_Item) (coreconvertAsRefClause2_ItemSliceU8Inst : core.convert.AsRef
+  Clause2_Item (Slice Std.U8)) (coreconvertAsRefCSliceU8Inst :
+  core.convert.AsRef C (Slice Std.U8)) (traversalCollectInst :
+  traversal.Collect R Clause1_Digest) (geometry1 : G) (terms1 : T)
+  (bagging_domain : Std.U8) (backward : Bool)
+  (proof : current.Fields Clause1_Digest) (start : Std.U64) (count : Std.U64)
+  (elements : E) (chunks : Slice C) (chunk_size : Std.Usize) (collected : R) :
+  RustM (core.option.Option Clause1_Digest)
+  := do
+  let o ← current.chunk_bits chunk_size
+  match o with
+  | core.option.Option.None => ok core.option.Option.None
+  | core.option.Option.Some bits =>
+    let i ← reconstructGeometryInst.max_leaves geometry1
+    let b ←
+      current.covered coreconvertAsRefCSliceU8Inst i proof.leaves start count
+        bits chunks chunk_size
+    if b
+    then
+      let start_chunk ← start / bits
+      let i1 ← start + count
+      let i2 ← i1 - 1#u64
+      let end_chunk ← i2 / bits
+      let complete ← proof.leaves / bits
+      let next_bit ← proof.leaves % bits
+      let grafting_height ← core.num.U64.ilog2 bits
+      let i3 ← reconstructGeometryInst.birth_offset geometry1 grafting_height
+      let born ← grafting.graftable_chunks proof.leaves grafting_height i3
+      let graftable ← current.smaller born complete
+      let i4 ← complete - graftable
+      if i4 > 1#u64
+      then ok core.option.Option.None
+      else
+        let b1 ←
+          current.partial_matches termsTermsInst coreconvertAsRefCSliceU8Inst
+            terms1 proof.partial next_bit end_chunk complete chunks
+        if b1
+        then
+          let b2 ←
+            current.pending_matches termsTermsInst coreconvertAsRefCSliceU8Inst
+              terms1 proof.pending graftable complete start_chunk end_chunk
+              chunks
+          if b2
+          then
+            let sn ← reconstruct.StandardNodes.new geometry1 terms1
+            let nodes ←
+              grafting.Grafted.new sn terms1 grafting_height start_chunk chunks
+                graftable
+            let i5 ← reconstructGeometryInst.domain geometry1
+            let r ←
+              reconstruct.reconstruct reconstructGeometryInst termsTermsInst
+                (grafting.Grafted.Insts.Commonware_symbolicTraversalNodes
+                (reconstruct.StandardNodes.Insts.Commonware_symbolicTraversalNodes
+                reconstructGeometryInst termsTermsInst) termsTermsInst
+                coreconvertAsRefCSliceU8Inst)
+                coreitertraitsiteratorIteratorInst
+                coreconvertAsRefClause2_ItemSliceU8Inst traversalCollectInst
+                geometry1 terms1 nodes
+                (Array.make 2#usize [ i5, bagging_domain ]) backward
+                proof.leaves proof.inactive proof.digests start count elements
+                collected
+            match r with
+            | core.result.Result.Ok merkle =>
+              let t ←
+                current.canonical termsTermsInst terms1 proof merkle next_bit
+              ok (core.option.Option.Some t)
+            | core.result.Result.Err _ => ok core.option.Option.None
+          else ok core.option.Option.None
+        else ok core.option.Option.None
+    else ok core.option.Option.None
+
+/-- [commonware_symbolic::current::{impl core::convert::AsRef<[u8]> for commonware_symbolic::current::Chunk<'_0>}::as_ref]:
+    Source: 'src/../../../storage/src/qmdb/current/proof/rules.rs', lines 292:4-294:5
+    Visibility: public -/
+def current.Chunk.Insts.CoreConvertAsRefSliceU8.as_ref
+  (self : current.Chunk) : RustM (Slice Std.U8) := do
+  ok self
+
+/-- Trait implementation: [commonware_symbolic::current::{impl core::convert::AsRef<[u8]> for commonware_symbolic::current::Chunk<'_0>}]
+    Source: 'src/../../../storage/src/qmdb/current/proof/rules.rs', lines 291:0-295:1 -/
+@[reducible]
+def current.Chunk.Insts.CoreConvertAsRefSliceU8 : core.convert.AsRef
+  current.Chunk (Slice Std.U8) := {
+  as_ref := current.Chunk.Insts.CoreConvertAsRefSliceU8.as_ref
+}
+
+/-- [commonware_symbolic::current::verify_operation]:
+    Source: 'src/../../../storage/src/qmdb/current/proof/rules.rs', lines 301:0-335:1 -/
+def current.verify_operation
+  {G : Type _} {T : Type _} {Clause0_Peaks : Type _} {Clause1_Digest : Type _}
+  (reconstructGeometryInst : reconstruct.Geometry G Clause0_Peaks)
+  (termsTermsInst : terms.Terms T Clause1_Digest) (geometry1 : G) (terms1 : T)
+  (bagging_domain : Std.U8) (backward : Bool)
+  (proof : current.Fields Clause1_Digest) (location : Std.U64)
+  (chunk : Slice Std.U8) (element : Slice Std.U8) (root : Clause1_Digest) :
+  RustM Bool
+  := do
+  let i ← core.slice.Slice.len chunk
+  let o ← current.chunk_bits i
+  match o with
+  | core.option.Option.None => ok false
+  | core.option.Option.Some bits =>
+    let b ← activity.get chunk location bits
+    if b
+    then
+      let s ← reconstruct.Single.new element
+      let s1 ← core.array.Array.as_slice (Array.make 1#usize [ chunk ])
+      let o1 ←
+        current.reconstruct reconstructGeometryInst termsTermsInst
+          reconstruct.Single.Insts.CoreIterTraitsIteratorIteratorElement
+          reconstruct.Element.Insts.CoreConvertAsRefSliceU8
+          current.Chunk.Insts.CoreConvertAsRefSliceU8
+          (Tuple.Insts.Commonware_symbolicTraversalCollect Clause1_Digest)
+          geometry1 terms1 bagging_domain backward proof location 1#u64 s s1 i
+          ()
+      match o1 with
+      | core.option.Option.None => ok false
+      | core.option.Option.Some reconstructed =>
+        termsTermsInst.corecmpPartialEqInst.eq reconstructed root
+    else ok false
+
+/-- [commonware_symbolic::tags::SET_CONTEXT]
+    Source: 'src/../../../storage/src/qmdb/operation/tags.rs', lines 14:0-14:30
+    Visibility: public -/
+@[global_simps, irreducible] def tags.SET_CONTEXT : Std.U8 := 3#u8
+
+/-- [commonware_symbolic::tags::APPEND_CONTEXT]
+    Source: 'src/../../../storage/src/qmdb/operation/tags.rs', lines 16:0-16:33
+    Visibility: public -/
+@[global_simps, irreducible] def tags.APPEND_CONTEXT : Std.U8 := 4#u8
 
 /-- [commonware_symbolic::bls::{impl commonware_symbolic::rules::Committee<K> for commonware_symbolic::bls::N3f1<'_0, C>}::key]:
     Source: 'src/bls.rs', lines 22:4-24:5 -/
@@ -894,8 +2629,138 @@ def bls.client_step
       ok (core.option.Option.Some { members, quorum := i })
     else ok core.option.Option.None
 
+/-- [commonware_symbolic::geometry::{impl commonware_symbolic::reconstruct::Peaks for commonware_symbolic::mmb_geometry::Peaks}::next]:
+    Source: 'src/geometry.rs', lines 16:4-18:5 -/
+def mmb_geometry.Peaks.Insts.Commonware_symbolicReconstructPeaks.next
+  (self : mmb_geometry.Peaks) :
+  RustM ((core.option.Option (Std.U64 × Std.U32)) × mmb_geometry.Peaks)
+  := do
+  mmb_geometry.Peaks.next self
+
+/-- Trait implementation: [commonware_symbolic::geometry::{impl commonware_symbolic::reconstruct::Peaks for commonware_symbolic::mmb_geometry::Peaks}]
+    Source: 'src/geometry.rs', lines 15:0-19:1 -/
+@[reducible]
+def mmb_geometry.Peaks.Insts.Commonware_symbolicReconstructPeaks :
+  reconstruct.Peaks mmb_geometry.Peaks := {
+  next := mmb_geometry.Peaks.Insts.Commonware_symbolicReconstructPeaks.next
+}
+
+/-- [commonware_symbolic::geometry::{impl commonware_symbolic::reconstruct::Geometry<commonware_symbolic::mmb_geometry::Peaks> for commonware_symbolic::geometry::Mmb}::birth_offset]:
+    Source: 'src/geometry.rs', lines 40:4-42:5 -/
+def geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks.birth_offset
+  (self : geometry.Mmb) (height : Std.U32) : RustM Std.U64 := do
+  mmb_geometry.birth_offset height
+
+/-- [commonware_symbolic::geometry::{impl commonware_symbolic::reconstruct::Geometry<commonware_symbolic::mmb_geometry::Peaks> for commonware_symbolic::geometry::Mmb}::children]:
+    Source: 'src/geometry.rs', lines 36:4-38:5 -/
+def geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks.children
+  (self : geometry.Mmb) (position : Std.U64) (height : Std.U32) :
+  RustM (Std.U64 × Std.U64)
+  := do
+  mmb_geometry.children position height
+
+/-- [commonware_symbolic::geometry::{impl commonware_symbolic::reconstruct::Geometry<commonware_symbolic::mmb_geometry::Peaks> for commonware_symbolic::geometry::Mmb}::peaks]:
+    Source: 'src/geometry.rs', lines 32:4-34:5 -/
+def geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks.peaks
+  (self : geometry.Mmb) (leaves : Std.U64) : RustM mmb_geometry.Peaks := do
+  mmb_geometry.Peaks.new leaves
+
+/-- [commonware_symbolic::geometry::{impl commonware_symbolic::reconstruct::Geometry<commonware_symbolic::mmb_geometry::Peaks> for commonware_symbolic::geometry::Mmb}::max_leaves]:
+    Source: 'src/geometry.rs', lines 28:4-30:5 -/
+def geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks.max_leaves
+  (self : geometry.Mmb) : RustM Std.U64 := do
+  ok mmb_geometry.MAX_LEAVES
+
+/-- [commonware_symbolic::geometry::{impl commonware_symbolic::reconstruct::Geometry<commonware_symbolic::mmb_geometry::Peaks> for commonware_symbolic::geometry::Mmb}::domain]:
+    Source: 'src/geometry.rs', lines 24:4-26:5 -/
+def geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks.domain
+  (self : geometry.Mmb) : RustM Std.U8 := do
+  ok mmb_geometry.DOMAIN
+
+/-- Trait implementation: [commonware_symbolic::geometry::{impl commonware_symbolic::reconstruct::Geometry<commonware_symbolic::mmb_geometry::Peaks> for commonware_symbolic::geometry::Mmb}]
+    Source: 'src/geometry.rs', lines 21:0-43:1 -/
+@[reducible]
+def geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks :
+  reconstruct.Geometry geometry.Mmb mmb_geometry.Peaks := {
+  PeaksInst := mmb_geometry.Peaks.Insts.Commonware_symbolicReconstructPeaks
+  domain :=
+    geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks.domain
+  max_leaves :=
+    geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks.max_leaves
+  peaks := geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks.peaks
+  children :=
+    geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks.children
+  birth_offset :=
+    geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks.birth_offset
+}
+
+/-- [commonware_symbolic::geometry::{impl commonware_symbolic::reconstruct::Peaks for commonware_symbolic::mmr_geometry::Peaks}::next]:
+    Source: 'src/geometry.rs', lines 49:4-51:5 -/
+def mmr_geometry.Peaks.Insts.Commonware_symbolicReconstructPeaks.next
+  (self : mmr_geometry.Peaks) :
+  RustM ((core.option.Option (Std.U64 × Std.U32)) × mmr_geometry.Peaks)
+  := do
+  mmr_geometry.Peaks.next self
+
+/-- Trait implementation: [commonware_symbolic::geometry::{impl commonware_symbolic::reconstruct::Peaks for commonware_symbolic::mmr_geometry::Peaks}]
+    Source: 'src/geometry.rs', lines 48:0-52:1 -/
+@[reducible]
+def mmr_geometry.Peaks.Insts.Commonware_symbolicReconstructPeaks :
+  reconstruct.Peaks mmr_geometry.Peaks := {
+  next := mmr_geometry.Peaks.Insts.Commonware_symbolicReconstructPeaks.next
+}
+
+/-- [commonware_symbolic::geometry::{impl commonware_symbolic::reconstruct::Geometry<commonware_symbolic::mmr_geometry::Peaks> for commonware_symbolic::geometry::Mmr}::birth_offset]:
+    Source: 'src/geometry.rs', lines 73:4-75:5 -/
+def geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks.birth_offset
+  (self : geometry.Mmr) (height : Std.U32) : RustM Std.U64 := do
+  mmr_geometry.birth_offset height
+
+/-- [commonware_symbolic::geometry::{impl commonware_symbolic::reconstruct::Geometry<commonware_symbolic::mmr_geometry::Peaks> for commonware_symbolic::geometry::Mmr}::children]:
+    Source: 'src/geometry.rs', lines 69:4-71:5 -/
+def geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks.children
+  (self : geometry.Mmr) (position : Std.U64) (height : Std.U32) :
+  RustM (Std.U64 × Std.U64)
+  := do
+  mmr_geometry.children position height
+
+/-- [commonware_symbolic::geometry::{impl commonware_symbolic::reconstruct::Geometry<commonware_symbolic::mmr_geometry::Peaks> for commonware_symbolic::geometry::Mmr}::peaks]:
+    Source: 'src/geometry.rs', lines 65:4-67:5 -/
+def geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks.peaks
+  (self : geometry.Mmr) (leaves : Std.U64) : RustM mmr_geometry.Peaks := do
+  mmr_geometry.Peaks.new leaves
+
+/-- [commonware_symbolic::geometry::{impl commonware_symbolic::reconstruct::Geometry<commonware_symbolic::mmr_geometry::Peaks> for commonware_symbolic::geometry::Mmr}::max_leaves]:
+    Source: 'src/geometry.rs', lines 61:4-63:5 -/
+def geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks.max_leaves
+  (self : geometry.Mmr) : RustM Std.U64 := do
+  ok mmr_geometry.MAX_LEAVES
+
+/-- [commonware_symbolic::geometry::{impl commonware_symbolic::reconstruct::Geometry<commonware_symbolic::mmr_geometry::Peaks> for commonware_symbolic::geometry::Mmr}::domain]:
+    Source: 'src/geometry.rs', lines 57:4-59:5 -/
+def geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks.domain
+  (self : geometry.Mmr) : RustM Std.U8 := do
+  ok mmr_geometry.DOMAIN
+
+/-- Trait implementation: [commonware_symbolic::geometry::{impl commonware_symbolic::reconstruct::Geometry<commonware_symbolic::mmr_geometry::Peaks> for commonware_symbolic::geometry::Mmr}]
+    Source: 'src/geometry.rs', lines 54:0-76:1 -/
+@[reducible]
+def geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks :
+  reconstruct.Geometry geometry.Mmr mmr_geometry.Peaks := {
+  PeaksInst := mmr_geometry.Peaks.Insts.Commonware_symbolicReconstructPeaks
+  domain :=
+    geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks.domain
+  max_leaves :=
+    geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks.max_leaves
+  peaks := geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks.peaks
+  children :=
+    geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks.children
+  birth_offset :=
+    geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks.birth_offset
+}
+
 /-- Trait implementation: [commonware_symbolic::ordered::{impl core::clone::Clone for commonware_symbolic::ordered::Update<K, V, Clause1_Value>}]
-    Source: 'src/ordered.rs', lines 31:0-39:1 -/
+    Source: 'src/ordered.rs', lines 42:0-50:1 -/
 @[reducible]
 impl_def ordered.Update.Insts.CoreCloneClone {K : Type _} {V : Type _}
   {Clause1_Value : Type _} (KeyInst : ordered.Key K) (ValueEncodingInst :
@@ -906,103 +2771,123 @@ impl_def ordered.Update.Insts.CoreCloneClone {K : Type _} {V : Type _}
     (ordered.Update.Insts.CoreCloneClone KeyInst ValueEncodingInst)
 }
 
-/-- [commonware_symbolic::qmdb::MMR_DOMAIN]
-    Source: 'src/qmdb.rs', lines 16:0-16:36 -/
-@[global_simps, irreducible] def qmdb.MMR_DOMAIN : Std.U8 := 0#u8
+/-- Trait implementation: [commonware_symbolic::ordered::{impl commonware_symbolic::ordered::Graftable for u64}]
+    Source: 'src/ordered.rs', lines 90:0-90:25 -/
+@[reducible]
+def U64.Insts.Commonware_symbolicOrderedGraftable : ordered.Graftable Std.U64
+  := {
+  coremarkerCopyInst := core.U64.Insts.CoreMarkerCopy
+}
 
-/-- [commonware_symbolic::qmdb::FORWARD_FOLD]
-    Source: 'src/qmdb.rs', lines 19:0-19:38 -/
-@[global_simps, irreducible] def qmdb.FORWARD_FOLD : Std.U8 := 0#u8
+/-- [commonware_symbolic::ordered::encode]:
+    Source: 'src/ordered.rs', lines 93:0-111:1 -/
+def ordered.encode
+  {K : Type _} {V : Type _} {W : Type _} {Clause1_Value : Type _} (KeyInst :
+  ordered.Key K) (ValueEncodingInst : ordered.ValueEncoding V Clause1_Value)
+  (layoutWriterWKClause1_ValueUpdateInst : layout.Writer W K Clause1_Value
+  (ordered.Update K V Clause1_Value)) (writer : W) (widths : layout.Widths)
+  (operation : ordered.Operation Std.U64 K V Clause1_Value) :
+  RustM W
+  := do
+  match operation with
+  | ordered.Operation.Update update =>
+    layout.write_fixed layoutWriterWKClause1_ValueUpdateInst writer widths
+      (layout.Operation.Update update)
+  | ordered.Operation.Commit metadata floor =>
+    layout.write_fixed layoutWriterWKClause1_ValueUpdateInst writer widths
+      (layout.Operation.Commit metadata floor)
+
+/-- [commonware_symbolic::qmdb::BACKWARD_FOLD]
+    Source: 'src/qmdb.rs', lines 18:0-18:39 -/
+@[global_simps, irreducible] def qmdb.BACKWARD_FOLD : Std.U8 := 1#u8
+
+/-- [commonware_symbolic::ordered::verify_selected]:
+    Source: 'src/ordered.rs', lines 114:0-150:1 -/
+def ordered.verify_selected
+  {K : Type _} {V : Type _} {T : Type _} {W : Type _} {Clause1_Value : Type _}
+  {Clause2_Digest : Type _} (KeyInst : ordered.Key K) (ValueEncodingInst :
+  ordered.ValueEncoding V Clause1_Value) (termsTermsInst : terms.Terms T
+  Clause2_Digest) (DigestInst : ordered.Digest Clause2_Digest)
+  (layoutWriterWKClause1_ValueUpdateInst : layout.Writer W K Clause1_Value
+  (ordered.Update K V Clause1_Value)) (coreconvertAsRefWSliceU8Inst :
+  core.convert.AsRef W (Slice Std.U8)) (terms1 : T) (widths : layout.Widths)
+  (writer : W)
+  (proof : ordered.OperationProof Std.U64 Clause2_Digest (ordered.Payload
+  Clause2_Digest)) (operation : ordered.Operation Std.U64 K V Clause1_Value)
+  (root : Clause2_Digest) :
+  RustM Bool
+  := do
+  let (t, p) := proof.payload
+  let writer1 ←
+    ordered.encode KeyInst ValueEncodingInst
+      layoutWriterWKClause1_ValueUpdateInst writer widths operation
+  let s ← coreconvertAsRefWSliceU8Inst.as_ref writer1
+  current.verify_operation
+    geometry.Mmb.Insts.Commonware_symbolicReconstructGeometryPeaks
+    termsTermsInst () terms1 qmdb.BACKWARD_FOLD true
+    {
+      leaves := p.leaves,
+      inactive := p.inactive,
+      digests := p.digests,
+      ops_root := t,
+      pending := p.pending,
+      «partial» := p.partial
+    } proof.loc p.chunk s root
+
+/-- [commonware_symbolic::ordered::verify_member]:
+    Source: 'src/ordered.rs', lines 155:0-174:1 -/
+def ordered.verify_member
+  {K : Type _} {V : Type _} {T : Type _} {W : Type _} {Clause1_Value : Type _}
+  {Clause2_Digest : Type _} (KeyInst : ordered.Key K) (ValueEncodingInst :
+  ordered.ValueEncoding V Clause1_Value) (termsTermsInst : terms.Terms T
+  Clause2_Digest) (DigestInst : ordered.Digest Clause2_Digest)
+  (layoutWriterWKClause1_ValueUpdateInst : layout.Writer W K Clause1_Value
+  (ordered.Update K V Clause1_Value)) (coreconvertAsRefWSliceU8Inst :
+  core.convert.AsRef W (Slice Std.U8)) (terms1 : T) (widths : layout.Widths)
+  (writer : W) (key : K) (value : Clause1_Value) (next : K)
+  (proof : ordered.OperationProof Std.U64 Clause2_Digest (ordered.Payload
+  Clause2_Digest)) (root : Clause2_Digest) :
+  RustM Bool
+  := do
+  let operation ←
+    ordered.claim.membership U64.Insts.Commonware_symbolicOrderedGraftable
+      KeyInst ValueEncodingInst key value next
+  ordered.verify_selected KeyInst ValueEncodingInst termsTermsInst DigestInst
+    layoutWriterWKClause1_ValueUpdateInst coreconvertAsRefWSliceU8Inst terms1
+    widths writer proof operation root
+
+/-- [commonware_symbolic::ordered::verify_exclusion]:
+    Source: 'src/ordered.rs', lines 178:0-199:1 -/
+def ordered.verify_exclusion
+  {K : Type _} {V : Type _} {T : Type _} {W : Type _} {Clause1_Value : Type _}
+  {Clause2_Digest : Type _} (KeyInst : ordered.Key K) (ValueEncodingInst :
+  ordered.ValueEncoding V Clause1_Value) (termsTermsInst : terms.Terms T
+  Clause2_Digest) (DigestInst : ordered.Digest Clause2_Digest)
+  (layoutWriterWKClause1_ValueUpdateInst : layout.Writer W K Clause1_Value
+  (ordered.Update K V Clause1_Value)) (coreconvertAsRefWSliceU8Inst :
+  core.convert.AsRef W (Slice Std.U8)) (terms1 : T) (widths : layout.Widths)
+  (writer : W) (key : K)
+  (proof : ordered.ExclusionProof Std.U64 K V Clause2_Digest (ordered.Payload
+  Clause2_Digest) Clause1_Value) (root : Clause2_Digest) :
+  RustM Bool
+  := do
+  let o ←
+    ordered.claim.exclusion U64.Insts.Commonware_symbolicOrderedGraftable
+      KeyInst ValueEncodingInst DigestInst key proof
+  match o with
+  | core.option.Option.None => ok false
+  | core.option.Option.Some p =>
+    let (op, operation) := p
+    ordered.verify_selected KeyInst ValueEncodingInst termsTermsInst DigestInst
+      layoutWriterWKClause1_ValueUpdateInst coreconvertAsRefWSliceU8Inst terms1
+      widths writer op operation root
 
 /-- [commonware_symbolic::qmdb::MAX_HEIGHT]
-    Source: 'src/qmdb.rs', lines 22:0-22:38 -/
+    Source: 'src/qmdb.rs', lines 21:0-21:38 -/
 @[global_simps, irreducible] def qmdb.MAX_HEIGHT : Std.U32 := 62#u32
 
-/-- [commonware_symbolic::qmdb::{impl commonware_symbolic::traversal::Nodes<Clause0_Digest> for commonware_symbolic::qmdb::Mmr<'_0, T>}::node_digest]:
-    Source: 'src/qmdb.rs', lines 38:4-40:5 -/
-def qmdb.Mmr.Insts.Commonware_symbolicTraversalNodes.node_digest
-  {T : Type _} {Clause0_Digest : Type _} (termsTermsInst : terms.Terms T
-  Clause0_Digest) (self : qmdb.Mmr T) (position : Std.U64)
-  (left : Clause0_Digest) (right : Clause0_Digest) :
-  RustM Clause0_Digest
-  := do
-  terms.node_digest termsTermsInst self position left right
-
-/-- [commonware_symbolic::qmdb::{impl commonware_symbolic::traversal::Nodes<Clause0_Digest> for commonware_symbolic::qmdb::Mmr<'_0, T>}::leaf_digest]:
-    Source: 'src/qmdb.rs', lines 34:4-36:5 -/
-def qmdb.Mmr.Insts.Commonware_symbolicTraversalNodes.leaf_digest
-  {T : Type _} {Clause0_Digest : Type _} (termsTermsInst : terms.Terms T
-  Clause0_Digest) (self : qmdb.Mmr T) (position : Std.U64)
-  (element : Slice Std.U8) :
-  RustM Clause0_Digest
-  := do
-  terms.leaf_digest termsTermsInst self position element
-
-/-- [commonware_symbolic::qmdb::{impl commonware_symbolic::traversal::Nodes<Clause0_Digest> for commonware_symbolic::qmdb::Mmr<'_0, T>}::children]:
-    Source: 'src/qmdb.rs', lines 30:4-32:5 -/
-def qmdb.Mmr.Insts.Commonware_symbolicTraversalNodes.children
-  {T : Type _} {Clause0_Digest : Type _} (termsTermsInst : terms.Terms T
-  Clause0_Digest) (self : qmdb.Mmr T) (position : Std.U64) (height : Std.U32) :
-  RustM (Std.U64 × Std.U64)
-  := do
-  let i ← 1#u64 <<< height
-  let i1 ← position - i
-  let i2 ← position - 1#u64
-  ok (i1, i2)
-
-/-- Trait implementation: [commonware_symbolic::qmdb::{impl commonware_symbolic::traversal::Nodes<Clause0_Digest> for commonware_symbolic::qmdb::Mmr<'_0, T>}]
-    Source: 'src/qmdb.rs', lines 27:0-41:1 -/
-@[reducible]
-def qmdb.Mmr.Insts.Commonware_symbolicTraversalNodes {T : Type _}
-  {Clause0_Digest : Type _} (termsTermsInst : terms.Terms T Clause0_Digest) :
-  traversal.Nodes (qmdb.Mmr T) Clause0_Digest := {
-  coremarkerCopyInst := termsTermsInst.coremarkerCopyInst
-  children := qmdb.Mmr.Insts.Commonware_symbolicTraversalNodes.children
-    termsTermsInst
-  leaf_digest := qmdb.Mmr.Insts.Commonware_symbolicTraversalNodes.leaf_digest
-    termsTermsInst
-  node_digest := qmdb.Mmr.Insts.Commonware_symbolicTraversalNodes.node_digest
-    termsTermsInst
-}
-
-/-- [commonware_symbolic::qmdb::{impl core::convert::AsRef<[u8]> for commonware_symbolic::qmdb::Element<'_0>}::as_ref]:
-    Source: 'src/qmdb.rs', lines 47:4-49:5
-    Visibility: public -/
-def qmdb.Element.Insts.CoreConvertAsRefSliceU8.as_ref
-  (self : qmdb.Element) : RustM (Slice Std.U8) := do
-  ok self
-
-/-- Trait implementation: [commonware_symbolic::qmdb::{impl core::convert::AsRef<[u8]> for commonware_symbolic::qmdb::Element<'_0>}]
-    Source: 'src/qmdb.rs', lines 46:0-50:1 -/
-@[reducible]
-def qmdb.Element.Insts.CoreConvertAsRefSliceU8 : core.convert.AsRef
-  qmdb.Element (Slice Std.U8) := {
-  as_ref := qmdb.Element.Insts.CoreConvertAsRefSliceU8.as_ref
-}
-
-/-- [commonware_symbolic::qmdb::{impl core::iter::traits::iterator::Iterator<commonware_symbolic::qmdb::Element<'a>> for commonware_symbolic::qmdb::Single<'a>}::next]:
-    Source: 'src/qmdb.rs', lines 58:4-66:5
-    Visibility: public -/
-def qmdb.Single.Insts.CoreIterTraitsIteratorIteratorElement.next
-  (self : qmdb.Single) :
-  RustM ((core.option.Option qmdb.Element) × qmdb.Single)
-  := do
-  match self with
-  | core.option.Option.None =>
-    ok (core.option.Option.None, core.option.Option.None)
-  | core.option.Option.Some item =>
-    ok (core.option.Option.Some item, core.option.Option.None)
-
-/-- Trait implementation: [commonware_symbolic::qmdb::{impl core::iter::traits::iterator::Iterator<commonware_symbolic::qmdb::Element<'a>> for commonware_symbolic::qmdb::Single<'a>}]
-    Source: 'src/qmdb.rs', lines 55:0-67:1 -/
-@[reducible]
-def qmdb.Single.Insts.CoreIterTraitsIteratorIteratorElement :
-  core.iter.traits.iterator.Iterator qmdb.Single qmdb.Element := {
-  next := qmdb.Single.Insts.CoreIterTraitsIteratorIteratorElement.next
-}
-
 /-- [commonware_symbolic::qmdb::verify]:
-    Source: 'src/qmdb.rs', lines 74:0-104:1 -/
+    Source: 'src/qmdb.rs', lines 26:0-54:1 -/
 def qmdb.verify
   {T : Type _} {Clause0_Digest : Type _} (termsTermsInst : terms.Terms T
   Clause0_Digest) (terms1 : T) (height : Std.U32) (location : Std.U64)
@@ -1013,44 +2898,29 @@ def qmdb.verify
   if height > qmdb.MAX_HEIGHT
   then ok false
   else
-    let leaves ← 1#u64 <<< height
-    if location >= leaves
-    then ok false
-    else
-      let opening ←
-        traversal.Opening.new (qmdb.Mmr.Insts.Commonware_symbolicTraversalNodes
-          termsTermsInst) terms1 (core.option.Option.Some item) siblings
-          0#usize ()
-      let i ← leaves - 1#u64
-      let i1 ← 2#u64 * i
-      let i2 ← location + 1#u64
-      let (r, opening1) ←
-        traversal.reconstruct
-          (traversal.Opening.Insts.Commonware_symbolicTraversalBackend
-          (qmdb.Mmr.Insts.Commonware_symbolicTraversalNodes termsTermsInst)
-          qmdb.Single.Insts.CoreIterTraitsIteratorIteratorElement
-          qmdb.Element.Insts.CoreConvertAsRefSliceU8
-          (Tuple.Insts.Commonware_symbolicTraversalCollect Clause0_Digest))
-          { opening with collected := () } i1 leaves 0#u64 location i2
-      match r with
-      | core.result.Result.Ok peak =>
-        let i3 ←
-          traversal.Opening.impl.cursor
-            (qmdb.Mmr.Insts.Commonware_symbolicTraversalNodes termsTermsInst)
-            { opening1 with collected := () }
-        let i4 ← core.slice.Slice.len siblings
-        if i3 = i4
-        then
-          let t ←
-            terms.root termsTermsInst terms1
-              (Array.make 2#usize [ qmdb.MMR_DOMAIN, qmdb.FORWARD_FOLD ])
-              leaves 0#u64 peak
-          termsTermsInst.corecmpPartialEqInst.eq t root
-        else ok false
-      | core.result.Result.Err _ => ok false
+    let sn ← reconstruct.StandardNodes.new () terms1
+    let i ← 1#u64 <<< height
+    let s ← reconstruct.Single.new item
+    let r ←
+      reconstruct.reconstruct
+        geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks
+        termsTermsInst
+        (reconstruct.StandardNodes.Insts.Commonware_symbolicTraversalNodes
+        geometry.Mmr.Insts.Commonware_symbolicReconstructGeometryPeaks
+        termsTermsInst)
+        reconstruct.Single.Insts.CoreIterTraitsIteratorIteratorElement
+        reconstruct.Element.Insts.CoreConvertAsRefSliceU8
+        (Tuple.Insts.Commonware_symbolicTraversalCollect Clause0_Digest) ()
+        terms1 sn
+        (Array.make 2#usize [ mmr_geometry.DOMAIN, qmdb.BACKWARD_FOLD ]) true i
+        0#usize siblings location 1#u64 s ()
+    match r with
+    | core.result.Result.Ok rebuilt =>
+      termsTermsInst.corecmpPartialEqInst.eq rebuilt root
+    | core.result.Result.Err _ => ok false
 
 /-- [commonware_symbolic::qmdb::client_step]:
-    Source: 'src/qmdb.rs', lines 118:0-140:1 -/
+    Source: 'src/qmdb.rs', lines 68:0-90:1 -/
 def qmdb.client_step
   {T : Type _} {Clause0_Digest : Type _} {Clause1_Message : Type _}
   (termsTermsInst : terms.Terms T Clause0_Digest) (clientMessagesInst :

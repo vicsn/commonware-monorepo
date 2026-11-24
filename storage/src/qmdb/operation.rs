@@ -8,21 +8,11 @@ use commonware_codec::{
 use commonware_runtime::BufMut;
 use core::{fmt::Debug, hash::Hash};
 
-/// Wire tag for a commit operation. Every database tags its commits alike.
-///
+pub(crate) mod tags;
+
 /// An encoded operation opens with its tag. One table serves every database, so no tag stands
 /// for two kinds of operation.
-pub const COMMIT_CONTEXT: u8 = 0;
-/// Wire tag for an update operation of an [any](crate::qmdb::any) or
-/// [current](crate::qmdb::current) database.
-pub const UPDATE_CONTEXT: u8 = 1;
-/// Wire tag for a delete operation of an [any](crate::qmdb::any) or
-/// [current](crate::qmdb::current) database.
-pub const DELETE_CONTEXT: u8 = 2;
-/// Wire tag for a set operation of an [immutable](crate::qmdb::immutable) database.
-pub const SET_CONTEXT: u8 = 3;
-/// Wire tag for an append operation of a [keyless](crate::qmdb::keyless) database.
-pub const APPEND_CONTEXT: u8 = 4;
+pub use tags::{APPEND_CONTEXT, COMMIT_CONTEXT, DELETE_CONTEXT, SET_CONTEXT, UPDATE_CONTEXT};
 
 /// A QMDB key, indexed by its `AsRef<[u8]>` bytes.
 ///

@@ -4,15 +4,15 @@ use crate::merkle::{Bagging, Error, Family, Location, Position};
 use commonware_cryptography::{Digest, Hasher as CHasher};
 use commonware_parallel::Sequential;
 use core::marker::PhantomData;
-use terms::{MAX_PARTS, Part, Terms};
+use terms::{Cursor, MAX_PARTS, Part, Terms};
 
 pub(crate) mod terms;
 
 /// Hashes [`Part`]s with a [`Hasher`] by concatenating their bytes.
-struct ByteTerms<'a, F, H>(&'a H, PhantomData<F>);
+pub(crate) struct ByteTerms<'a, F, H>(&'a H, PhantomData<F>);
 
 impl<'a, F: Family, H: Hasher<F>> ByteTerms<'a, F, H> {
-    const fn new(hasher: &'a H) -> Self {
+    pub(crate) const fn new(hasher: &'a H) -> Self {
         Self(hasher, PhantomData)
     }
 }
@@ -22,6 +22,21 @@ impl<F: Family, H: Hasher<F>> Terms for ByteTerms<'_, F, H> {
 
     fn hash(&self, parts: &[Part<'_, H::Digest>]) -> H::Digest {
         hash_parts(parts, |slices| self.0.hash(slices))
+    }
+}
+
+/// Reads peak digests from both ends of a double-ended iterator.
+struct Ends<I>(I);
+
+impl<'a, D: Copy + 'a, I: DoubleEndedIterator<Item = &'a D>> Cursor for Ends<I> {
+    type Digest = D;
+
+    fn next(&mut self) -> Option<D> {
+        self.0.next().copied()
+    }
+
+    fn next_back(&mut self) -> Option<D> {
+        self.0.next_back().copied()
     }
 }
 
@@ -147,40 +162,15 @@ pub trait Hasher<F: Family>: Clone + Send + Sync {
         I::IntoIter: DoubleEndedIterator,
     {
         let bagging = self.root_bagging();
-        let domain = [F::DOMAIN, bagging.domain()];
-        let mut peak_digests = peak_digests.into_iter();
-        let Some(first) = peak_digests.next() else {
-            return (inactive_peaks_to_fold == 0 && committed_inactive_peaks == 0)
-                .then(|| terms::empty_root(&ByteTerms::new(self), domain, *leaves));
-        };
-
-        let mut acc = *first;
-        for _ in 0..inactive_peaks_to_fold.saturating_sub(1) {
-            let peak = peak_digests.next()?;
-            acc = self.fold(&acc, peak);
-        }
-
-        let folded_peaks = match bagging {
-            Bagging::ForwardFold => {
-                for peak in peak_digests {
-                    acc = self.fold(&acc, peak);
-                }
-                acc
-            }
-            Bagging::BackwardFold => peak_digests
-                .rev()
-                .copied()
-                .reduce(|bag, peak| self.fold(&peak, &bag))
-                .map_or(acc, |bag| self.fold(&acc, &bag)),
-        };
-
-        Some(terms::root(
+        terms::bagged_root(
             &ByteTerms::new(self),
-            domain,
+            [F::DOMAIN, bagging.domain()],
+            bagging == Bagging::BackwardFold,
             *leaves,
+            inactive_peaks_to_fold,
             committed_inactive_peaks as u64,
-            &folded_peaks,
-        ))
+            &mut Ends(peak_digests.into_iter()),
+        )
     }
 }
 

@@ -1,6 +1,6 @@
 use crate::qmdb::{
     any::operation::{
-        Update as UpdateTrait,
+        Buffer, Update as UpdateTrait, layout,
         update::{Parts, sealed::Sealed},
     },
     operation::Key,
@@ -105,9 +105,12 @@ where
     V: ValueEncoding,
 {
     fn write(&self, buf: &mut impl BufMut) {
-        self.key.write(buf);
-        self.value.write(buf);
-        self.next_key.write(buf);
+        layout::write_ordered_update(
+            &mut Buffer::<_, K, V::Value, Self>::new(buf),
+            &self.key,
+            &self.value,
+            &self.next_key,
+        );
     }
 }
 

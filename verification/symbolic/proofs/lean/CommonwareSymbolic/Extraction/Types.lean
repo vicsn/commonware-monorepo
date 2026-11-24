@@ -3,6 +3,7 @@
 module
 public import Aeneas
 public import CoreModels
+public import CommonwareSymbolic.Extraction.TypesExternal
 @[expose] public section
 open CoreModels Aeneas
 open Aeneas.Std hiding namespace core alloc
@@ -139,6 +140,95 @@ structure terms.Terms (Self : Type _) (Self_Digest : Type _) where
   corecmpPartialEqInst : core.cmp.PartialEq Self_Digest Self_Digest
   hash : Self → Slice (terms.Part Self_Digest) → RustM Self_Digest
 
+/-- Trait declaration: [commonware_symbolic::terms::Cursor]
+    Source: 'src/../../../storage/src/merkle/hasher/terms.rs', lines 83:0-92:1 -/
+structure terms.Cursor (Self : Type _) (Self_Digest : Type _) where
+  next : Self → RustM ((core.option.Option Self_Digest) × Self)
+  next_back : Self → RustM ((core.option.Option Self_Digest) × Self)
+
+/-- [commonware_symbolic::mmb_geometry::Peaks]
+    Source: 'src/../../../storage/src/merkle/mmb/geometry.rs', lines 62:0-71:1 -/
+structure mmb_geometry.Peaks where
+  n : Std.U64
+  current_i : Std.U32
+  remaining : Std.U32
+  start_leaf_cursor : Std.U64
+
+/-- [commonware_symbolic::mmr_geometry::Peaks]
+    Source: 'src/../../../storage/src/merkle/mmr/geometry.rs', lines 33:0-40:1 -/
+structure mmr_geometry.Peaks where
+  leaves : Std.U64
+  height : Std.U32
+  nodes : Std.U64
+
+/-- [commonware_symbolic::reconstruct::Error]
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 12:0-27:1 -/
+@[discriminant isize]
+inductive reconstruct.Error where
+| ExtraDigests : reconstruct.Error
+| InvalidProof : reconstruct.Error
+| MissingElements : reconstruct.Error
+| InvalidStartLoc : reconstruct.Error
+| InvalidEndLoc : reconstruct.Error
+| InvalidSize : reconstruct.Error
+| MissingDigests : reconstruct.Error
+
+/-- Trait declaration: [commonware_symbolic::reconstruct::Peaks]
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 30:0-33:1 -/
+structure reconstruct.Peaks (Self : Type _) where
+  next : Self → RustM ((core.option.Option (Std.U64 × Std.U32)) × Self)
+
+/-- Trait declaration: [commonware_symbolic::reconstruct::Geometry]
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 36:0-56:1 -/
+structure reconstruct.Geometry (Self : Type _) (Self_Peaks : Type _) where
+  PeaksInst : reconstruct.Peaks Self_Peaks
+  domain : Self → RustM Std.U8
+  max_leaves : Self → RustM Std.U64
+  peaks : Self → Std.U64 → RustM Self_Peaks
+  children : Self → Std.U64 → Std.U32 → RustM (Std.U64 × Std.U64)
+  birth_offset : Self → Std.U32 → RustM Std.U64
+
+/-- [commonware_symbolic::reconstruct::StandardNodes]
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 59:0-62:1 -/
+structure reconstruct.StandardNodes (G : Type _) (T : Type _) where
+  geometry : G
+  terms : T
+
+/-- Trait declaration: [commonware_symbolic::traversal::Nodes]
+    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 69:0-90:1 -/
+structure traversal.Nodes (Self : Type _) (Self_Digest : Type _) where
+  coremarkerCopyInst : core.marker.Copy Self_Digest
+  children : Self → Std.U64 → Std.U32 → RustM (Std.U64 × Std.U64)
+  leaf_digest : Self → Std.U64 → Slice Std.U8 → RustM Self_Digest
+  node_digest : Self → Std.U64 → Std.U32 → Std.U64 → Self_Digest →
+    Self_Digest → RustM Self_Digest
+
+/-- [commonware_symbolic::reconstruct::Element]
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 95:0-95:40 -/
+@[reducible]
+def reconstruct.Element := Slice Std.U8
+
+/-- [commonware_symbolic::reconstruct::Single]
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 104:0-104:47 -/
+@[reducible]
+def reconstruct.Single := core.option.Option (Slice Std.U8)
+
+/-- [commonware_symbolic::reconstruct::Ends]
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 128:0-132:1 -/
+structure reconstruct.Ends (D : Type _) where
+  digests : Slice D
+  front : Std.Usize
+  back : Std.Usize
+
+/-- [commonware_symbolic::reconstruct::Layout]
+    Source: 'src/../../../storage/src/merkle/proof/reconstruct.rs', lines 183:0-194:1 -/
+structure reconstruct.Layout where
+  before : Std.Usize
+  overlapping : Std.Usize
+  after : Std.Usize
+  fold : Std.Usize
+  individual_after : Std.Usize
+
 /-- [commonware_symbolic::traversal::Error]
     Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 4:0-7:1 -/
 @[discriminant isize]
@@ -146,35 +236,8 @@ inductive traversal.Error where
 | MissingElements : traversal.Error
 | MissingDigests : traversal.Error
 
-/-- Trait declaration: [commonware_symbolic::traversal::Backend]
-    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 10:0-24:1 -/
-structure traversal.Backend (Self : Type _) (Self_Digest : Type _) where
-  coremarkerCopyInst : core.marker.Copy Self_Digest
-  children : Self → Std.U64 → Std.U64 → RustM (Std.U64 × Std.U64)
-  sibling : Self → RustM ((core.result.Result Self_Digest traversal.Error) ×
-    Self)
-  leaf : Self → Std.U64 → RustM ((core.result.Result Self_Digest
-    traversal.Error) × Self)
-  node : Self → Std.U64 → Self_Digest → Self_Digest → RustM Self_Digest
-  collect : Self → Std.U64 → Self_Digest → Std.U64 → Self_Digest →
-    RustM Self
-
-/-- Trait declaration: [commonware_symbolic::traversal::Nodes]
-    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 62:0-76:1 -/
-structure traversal.Nodes (Self : Type _) (Self_Digest : Type _) where
-  coremarkerCopyInst : core.marker.Copy Self_Digest
-  children : Self → Std.U64 → Std.U32 → RustM (Std.U64 × Std.U64)
-  leaf_digest : Self → Std.U64 → Slice Std.U8 → RustM Self_Digest
-  node_digest : Self → Std.U64 → Self_Digest → Self_Digest → RustM
-    Self_Digest
-
-/-- Trait declaration: [commonware_symbolic::traversal::Collect]
-    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 79:0-82:1 -/
-structure traversal.Collect (Self : Type _) (D : Type _) where
-  collect : Self → Std.U64 → D → Std.U64 → D → RustM Self
-
 /-- [commonware_symbolic::traversal::Opening]
-    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 90:0-96:1 -/
+    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 109:0-115:1 -/
 structure traversal.Opening (N : Type _) (E : Type _) (C : Type _)
   (Clause0_Digest : Type _) where
   nodes : N
@@ -183,8 +246,64 @@ structure traversal.Opening (N : Type _) (E : Type _) (C : Type _)
   cursor : Std.Usize
   collected : C
 
+/-- Trait declaration: [commonware_symbolic::traversal::Collect]
+    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 93:0-99:1 -/
+structure traversal.Collect (Self : Type _) (D : Type _) where
+  collect : Self → Std.U64 → D → Std.U64 → D → RustM Self
+  peak : Self → Std.U64 → D → RustM Self
+
+/-- Trait declaration: [commonware_symbolic::traversal::Backend]
+    Source: 'src/../../../storage/src/merkle/proof/traversal.rs', lines 10:0-31:1 -/
+structure traversal.Backend (Self : Type _) (Self_Digest : Type _) where
+  coremarkerCopyInst : core.marker.Copy Self_Digest
+  children : Self → Std.U64 → Std.U64 → RustM (Std.U64 × Std.U64)
+  sibling : Self → RustM ((core.result.Result Self_Digest traversal.Error) ×
+    Self)
+  leaf : Self → Std.U64 → RustM ((core.result.Result Self_Digest
+    traversal.Error) × Self)
+  node : Self → Std.U64 → Std.U64 → Std.U64 → Self_Digest →
+    Self_Digest → RustM Self_Digest
+  collect : Self → Std.U64 → Self_Digest → Std.U64 → Self_Digest →
+    RustM Self
+
+/-- Trait declaration: [commonware_symbolic::layout::Writer]
+    Source: 'src/../../../storage/src/qmdb/any/operation/layout.rs', lines 9:0-34:1 -/
+structure layout.Writer (Self : Type _) (Self_Key : Type _) (Self_Value :
+  Type _) (Self_Update : Type _) where
+  byte : Self → Std.U8 → RustM Self
+  zeros : Self → Std.Usize → RustM Self
+  word : Self → Std.U64 → RustM Self
+  key : Self → Self_Key → RustM Self
+  value : Self → Self_Value → RustM Self
+  update : Self → Self_Update → RustM Self
+
+/-- [commonware_symbolic::layout::Operation]
+    Source: 'src/../../../storage/src/qmdb/any/operation/layout.rs', lines 37:0-44:1 -/
+@[discriminant isize]
+inductive layout.Operation (K : Type _) (V : Type _) (U : Type _) where
+| Delete : K → layout.Operation K V U
+| Update : U → layout.Operation K V U
+| Commit : core.option.Option V → Std.U64 → layout.Operation K V U
+
+/-- [commonware_symbolic::layout::Widths]
+    Source: 'src/../../../storage/src/qmdb/any/operation/layout.rs', lines 47:0-54:1 -/
+structure layout.Widths where
+  key : Std.Usize
+  value : Std.Usize
+  update : Std.Usize
+
+/-- [commonware_symbolic::grafting::Grafted]
+    Source: 'src/../../../storage/src/qmdb/current/grafting/rules.rs', lines 76:0-83:1 -/
+structure grafting.Grafted (N : Type _) (T : Type _) (C : Type _) where
+  nodes : N
+  terms : T
+  grafting_height : Std.U32
+  start_chunk : Std.U64
+  chunks : Slice C
+  graftable : Std.U64
+
 /-- [commonware_symbolic::ordered::Update]
-    Source: 'src/ordered.rs', lines 25:0-29:1 -/
+    Source: 'src/ordered.rs', lines 36:0-40:1 -/
 structure ordered.Update (K : Type _) (V : Type _) (Clause1_Value : Type _)
   where
   key : K
@@ -192,7 +311,7 @@ structure ordered.Update (K : Type _) (V : Type _) (Clause1_Value : Type _)
   next_key : K
 
 /-- [commonware_symbolic::ordered::Operation]
-    Source: 'src/ordered.rs', lines 41:0-44:1 -/
+    Source: 'src/ordered.rs', lines 52:0-55:1 -/
 @[discriminant isize]
 inductive ordered.Operation (F : Type _) (K : Type _) (V : Type _)
   (Clause2_Value : Type _) where
@@ -205,30 +324,30 @@ inductive ordered.Operation (F : Type _) (K : Type _) (V : Type _)
   ordered.Operation F K V Clause2_Value
 
 /-- Trait declaration: [commonware_symbolic::ordered::ValueEncoding]
-    Source: 'src/ordered.rs', lines 13:0-15:1 -/
+    Source: 'src/ordered.rs', lines 24:0-26:1 -/
 structure ordered.ValueEncoding (Self : Type _) (Self_Value : Type _) where
   corecloneCloneInst : core.clone.Clone Self_Value
 
 /-- Trait declaration: [commonware_symbolic::ordered::Key]
-    Source: 'src/ordered.rs', lines 10:0-12:1 -/
+    Source: 'src/ordered.rs', lines 21:0-23:1 -/
 structure ordered.Key (Self : Type _) where
   corecloneCloneInst : core.clone.Clone Self
   corecmpPartialEqInst : core.cmp.PartialEq Self Self
   less : Self → Self → RustM Bool
 
 /-- Trait declaration: [commonware_symbolic::ordered::Graftable]
-    Source: 'src/ordered.rs', lines 8:0-8:35 -/
+    Source: 'src/ordered.rs', lines 19:0-19:35 -/
 structure ordered.Graftable (Self : Type _) where
   coremarkerCopyInst : core.marker.Copy Self
 
 /-- [commonware_symbolic::ordered::OperationProof]
-    Source: 'src/ordered.rs', lines 46:0-49:1 -/
+    Source: 'src/ordered.rs', lines 57:0-60:1 -/
 structure ordered.OperationProof (F : Type _) (D : Type _) (C : Type _) where
   loc : F
   payload : (D × C)
 
 /-- [commonware_symbolic::ordered::ExclusionProof]
-    Source: 'src/ordered.rs', lines 51:0-54:1 -/
+    Source: 'src/ordered.rs', lines 62:0-65:1 -/
 @[discriminant isize]
 inductive ordered.ExclusionProof (F : Type _) (K : Type _) (V : Type _) (D :
   Type _) (C : Type _) (Clause2_Value : Type _) where
@@ -242,8 +361,23 @@ inductive ordered.ExclusionProof (F : Type _) (K : Type _) (V : Type _) (D :
   ordered.ExclusionProof F K V D C Clause2_Value
 
 /-- Trait declaration: [commonware_symbolic::ordered::Digest]
-    Source: 'src/ordered.rs', lines 9:0-9:26 -/
+    Source: 'src/ordered.rs', lines 20:0-20:26 -/
 structure ordered.Digest (Self : Type _) where
+
+/-- [commonware_symbolic::current::Fields]
+    Source: 'src/../../../storage/src/qmdb/current/proof/rules.rs', lines 49:0-62:1 -/
+structure current.Fields (D : Type _) where
+  leaves : Std.U64
+  inactive : Std.Usize
+  digests : Slice D
+  ops_root : D
+  pending : core.option.Option D
+  «partial» : core.option.Option D
+
+/-- [commonware_symbolic::current::Chunk]
+    Source: 'src/../../../storage/src/qmdb/current/proof/rules.rs', lines 289:0-289:27 -/
+@[reducible]
+def current.Chunk := Slice Std.U8
 
 /-- [commonware_symbolic::bls::N3f1]
     Source: 'src/bls.rs', lines 10:0-10:48 -/
@@ -261,23 +395,28 @@ structure bls.Certified where
 structure client.Messages (Self : Type _) (Self_Message : Type _) where
   parse : Self → Self_Message → RustM (core.option.Option (Slice Std.U8))
 
-/-- [commonware_symbolic::qmdb::Mmr]
-    Source: 'src/qmdb.rs', lines 25:0-25:36 -/
+/-- [commonware_symbolic::geometry::Mmb]
+    Source: 'src/geometry.rs', lines 13:0-13:22 -/
 @[reducible]
-def qmdb.Mmr (T : Type _) := T
+def geometry.Mmb := Unit
 
-/-- [commonware_symbolic::qmdb::Element]
-    Source: 'src/qmdb.rs', lines 44:0-44:40 -/
+/-- [commonware_symbolic::geometry::Mmr]
+    Source: 'src/geometry.rs', lines 46:0-46:22 -/
 @[reducible]
-def qmdb.Element := Slice Std.U8
+def geometry.Mmr := Unit
 
-/-- [commonware_symbolic::qmdb::Single]
-    Source: 'src/qmdb.rs', lines 53:0-53:47 -/
-@[reducible]
-def qmdb.Single := core.option.Option (Slice Std.U8)
+/-- [commonware_symbolic::ordered::Payload]
+    Source: 'src/ordered.rs', lines 72:0-85:1 -/
+structure ordered.Payload (D : Type _) where
+  leaves : Std.U64
+  inactive : Std.Usize
+  digests : Slice D
+  pending : core.option.Option D
+  «partial» : core.option.Option D
+  chunk : Slice Std.U8
 
 /-- [commonware_symbolic::qmdb::Acceptance]
-    Source: 'src/qmdb.rs', lines 107:0-114:1 -/
+    Source: 'src/qmdb.rs', lines 57:0-64:1 -/
 structure qmdb.Acceptance where
   height : Std.U32
   location : Std.U64

@@ -19,7 +19,7 @@ pub mod mmb;
 pub mod mmr;
 pub mod path;
 mod position;
-mod proof;
+pub(crate) mod proof;
 mod read;
 #[cfg(feature = "std")]
 pub mod storage;

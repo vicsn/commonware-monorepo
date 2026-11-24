@@ -1,9 +1,12 @@
 //! Operation proofs with fixed-size or runtime-sized bitmap chunks.
 
-use super::{RangeProof, activity, chunk_bits};
+use super::{RangeProof, chunk_bits, rules};
 use crate::{
-    merkle::{ElementPlan, Graftable, Location, Position, storage::Storage},
-    qmdb::Error,
+    merkle::{
+        Bagging, ElementPlan, Graftable, Location, PendingChunk as _, Position,
+        proof::FamilyGeometry, storage::Storage,
+    },
+    qmdb::{self, Error},
 };
 use bytes::{BufMut, Bytes};
 use commonware_codec::{Buf, Encode, EncodeSize, Read, ReadExt as _, Write, util::at_least};
@@ -89,24 +92,30 @@ impl<F: Graftable, D: Digest, C: AsRef<[u8]>> Proof<F, D, C> {
     /// Return true if the proof authenticates that `operation` is active in the database with
     /// the provided `root`.
     pub fn verify<H: Hasher<Digest = D>, O: Encode>(&self, operation: O, root: &D) -> bool {
-        let chunk = self.chunk.as_ref();
-        let Ok(bits) = chunk_bits(chunk.len()) else {
-            debug!("proof verification failed, invalid chunk size");
-            return false;
+        let range = &self.range_proof;
+        let fields = rules::Fields {
+            leaves: *range.proof.leaves,
+            inactive: range.proof.inactive_peaks,
+            digests: &range.proof.digests,
+            ops_root: range.ops_root,
+            pending: range.pending_chunk_digest.as_ref().copied(),
+            partial: range.partial_chunk_digest,
         };
-
-        if !activity::get(chunk, *self.loc, bits) {
-            debug!(?self.loc, "proof verification failed, operation is inactive");
-            return false;
-        }
-
-        self.range_proof.verify_with_chunk_size::<H, O>(
-            self.loc,
-            &[operation],
-            core::slice::from_ref(&self.chunk),
-            chunk.len(),
+        let verified = rules::verify_operation(
+            &FamilyGeometry::<F>::new(),
+            &qmdb::hasher::<H>(),
+            qmdb::ROOT_BAGGING.domain(),
+            qmdb::ROOT_BAGGING == Bagging::BackwardFold,
+            &fields,
+            *self.loc,
+            self.chunk.as_ref(),
+            &operation.encode(),
             root,
-        )
+        );
+        if !verified {
+            debug!(?self.loc, "operation proof verification failed");
+        }
+        verified
     }
 }
 

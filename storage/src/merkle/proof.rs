@@ -4,7 +4,10 @@
 //! family (MMR, MMB, etc.) reuses the shared verification and reconstruction logic in this module,
 //! while retaining any family-specific proof helpers in its submodule.
 
-use crate::merkle::{Bagging, Error, Family, Location, Position, hasher::Hasher};
+use crate::merkle::{
+    Bagging, Error, Family, Location, MAX_PINNED_NODES, Position,
+    hasher::{ByteTerms, Hasher},
+};
 use alloc::{collections::BTreeMap, vec, vec::Vec};
 use bytes::BufMut;
 use commonware_codec::{
@@ -14,7 +17,8 @@ use commonware_codec::{
 use commonware_cryptography::Digest;
 use core::{marker::PhantomData, ops::Range};
 
-mod traversal;
+pub(crate) mod reconstruct;
+pub(crate) mod traversal;
 
 /// Errors that can occur when reconstructing a digest from a proof due to invalid input.
 #[derive(thiserror::Error, Debug)]
@@ -506,6 +510,39 @@ impl<F: Family, D: Digest> Proof<F, D> {
         H: Hasher<F, Digest = D>,
         E: AsRef<[u8]>,
     {
+        let elements = elements.into_iter();
+        let count = elements.len() as u64;
+        let bagging = hasher.root_bagging();
+        reconstruct::reconstruct(
+            &FamilyGeometry::<F>::new(),
+            &ByteTerms::new(hasher),
+            FamilyNodes(hasher, PhantomData),
+            [F::DOMAIN, bagging.domain()],
+            bagging == Bagging::BackwardFold,
+            *self.leaves,
+            self.inactive_peaks,
+            &self.digests,
+            *start_loc,
+            count,
+            elements,
+            collected,
+        )
+        .map_err(Into::into)
+    }
+
+    // Baseline reconstruction retained only as an independent regression oracle.
+    #[cfg(test)]
+    pub(crate) fn reconstruct_root_inner_reference<H, E>(
+        &self,
+        hasher: &H,
+        start_loc: Location<F>,
+        elements: impl IntoIterator<Item = E, IntoIter: ExactSizeIterator>,
+        collected: Option<&mut Vec<(Position<F>, D)>>,
+    ) -> Result<D, ReconstructionError>
+    where
+        H: Hasher<F, Digest = D>,
+        E: AsRef<[u8]>,
+    {
         let mut elements = elements.into_iter();
         let elements_len = elements.len();
         let bagging = hasher.root_bagging();
@@ -635,7 +672,14 @@ impl<F: Family, H: Hasher<F>> traversal::Nodes for FamilyNodes<'_, F, H> {
         self.0.leaf_digest(Position::new(position), element)
     }
 
-    fn node_digest(&self, position: u64, left: &H::Digest, right: &H::Digest) -> H::Digest {
+    fn node_digest(
+        &self,
+        position: u64,
+        _height: u32,
+        _start: u64,
+        left: &H::Digest,
+        right: &H::Digest,
+    ) -> H::Digest {
         self.0.node_digest(Position::new(position), left, right)
     }
 }
@@ -645,6 +689,88 @@ impl<F: Family, D> traversal::Collect<D> for Option<&mut Vec<(Position<F>, D)>> 
         if let Some(collected) = self {
             collected.push((Position::new(left_position), left));
             collected.push((Position::new(right_position), right));
+        }
+    }
+
+    fn peak(&mut self, position: u64, digest: D) {
+        if let Some(collected) = self {
+            collected.push((Position::new(position), digest));
+        }
+    }
+}
+
+/// The peaks of family `F`, as [`reconstruct::Geometry`] reads them.
+pub(crate) struct FamilyGeometry<F>(PhantomData<F>);
+
+impl<F> FamilyGeometry<F> {
+    pub(crate) const fn new() -> Self {
+        Self(PhantomData)
+    }
+}
+
+/// The peaks of one structure, copied from [`Family::peaks`].
+pub(crate) struct FamilyPeaks {
+    peaks: [(u64, u32); MAX_PINNED_NODES],
+    len: usize,
+    next: usize,
+}
+
+impl reconstruct::Peaks for FamilyPeaks {
+    fn next(&mut self) -> Option<(u64, u32)> {
+        if self.next == self.len {
+            return None;
+        }
+        let peak = self.peaks[self.next];
+        self.next += 1;
+        Some(peak)
+    }
+}
+
+impl<F: Family> reconstruct::Geometry for FamilyGeometry<F> {
+    type Peaks = FamilyPeaks;
+
+    fn domain(&self) -> u8 {
+        F::DOMAIN
+    }
+
+    fn max_leaves(&self) -> u64 {
+        *F::MAX_LEAVES
+    }
+
+    fn children(&self, position: u64, height: u32) -> (u64, u64) {
+        let (left, right) = F::children(Position::new(position), height);
+        (*left, *right)
+    }
+
+    fn birth_offset(&self, height: u32) -> u64 {
+        F::birth_offset(height)
+    }
+
+    fn peaks(&self, leaves: u64) -> FamilyPeaks {
+        let size = Position::<F>::try_from(Location::new(leaves)).expect("valid leaf count");
+        let mut peaks = FamilyPeaks {
+            peaks: [(0, 0); MAX_PINNED_NODES],
+            len: 0,
+            next: 0,
+        };
+        for (position, height) in F::peaks(size) {
+            peaks.peaks[peaks.len] = (*position, height);
+            peaks.len += 1;
+        }
+        peaks
+    }
+}
+
+impl From<reconstruct::Error> for ReconstructionError {
+    fn from(error: reconstruct::Error) -> Self {
+        match error {
+            reconstruct::Error::ExtraDigests => Self::ExtraDigests,
+            reconstruct::Error::InvalidProof => Self::InvalidProof,
+            reconstruct::Error::MissingElements => Self::MissingElements,
+            reconstruct::Error::InvalidStartLoc => Self::InvalidStartLoc,
+            reconstruct::Error::InvalidEndLoc => Self::InvalidEndLoc,
+            reconstruct::Error::InvalidSize => Self::InvalidSize,
+            reconstruct::Error::MissingDigests => Self::MissingDigests,
         }
     }
 }
@@ -887,6 +1013,7 @@ impl<F: Family> Subtree<F> {
     ///
     /// If `collected` is `Some`, every child `(position, digest)` pair encountered during
     /// reconstruction is appended to the vector.
+    #[cfg(test)]
     fn reconstruct_digest<H, E>(
         &self,
         hasher: &H,
@@ -1115,9 +1242,12 @@ pub(crate) struct Blueprint<F: Family> {
 
 pub(crate) struct ProofDigestLayout<'a, D> {
     pub(crate) fold_prefix: Option<&'a D>,
+    #[cfg(test)]
     pub(crate) prefix_active_peaks: &'a [D],
+    #[cfg(test)]
     pub(crate) after_peaks: &'a [D],
     pub(crate) suffix_acc: Option<&'a D>,
+    #[cfg(test)]
     pub(crate) siblings: &'a [D],
 }
 
@@ -1154,30 +1284,25 @@ impl<F: Family> Blueprint<F> {
         // `inactive_peaks` is a global boundary over the tree's peaks, not just the peaks before
         // this range. It may point into or beyond the proven range; reconstruction then folds the
         // same global boundary and the final root comparison rejects non-canonical proofs.
-        if inactive_peaks > before.len() + overlapping.len() + after.len() {
-            return Err(super::Error::InvalidProof);
-        }
-
+        //
         // Peaks before the range fold into one prefix accumulator when they are inactive or the
         // bagging is forward. Under backward bagging the active ones are folded only after the
         // overlapping peaks, so they cannot be combined ahead of time and stay individual.
-        let first_after = before.len() + overlapping.len();
-        let fold_count = match bagging {
-            Bagging::ForwardFold => before.len(),
-            Bagging::BackwardFold => inactive_peaks.min(before.len()),
-        };
-        let mut fold_prefix = before;
-        let prefix_active_peaks = fold_prefix.split_off(fold_count);
-
         // Backward bagging starts its fold at the newest peak, so the active peaks after the
         // range collapse into one suffix accumulator. The inactive boundary indexes the global
         // peak order, so the after-peaks continue the count past the prefix and overlapping peaks.
-        let individual_count = match bagging {
-            Bagging::ForwardFold => after.len(),
-            Bagging::BackwardFold => inactive_peaks.saturating_sub(first_after).min(after.len()),
-        };
+        let layout = reconstruct::Layout::new(
+            before.len(),
+            overlapping.len(),
+            after.len(),
+            inactive_peaks,
+            bagging == Bagging::BackwardFold,
+        )
+        .ok_or(super::Error::InvalidProof)?;
+        let mut fold_prefix = before;
+        let prefix_active_peaks = fold_prefix.split_off(layout.fold);
         let mut after_peaks = after;
-        let suffix_peaks = after_peaks.split_off(individual_count);
+        let suffix_peaks = after_peaks.split_off(layout.individual_after);
 
         Ok(Self {
             leaves,
@@ -1239,9 +1364,12 @@ impl<F: Family> Blueprint<F> {
 
         Ok(ProofDigestLayout {
             fold_prefix: (!self.fold_prefix.is_empty()).then(|| &digests[0]),
+            #[cfg(test)]
             prefix_active_peaks: &digests[prefix_start..after_start],
+            #[cfg(test)]
             after_peaks: &digests[after_start..suffix_start],
             suffix_acc: (!self.suffix_peaks.is_empty()).then(|| &digests[suffix_start]),
+            #[cfg(test)]
             siblings: &digests[suffix_end..],
         })
     }
@@ -1252,6 +1380,7 @@ impl<F: Family> Blueprint<F> {
     /// The accumulator counts as 1 inactive peak; any inactive peaks beyond `fold_prefix.len()`
     /// remain unfolded after it. Under `ForwardFold` the accumulator may absorb active peaks too
     /// (`fold_prefix.len() > inactive_peaks`); `saturating_sub` clamps and the result is 1.
+    #[cfg(test)]
     const fn inactive_peaks_after_prefix_fold(&self, inactive_peaks: usize) -> usize {
         if self.fold_prefix.is_empty() {
             return inactive_peaks;
@@ -3240,6 +3369,91 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn reconstruction_matches_reference() {
+        fn check<F: Family>() {
+            for bagging in [ForwardFold, BackwardFold] {
+                let hasher = H::new(bagging);
+                for leaves in 0u64..=34 {
+                    let mem = build_raw::<F>(&hasher, leaves);
+                    let size = Position::<F>::try_from(Location::new(leaves)).unwrap();
+                    let peaks = F::peaks(size).count();
+                    for inactive in 0..=peaks {
+                        for start in 0..=leaves {
+                            for end in start..=leaves + 1 {
+                                let range = Location::new(start)..Location::new(end);
+                                let proof = if start < end && end <= leaves {
+                                    RangePlan::new(mem.leaves(), range.clone())
+                                        .unwrap()
+                                        .build(&hasher, inactive, |pos| mem.get_node(pos))
+                                        .unwrap()
+                                } else {
+                                    Proof {
+                                        leaves: Location::new(leaves),
+                                        inactive_peaks: inactive,
+                                        digests: Vec::new(),
+                                    }
+                                };
+                                for damage in 0..8 {
+                                    let mut proof = proof.clone();
+                                    let mut items: Vec<_> =
+                                        (start..end).map(u64::to_be_bytes).collect();
+                                    match damage {
+                                        1 => {
+                                            proof.digests.pop();
+                                        }
+                                        2 => proof.digests.push(test_digest(7)),
+                                        3 => {
+                                            if let Some(d) = proof.digests.first_mut() {
+                                                *d = test_digest(255);
+                                            }
+                                        }
+                                        4 => {
+                                            items.pop();
+                                        }
+                                        5 => items.push(u64::MAX.to_be_bytes()),
+                                        6 => proof.inactive_peaks += 1,
+                                        7 => proof.leaves = Location::new(leaves + 1),
+                                        _ => {}
+                                    }
+                                    for collect in [false, true] {
+                                        let (mut old, mut new) = (Vec::new(), Vec::new());
+                                        let expected = proof
+                                            .reconstruct_root_inner_reference(
+                                                &hasher,
+                                                range.start,
+                                                &items,
+                                                collect.then_some(&mut old),
+                                            )
+                                            .map_err(|e| format!("{e:?}"));
+                                        let actual = proof
+                                            .reconstruct_root_inner(
+                                                &hasher,
+                                                range.start,
+                                                &items,
+                                                collect.then_some(&mut new),
+                                            )
+                                            .map_err(|e| format!("{e:?}"));
+                                        assert_eq!(
+                                            actual, expected,
+                                            "leaves={leaves} inactive={inactive} \
+                                             range={start}..{end} damage={damage}"
+                                        );
+                                        if expected.is_ok() {
+                                            assert_eq!(new, old);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        check::<mmr::Family>();
+        check::<mmb::Family>();
     }
 
     #[test]

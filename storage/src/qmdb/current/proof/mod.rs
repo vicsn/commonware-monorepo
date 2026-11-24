@@ -37,10 +37,12 @@
 //! Pending and partial slots are independent: at gh >= 3 they can coexist. When both are present,
 //! pending hashes in before partial.
 
+#[cfg(test)]
+use crate::merkle::hasher::Hasher as _;
 use crate::{
     journal::contiguous::Contiguous,
     merkle::{
-        self, Family, Graftable, Location, PendingChunk, Position, Proof, hasher::Hasher as _,
+        self, Family, Graftable, Location, PendingChunk, Position, Proof, proof::FamilyGeometry,
         storage::Storage,
     },
     qmdb::{
@@ -55,26 +57,20 @@ use ahash::AHashMap;
 use bytes::BufMut;
 use commonware_codec::{Buf, Encode, EncodeSize, Read, ReadExt as _, Write, varint::UInt};
 use commonware_cryptography::{Digest, Hasher};
-use commonware_utils::{
-    Widen,
-    bitmap::{Prunable as BitMap, Readable as BitmapReadable},
-};
+use commonware_utils::bitmap::{Prunable as BitMap, Readable as BitmapReadable};
 use core::{num::NonZeroU64, ops::Range};
 use tracing::debug;
 
 mod activity;
 pub mod operation;
+mod rules;
 
 /// Validate the chunk width before deriving bitmap indices or Merkle heights.
 pub(super) fn chunk_bits(chunk_size: usize) -> Result<u64, commonware_codec::Error> {
-    chunk_size
-        .checked_mul(8)
-        .map(|bits| -> u64 { Widen::widen(bits) })
-        .filter(|bits| bits.is_power_of_two() && bits.trailing_zeros() < 63)
-        .ok_or(commonware_codec::Error::Invalid(
-            "current proof",
-            "invalid bitmap chunk size",
-        ))
+    rules::chunk_bits(chunk_size).ok_or(commonware_codec::Error::Invalid(
+        "current proof",
+        "invalid bitmap chunk size",
+    ))
 }
 
 /// Bitmap chunk indices read by [RangeProof::new] or [constant::OperationProof::new].
@@ -394,6 +390,50 @@ impl<F: Graftable, D: Digest> RangeProof<F, D> {
     /// Reconstruct the canonical current root, optionally collecting the positioned digests
     /// required to compute the peaks covering the proven range.
     fn reconstruct_root<'a, H, O>(
+        &self,
+        start_loc: Location<F>,
+        ops: impl IntoIterator<Item = &'a O, IntoIter: ExactSizeIterator>,
+        chunks: &[impl AsRef<[u8]>],
+        chunk_size: usize,
+        collected: Option<&mut Vec<(Position<F>, D)>>,
+    ) -> Result<D, merkle::Error<F>>
+    where
+        H: Hasher<Digest = D>,
+        O: Encode + 'a,
+    {
+        let ops = ops.into_iter();
+        let count = ops.len() as u64;
+        let hasher = qmdb::hasher::<H>();
+        let fields = rules::Fields {
+            leaves: *self.proof.leaves,
+            inactive: self.proof.inactive_peaks,
+            digests: &self.proof.digests,
+            ops_root: self.ops_root,
+            pending: self.pending_chunk_digest.as_ref().copied(),
+            partial: self.partial_chunk_digest,
+        };
+        rules::reconstruct(
+            &FamilyGeometry::<F>::new(),
+            &hasher,
+            qmdb::ROOT_BAGGING.domain(),
+            qmdb::ROOT_BAGGING == merkle::Bagging::BackwardFold,
+            &fields,
+            *start_loc,
+            count,
+            ops.map(|op| op.encode()),
+            chunks,
+            chunk_size,
+            collected,
+        )
+        .ok_or_else(|| {
+            debug!("current range proof verification failed");
+            merkle::Error::InvalidProof
+        })
+    }
+
+    // Baseline reconstruction retained only as an independent regression oracle.
+    #[cfg(test)]
+    fn reconstruct_root_reference<'a, H, O>(
         &self,
         start_loc: Location<F>,
         ops: impl IntoIterator<Item = &'a O, IntoIter: ExactSizeIterator>,
@@ -2663,6 +2703,155 @@ mod tests {
                 }
             }
         }
+    }
+
+    async fn check_reconstruction_matches_reference<F: Graftable>() {
+        let hasher = qmdb::hasher::<Sha256>();
+        for leaves in 1u64..=40 {
+            let (bitmap, ops, grafted) = fixture::<F>(leaves, 0).await;
+            let ops_root = ops.root(&hasher, 0).unwrap();
+            let storage =
+                grafting::Storage::<F, Sha256, _, _>::new(&grafted, grafting::height::<1>(), &ops);
+            for floor in [0, leaves / 2, leaves - 1] {
+                let floor = Location::<F>::new(floor);
+                let root = db::compute_ops_root_witness::<F, Sha256, _, _, 1>(
+                    &bitmap,
+                    &storage,
+                    Location::new(leaves),
+                    floor,
+                )
+                .unwrap()
+                .root::<Sha256>(&ops_root);
+                for start in *floor..leaves {
+                    for end in start + 1..=leaves.min(start + 9) {
+                        let range = Location::new(start)..Location::new(end);
+                        let honest = RangeProof::new::<Sha256, _, 1>(
+                            &bitmap, &storage, floor, range, ops_root,
+                        )
+                        .await
+                        .unwrap();
+                        for damage in 0..12 {
+                            let mut proof = honest.clone();
+                            let mut elements = (start..end)
+                                .map(|loc| hasher.digest(&loc.to_be_bytes()))
+                                .collect::<Vec<_>>();
+                            let mut chunks = (start / 8..=(end - 1) / 8)
+                                .map(|chunk| *bitmap.get_chunk(chunk as usize))
+                                .collect::<Vec<_>>();
+                            let mut chunk_size = 1;
+                            match damage {
+                                1 => {
+                                    if let Some(digest) = proof.proof.digests.first_mut() {
+                                        *digest = hasher.digest(b"tamper");
+                                    }
+                                }
+                                2 => {
+                                    proof.proof.digests.pop();
+                                }
+                                3 => proof.proof.digests.push(hasher.digest(b"extra")),
+                                4 => {
+                                    proof.partial_chunk_digest = match proof.partial_chunk_digest {
+                                        Some(_) => None,
+                                        None => Some(hasher.digest(b"partial")),
+                                    }
+                                }
+                                5 => chunks[0][0] ^= 1,
+                                6 => {
+                                    elements.pop();
+                                }
+                                7 => elements.push(hasher.digest(b"element")),
+                                8 => {
+                                    chunks.pop();
+                                }
+                                9 => chunk_size = 2,
+                                10 => proof.ops_root = hasher.digest(b"ops"),
+                                11 => proof.proof.inactive_peaks += 1,
+                                _ => {}
+                            }
+                            for collect in [false, true] {
+                                let (mut old, mut new) = (Vec::new(), Vec::new());
+                                let expected = proof
+                                    .reconstruct_root_reference::<Sha256, _>(
+                                        Location::new(start),
+                                        &elements,
+                                        &chunks,
+                                        chunk_size,
+                                        collect.then_some(&mut old),
+                                    )
+                                    .map_err(|e| format!("{e:?}"));
+                                let actual = proof
+                                    .reconstruct_root::<Sha256, _>(
+                                        Location::new(start),
+                                        &elements,
+                                        &chunks,
+                                        chunk_size,
+                                        collect.then_some(&mut new),
+                                    )
+                                    .map_err(|e| format!("{e:?}"));
+                                assert_eq!(
+                                    actual, expected,
+                                    "leaves={leaves} floor={floor} range={start}..{end} \
+                                     damage={damage}"
+                                );
+                                if expected.is_ok() {
+                                    assert_eq!(new, old);
+                                }
+                                if damage == 0 {
+                                    assert_eq!(actual, Ok(root));
+                                }
+                            }
+                        }
+                    }
+                    let loc = Location::<F>::new(start);
+                    let honest =
+                        constant::OperationProof::<F, sha256::Digest, 1>::new::<Sha256, _>(
+                            &bitmap, &storage, floor, loc, ops_root,
+                        )
+                        .await
+                        .unwrap();
+                    for damage in 0..5 {
+                        let mut proof = honest.clone();
+                        let mut operation = hasher.digest(&start.to_be_bytes());
+                        match damage {
+                            1 => proof.chunk[0] ^= 1 << (start % 8),
+                            2 => operation = hasher.digest(b"operation"),
+                            3 => proof.loc = Location::new(start ^ 1),
+                            4 => {
+                                if let Some(digest) = proof.range_proof.proof.digests.last_mut() {
+                                    *digest = hasher.digest(b"tamper");
+                                }
+                            }
+                            _ => {}
+                        }
+                        let chunk = proof.chunk;
+                        let expected = chunk_bits(chunk.len()).is_ok_and(|bits| {
+                            activity::get(&chunk, *proof.loc, bits)
+                                && proof
+                                    .range_proof
+                                    .reconstruct_root_reference::<Sha256, _>(
+                                        proof.loc,
+                                        &[operation],
+                                        core::slice::from_ref(&chunk),
+                                        chunk.len(),
+                                        None,
+                                    )
+                                    .is_ok_and(|reconstructed| reconstructed == root)
+                        });
+                        assert_eq!(
+                            proof.verify::<Sha256, _>(operation, &root),
+                            expected,
+                            "leaves={leaves} floor={floor} loc={start} damage={damage}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test_async]
+    async fn reconstruction_matches_reference() {
+        check_reconstruction_matches_reference::<mmr::Family>().await;
+        check_reconstruction_matches_reference::<mmb::Family>().await;
     }
 
     #[test_async]

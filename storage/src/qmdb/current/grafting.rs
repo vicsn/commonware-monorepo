@@ -73,6 +73,8 @@ use commonware_utils::bitmap::BitMap;
 use core::{cmp::Ordering, marker::PhantomData};
 use tracing::debug;
 
+pub(crate) mod rules;
+
 /// Get the grafting height for a bitmap with chunk size determined by N.
 pub const fn height<const N: usize>() -> u32 {
     BitMap::<N>::CHUNK_SIZE_BITS.trailing_zeros()
@@ -95,13 +97,12 @@ pub(super) const fn hasher<F: Graftable, H: Hasher>(
 /// Panics if `grafting_height == 0`.
 pub fn graftable_chunks<F: Graftable>(ops_leaves: u64, grafting_height: u32) -> u64 {
     assert!(grafting_height >= 1, "grafting_height must be >= 1");
-    let pos = F::subtree_root_position(Location::<F>::new(0), grafting_height);
-    let birth_chunk_0 = F::peak_birth_size(pos, grafting_height);
-    if ops_leaves < birth_chunk_0 {
-        return 0;
-    }
-    let chunk_size = 1u64 << grafting_height;
-    (ops_leaves - birth_chunk_0) / chunk_size + 1
+    // The first chunk's ancestor starts at leaf 0, so it is born `birth_offset` leaves in.
+    rules::graftable_chunks(
+        ops_leaves,
+        grafting_height,
+        F::birth_offset(grafting_height),
+    )
 }
 
 /// Returns the grafted leaf digest for a bitmap `chunk` and the root of the ops subtree it covers.
@@ -571,6 +572,33 @@ impl<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn graftable_chunks_reference<F: Graftable>(ops_leaves: u64, grafting_height: u32) -> u64 {
+        let pos = F::subtree_root_position(crate::merkle::Location::<F>::new(0), grafting_height);
+        let birth_chunk_0 = F::peak_birth_size(pos, grafting_height);
+        if ops_leaves < birth_chunk_0 {
+            return 0;
+        }
+        let chunk_size = 1u64 << grafting_height;
+        (ops_leaves - birth_chunk_0) / chunk_size + 1
+    }
+
+    #[test]
+    fn graftable_chunks_matches_reference() {
+        fn check<F: Graftable>() {
+            for height in 1..=12 {
+                for leaves in 0..=6000 {
+                    assert_eq!(
+                        graftable_chunks::<F>(leaves, height),
+                        graftable_chunks_reference::<F>(leaves, height),
+                        "height={height} leaves={leaves}"
+                    );
+                }
+            }
+        }
+        check::<mmr::Family>();
+        check::<mmb::Family>();
+    }
     use crate::{
         merkle::conformance::build_test_mmr,
         mmb, mmr,

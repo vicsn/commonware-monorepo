@@ -3,7 +3,7 @@
 
 use crate::merkle::{
     Family as _,
-    mmb::{Family, Location, Position},
+    mmb::{Family, Location, Position, geometry},
 };
 
 /// A PeakIterator yields `(position, height)` for each peak in an MMB with the given size, in
@@ -27,12 +27,7 @@ use crate::merkle::{
 ///
 /// Code iterating through peaks must not assume their positions are sorted in any direction.
 #[derive(Default)]
-pub struct PeakIterator {
-    n: Location,                 // The exact number of leaves in the MMB
-    current_i: u32,              // Bit index, counting down from (num_peaks-1) to 0
-    remaining: u32,              // Number of peaks left to yield
-    start_leaf_cursor: Location, // First leaf of the next (rightward) peak
-}
+pub struct PeakIterator(geometry::Peaks);
 
 impl PeakIterator {
     /// Return a new PeakIterator over the peaks of an MMB with the given number of nodes.
@@ -42,25 +37,13 @@ impl PeakIterator {
     /// Panics if size is not a valid MMB size.
     pub fn new(size: Position) -> Self {
         let n = Location::try_from(size).expect("size is not a valid MMB size");
-        if n.as_u64() == 0 {
-            return Self::default();
-        }
-
-        // Exactly `ilog2(N+1)` peaks total.
-        let num_peaks = (n.as_u64() + 1).ilog2();
-
-        Self {
-            n,
-            current_i: num_peaks - 1,
-            remaining: num_peaks,
-            start_leaf_cursor: Location::new(0),
-        }
+        Self(geometry::Peaks::new(*n))
     }
 
     /// Return the number of leaves in the MMB.
     #[inline]
     pub const fn leaves(&self) -> Location {
-        self.n
+        Location::new(self.0.leaves())
     }
 
     /// Returns the largest valid MMB size that is no greater than the given size.
@@ -96,140 +79,49 @@ impl Iterator for PeakIterator {
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let len = self.remaining as usize;
+        let len = self.0.remaining() as usize;
         (len, Some(len))
     }
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.remaining == 0 {
-            return None;
-        }
-
-        let i = self.current_i;
-        let n_val = self.n.as_u64();
-
-        // Height formula: h_i = i + b_i where b_i = ((n+1) >> i) & 1.
-        // Index `i` corresponds to the original newest-to-oldest numbering; we iterate
-        // from the highest `i` (oldest) down to 0 (newest).
-        let height = (i as u64) + (((n_val + 1) >> i) & 1);
-        let leaves_in_peak = 1u64 << height;
-
-        // The last leaf in this peak's subtree.
-        let last_leaf = self.start_leaf_cursor + leaves_in_peak - 1;
-
-        // Advance the cursor rightward for the next (newer) peak.
-        self.start_leaf_cursor += leaves_in_peak;
-        self.current_i = self.current_i.wrapping_sub(1);
-        self.remaining -= 1;
-
-        let n_birth = peak_birth_leaf(last_leaf, height as u32);
-        Some((birthed_node_pos(n_birth, height == 0), height as u32))
+        self.0
+            .next()
+            .map(|(position, height)| (Position::new(position), height))
     }
 }
 
 impl ExactSizeIterator for PeakIterator {}
 
-/// Compute the birth leaves of both children of a parent with the given birth leaf and height.
-///
-/// Returns `(left_leaf, right_leaf)`. The left child is always the older (lower leaf index) child.
-pub(super) const fn child_leaves(parent_leaf: Location, height: u32) -> (Location, Location) {
-    let parent_leaf = parent_leaf.as_u64();
-    if height == 1 {
-        (Location::new(parent_leaf - 1), Location::new(parent_leaf))
-    } else {
-        let base = 1u64 << (height - 2);
-        (
-            Location::new(parent_leaf - 3 * base),
-            Location::new(parent_leaf - base),
-        )
-    }
-}
-
-/// Convert a leaf to the position of the birthed node. `is_leaf` specifies whether you want the
-/// position of the leaf it births (its own position) or the position of the parent it births (if
-/// any).
-///
-/// A leaf created alongside `birth_leaf` has position
-/// `Family::location_to_position(birth_leaf)`. A parent created alongside `birth_leaf` has
-/// position `Family::location_to_position(birth_leaf) + 1`.
-///
-/// # Warning
-///
-/// This calculates based solely on the structural math. If called with `is_leaf = false` on a
-/// `birth_leaf` where no parent was actually birthed, it blindly returns the position of the next
-/// appended leaf instead. It is the caller's responsibility to ensure a parent node functionally
-/// exists at the provided `birth_leaf`.
-pub(super) fn birthed_node_pos(birth_leaf: Location, is_leaf: bool) -> Position {
-    if is_leaf {
-        Family::location_to_position(birth_leaf)
-    } else {
-        Position::new(Family::location_to_position(birth_leaf).as_u64() + 1)
-    }
-}
-
-/// Compute the birth leaf of a parent node from its position.
-///
-/// A parent created alongside `birth_leaf` has position
-/// `Family::location_to_position(birth_leaf) + 1`. This function inverts that formula. Returns
-/// `None` if `pos` is not a valid parent position (e.g., if it's a leaf).
-fn parent_birth_leaf(pos: Position) -> Option<Location> {
-    let p = pos.as_u64();
-
-    // The first parent in an MMB is always at index 2 (merging leaves 0 and 1).
-    if p < 2 {
-        return None;
-    }
-
-    // Every position in an MMB is strictly either a leaf or a parent.
-    // If a position coincides with an MMB footprint boundary
-    // (meaning `Family::position_to_location(p).is_some()`), it is a leaf and we must reject it.
-    if Family::position_to_location(pos).is_some() {
-        return None;
-    }
-
-    // Since a parent's position is exactly location_to_position(s) + 1, we can simply invert
-    // the formula by checking if `p - 1` corresponds to a valid tree size.
-    Family::position_to_location(Position::new(p - 1))
-}
-
 /// Compute the positions of the left and right children of a parent node.
-///
-/// Uses the delay matrix: for a parent at height h created at `birth_leaf`, its children (both at
-/// height h-1) were created at leaves determined by fixed delays that depend only on h.
 ///
 /// # Panics
 ///
 /// Panics if `height` is 0 or if `pos` is not a valid parent position.
 pub(crate) fn children(pos: Position, height: u32) -> (Position, Position) {
-    assert!(height > 0, "height-0 nodes are leaves and have no children");
-
-    // Safely unwrap the birth leaf, or panic with a clear error if the caller passed a leaf.
-    let s = parent_birth_leaf(pos).expect("pos is not a valid parent position");
-
-    let (left_leaf, right_leaf) = child_leaves(s, height);
-    let is_leaf = height == 1;
-    let left = birthed_node_pos(left_leaf, is_leaf);
-    let right = birthed_node_pos(right_leaf, is_leaf);
-
-    (left, right)
-}
-
-/// Compute the birth leaf of a peak from its leaf range and height.
-///
-/// For a height-0 peak (bare leaf), the birth leaf equals the last leaf index. For a taller peak,
-/// the birth leaf is `last_leaf + 2^(h-1) - 1`.
-pub(super) const fn peak_birth_leaf(last_leaf: Location, height: u32) -> Location {
-    let last_leaf = last_leaf.as_u64();
-    if height == 0 {
-        Location::new(last_leaf)
-    } else {
-        Location::new(last_leaf + (1u64 << (height - 1)) - 1)
-    }
+    let (left, right) = geometry::children(*pos, height);
+    (Position::new(left), Position::new(right))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn child_leaves(parent_leaf: Location, height: u32) -> (Location, Location) {
+        let (left, right) = geometry::child_leaves(*parent_leaf, height);
+        (Location::new(left), Location::new(right))
+    }
+
+    fn birthed_node_pos(birth_leaf: Location, is_leaf: bool) -> Position {
+        Position::new(geometry::birthed_node_pos(*birth_leaf, is_leaf))
+    }
+
+    fn parent_birth_leaf(pos: Position) -> Option<Location> {
+        geometry::parent_birth_leaf(*pos).map(Location::new)
+    }
+
+    fn peak_birth_leaf(last_leaf: Location, height: u32) -> Location {
+        Location::new(geometry::peak_birth_leaf(*last_leaf, height))
+    }
 
     #[test]
     fn test_location_to_position() {

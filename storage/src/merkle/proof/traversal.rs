@@ -13,7 +13,14 @@ pub(crate) trait Backend {
     fn children(&self, position: u64, width: u64) -> (u64, u64);
     fn sibling(&mut self) -> Result<Self::Digest, Error>;
     fn leaf(&mut self, position: u64) -> Result<Self::Digest, Error>;
-    fn node(&self, position: u64, left: Self::Digest, right: Self::Digest) -> Self::Digest;
+    fn node(
+        &self,
+        position: u64,
+        width: u64,
+        start: u64,
+        left: Self::Digest,
+        right: Self::Digest,
+    ) -> Self::Digest;
     fn collect(
         &mut self,
         left_position: u64,
@@ -55,7 +62,7 @@ pub(crate) fn reconstruct<B: Backend>(
         Err(error) => return Err(error),
     };
     backend.collect(left_position, left, right_position, right);
-    Ok(backend.node(position, left, right))
+    Ok(backend.node(position, width, start, left, right))
 }
 
 /// Geometry and digests of the nodes of one Merkle family.
@@ -70,19 +77,31 @@ pub(crate) trait Nodes {
     /// Digest of the leaf at `position` holding `element`.
     fn leaf_digest(&self, position: u64, element: &[u8]) -> Self::Digest;
 
-    /// Digest of the node at `position` whose children have digests `left` and `right`.
-    fn node_digest(&self, position: u64, left: &Self::Digest, right: &Self::Digest)
-    -> Self::Digest;
+    /// Digest of the node at `position` whose children have digests `left` and `right`. The node
+    /// has `2^height` leaves, the first at location `start`.
+    fn node_digest(
+        &self,
+        position: u64,
+        height: u32,
+        start: u64,
+        left: &Self::Digest,
+        right: &Self::Digest,
+    ) -> Self::Digest;
 }
 
-/// Receives the child digests computed during reconstruction.
+/// Receives the digests authenticated during reconstruction.
 pub(crate) trait Collect<D> {
     /// Record the digests of the two children of a reconstructed node.
     fn collect(&mut self, left_position: u64, left: D, right_position: u64, right: D);
+
+    /// Record the digest of a peak.
+    fn peak(&mut self, position: u64, digest: D);
 }
 
 impl<D> Collect<D> for () {
     fn collect(&mut self, _: u64, _: D, _: u64, _: D) {}
+
+    fn peak(&mut self, _: u64, _: D) {}
 }
 
 /// Reconstruction inputs: consecutive elements, sibling digests read from a cursor, and a
@@ -117,6 +136,22 @@ impl<'a, N: Nodes, E, C> Opening<'a, N, E, C> {
     pub(crate) const fn cursor(&self) -> usize {
         self.cursor
     }
+
+    /// Record the digest of a peak with the collector.
+    pub(crate) fn peak(&mut self, position: u64, digest: N::Digest)
+    where
+        C: Collect<N::Digest>,
+    {
+        self.collected.peak(position, digest);
+    }
+
+    /// Whether every element has been read.
+    pub(crate) fn exhausted(&mut self) -> bool
+    where
+        E: Iterator,
+    {
+        self.elements.next().is_none()
+    }
 }
 
 impl<N, E, C> Backend for Opening<'_, N, E, C>
@@ -148,8 +183,16 @@ where
         }
     }
 
-    fn node(&self, position: u64, left: N::Digest, right: N::Digest) -> N::Digest {
-        self.nodes.node_digest(position, &left, &right)
+    fn node(
+        &self,
+        position: u64,
+        width: u64,
+        start: u64,
+        left: N::Digest,
+        right: N::Digest,
+    ) -> N::Digest {
+        self.nodes
+            .node_digest(position, width.ilog2(), start, &left, &right)
     }
 
     fn collect(

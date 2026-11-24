@@ -24,7 +24,7 @@ fn tamper(digest: &sha256::Digest) -> sha256::Digest {
 type Production = StandardHasher<Sha256>;
 
 fn production(items: &[Vec<u8>]) -> (Production, Mmr<sha256::Digest>) {
-    let hasher = Production::new(Bagging::ForwardFold);
+    let hasher = Production::new(Bagging::BackwardFold);
     let mut mmr = Mmr::new();
     let batch = {
         let mut batch = mmr.new_batch();

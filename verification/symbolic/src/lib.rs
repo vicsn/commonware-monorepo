@@ -17,6 +17,36 @@
 #[path = "../../../storage/src/qmdb/current/proof/activity.rs"]
 pub(crate) mod activity;
 
+/// Production verification of current range and operation proofs.
+#[path = "../../../storage/src/qmdb/current/proof/rules.rs"]
+pub(crate) mod current;
+
+pub(crate) mod geometry;
+
+/// Production grafting of bitmap chunks onto ops-tree nodes.
+#[path = "../../../storage/src/qmdb/current/grafting/rules.rs"]
+pub(crate) mod grafting;
+
+/// Production field order, tags and padding of encoded operations.
+#[path = "../../../storage/src/qmdb/any/operation/layout.rs"]
+pub(crate) mod layout;
+
+/// Production node positions and peaks of an MMB.
+#[path = "../../../storage/src/merkle/mmb/geometry.rs"]
+pub(crate) mod mmb_geometry;
+
+/// Production node positions and peaks of an MMR.
+#[path = "../../../storage/src/merkle/mmr/geometry.rs"]
+pub(crate) mod mmr_geometry;
+
+/// Production range-proof root reconstruction.
+#[path = "../../../storage/src/merkle/proof/reconstruct.rs"]
+pub(crate) mod reconstruct;
+
+/// Production wire tags of operations.
+#[path = "../../../storage/src/qmdb/operation/tags.rs"]
+pub(crate) mod tags;
+
 pub(crate) mod bls;
 pub(crate) mod client;
 
@@ -42,6 +72,16 @@ pub(crate) mod terms;
 /// Production proof traversal and its callbacks.
 #[path = "../../../storage/src/merkle/proof/traversal.rs"]
 pub(crate) mod traversal;
+
+/// The module paths that the included production files name.
+pub(crate) mod merkle {
+    pub(crate) mod hasher {
+        pub(crate) use crate::terms;
+    }
+    pub(crate) mod proof {
+        pub(crate) use crate::{reconstruct, traversal};
+    }
+}
 
 #[cfg(test)]
 mod concrete;

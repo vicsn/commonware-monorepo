@@ -8,10 +8,51 @@ use commonware_runtime::BufMut;
 use std::fmt;
 
 pub(crate) mod fixed;
+pub(crate) mod layout;
 pub(crate) mod update;
 pub(crate) mod variable;
 pub use crate::qmdb::operation::{COMMIT_CONTEXT, DELETE_CONTEXT, UPDATE_CONTEXT};
 pub use update::Update;
+
+/// Writes the parts that [`layout`] lays out into a byte buffer, encoding keys, values and
+/// update payloads with their codecs.
+pub(crate) struct Buffer<'a, B, K, V, U>(&'a mut B, core::marker::PhantomData<(K, V, U)>);
+
+impl<'a, B, K, V, U> Buffer<'a, B, K, V, U> {
+    pub(crate) const fn new(buf: &'a mut B) -> Self {
+        Self(buf, core::marker::PhantomData)
+    }
+}
+
+impl<B: BufMut, K: Write, V: Write, U: Write> layout::Writer for Buffer<'_, B, K, V, U> {
+    type Key = K;
+    type Value = V;
+    type Update = U;
+
+    fn byte(&mut self, byte: u8) {
+        self.0.put_u8(byte);
+    }
+
+    fn zeros(&mut self, count: usize) {
+        self.0.put_bytes(0, count);
+    }
+
+    fn word(&mut self, word: u64) {
+        self.0.put_slice(&word.to_be_bytes());
+    }
+
+    fn key(&mut self, key: &K) {
+        key.write(self.0);
+    }
+
+    fn value(&mut self, value: &V) {
+        value.write(self.0);
+    }
+
+    fn update(&mut self, update: &U) {
+        update.write(self.0);
+    }
+}
 
 pub type Ordered<F, K, V> = Operation<F, update::Ordered<K, V>>;
 pub type Unordered<F, K, V> = Operation<F, update::Unordered<K, V>>;
