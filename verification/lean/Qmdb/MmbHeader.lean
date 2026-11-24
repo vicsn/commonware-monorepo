@@ -40,11 +40,18 @@ private theorem count_inj {m n : UInt64} (h : count m = count n) : m = n := by
 
 private theorem count_length (n : UInt64) : (count n).length = 8 := wireLiteral_length _
 
-/-- Pinned MMB root preimage, with the variable-width prefix chosen by root_with_folded_peaks. -/
-def Header.input (h : Header) : Bytes :=
+/-- The domain bytes of a QMDB operations root over an MMB: the family's, then backward fold's. -/
+def domainBytes : Bytes := wireLiteral (n := 2) #v[1, 1]
+
+/-- The MMB root preimage after the domain bytes, as `terms::root` and `terms::empty_root` lay
+it out. -/
+def Header.dimensions (h : Header) : Bytes :=
   if h.leaves = 0 then count h.leaves
   else Concat.concat (count h.leaves)
     (if h.inactive = 0 then h.bag.val else Concat.concat (count h.inactive) h.bag.val)
+
+/-- The MMB root preimage. -/
+def Header.input (h : Header) : Bytes := Concat.concat domainBytes h.dimensions
 
 /-- The canonical root recomputed from a supplied opening of the MMB dimensions. -/
 def Header.root (h : Header) : Bytes :=
@@ -93,7 +100,8 @@ private theorem root_eq (h : Header) : h.root = Hash.hash (Concat.concat h.ops.v
 
 private theorem input_binding (a b : Header) (h : a.input = b.input) :
     a.leaves = b.leaves ∧ a.inactive = b.inactive := by
-  unfold Header.input at h
+  replace h := (concat_inj h).2
+  unfold Header.dimensions at h
   split_ifs at h with e f g i j <;> first
     | have size := congrArg Bytes.length h
       simp only [Concat.length_concat, count_length, a.bag.property, b.bag.property] at size

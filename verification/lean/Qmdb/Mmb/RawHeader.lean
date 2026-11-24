@@ -126,8 +126,9 @@ theorem RawProof.header_of_verify {p : RawProof} {root : Bytes} {leaves inactive
       by_cases ip : inactive = 0 <;> by_cases cp : loc / 256 = resolved <;>
       by_cases ct : loc / 256 = complete <;>
       dsimp [complete, resolved] at pe cp ct ⊢ <;>
-      simp [CurrentRoot.term, Header.input, leafNZ, inactiveZero, Shape.fill, Expr.value,
-        RawProof.get, pending, trailing, takeChunk, complete, resolved, pe, tr, ip, cp, ct] <;>
+      simp [CurrentRoot.term, Header.input, Header.dimensions, leafNZ, inactiveZero, Shape.fill,
+        Expr.value, RawProof.get, pending, trailing, takeChunk, complete, resolved, pe, tr, ip, cp,
+        ct] <;>
       split_ifs <;> rfl
 
 end

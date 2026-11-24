@@ -6,7 +6,7 @@ public import Qmdb.Ordered.Database
 public import Qmdb.Mmb.Raw
 
 /-! Constructive examples of the empty database and a singleton after its first committed
-update. The examples use the fixed location layout of Tempo's pinned MMB. -/
+update, laid out as production's MMB with its root domain bytes. -/
 
 namespace Qmdb.Ordered.Examples
 open DY Active Commonware.Symbolic
@@ -48,9 +48,9 @@ private def Rows.header (r : Rows) : Mmb.Header :=
     none, some (n, hash (literal r.bitmap))⟩
 
 private def Rows.opPath : Rows → Nat → List Step
-  | .one _, _ => [.hash, .right, .left, .hash, .right, .hash, .right]
+  | .one _, _ => [.hash, .right, .left, .hash, .right, .right, .hash, .right]
   | .three .., n =>
-    [.hash, .right, .left, .hash, .right, .hash] ++
+    [.hash, .right, .left, .hash, .right, .right, .hash] ++
       (if n = 0 then [.left, .hash, .right, .left]
        else if n = 1 then [.left, .hash, .right, .right] else [.right]) ++ [.hash, .right]
 
@@ -193,7 +193,7 @@ private def Rows.recipe (r : Rows) : Mmb.Plan := Id.run do
     | .three .. =>
       let node : Mmb.Shape := .hash (.pair (.atom (.word 2)) (.pair (.atom (.sibling 1)) single))
       .hash (.pair node (.atom (.sibling 0)))
-  let merkle : Mmb.Shape := .hash (.pair (.atom (.word r.n)) bagged)
+  let merkle : Mmb.Shape := .hash (.pair (.atom .domain) (.pair (.atom (.word r.n)) bagged))
   let suffix : Mmb.Shape := .pair (.atom (.word r.n)) (.hash (.atom .bitmap))
   return ⟨(match r with | .one _ => 0 | .three .. => 2),
     .hash (.pair (.atom .ops) (.pair merkle suffix))⟩

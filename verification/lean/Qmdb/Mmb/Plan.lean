@@ -38,6 +38,8 @@ def subtreePosition (start height : Nat) : Nat :=
 
 /-- Leaf inputs of the replayed hash calls. -/
 inductive Field where
+  /-- The family and bagging domain bytes that the Merkle root commits to. -/
+  | domain
   /-- Encoded operation being opened. -/
   | item
   /-- Supplied 32-byte bitmap chunk. -/
@@ -103,10 +105,10 @@ structure Plan where
   /-- The complete canonical current root preimage tree. -/
   tree : Shape
 
-/-- The pinned Merkle root over nonempty peaks. -/
+/-- The Merkle root over nonempty peaks: domain bytes, leaf count, nonzero inactive count, bag. -/
 def merkleShape (leaves inactive : Nat) (folded : Shape) : Shape :=
   let fields := if inactive = 0 then folded else .pair (.atom (.word inactive)) folded
-  .hash (.pair (.atom (.word leaves)) fields)
+  .hash (.pair (.atom .domain) (.pair (.atom (.word leaves)) fields))
 
 /-- The Merkle root over the bag and the canonical root's two optional suffix fields. -/
 def envelope (leaves inactive loc : Nat) (folded : Shape) : Shape :=

@@ -88,6 +88,7 @@ def suffixMatches (present covered : Bool) (supplied : Option Bytes) (chunk : By
 
 /-- Read a field of the decoded proof. Shape references are checked before interpretation. -/
 def RawProof.get (p : RawProof) (item : Bytes) : Field → Bytes
+  | .domain => domainBytes
   | .word n => count (UInt64.ofNat n)
   | .item => item
   | .bitmap => literal p.chunk

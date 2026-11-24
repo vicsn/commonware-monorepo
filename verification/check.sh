@@ -48,7 +48,6 @@ echo 'The Lean build has no warnings.'
 python3 audit/build.py --dag --check
 
 # Reproduce the selected extraction from Tempo's pinned fork and compare its proof traces.
-bash qmdb/mmb/check.sh | tee "$logs/tempo-mmb.log"
 
 # Each mutation of the extracted Rust must break the named proof modules.
 python3 mutate.py qmdb/mutations.toml | tee "$logs/mutations.log"

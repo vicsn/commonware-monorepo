@@ -2,10 +2,6 @@ module
 import Commonware.Symbolic.Audit
 import Commonware.Symbolic.RootPair
 import Qmdb.Bitmap
-import Qmdb.Mmb.Blueprint
-import Qmdb.Mmb.Bagging
-import Qmdb.Mmb.Grafting
-import Qmdb.Mmb.Dfs
 import Qmdb.Mmb.Children
 import Qmdb.Mmb.RawHeader
 import Qmdb.Ordered.Encoding
