@@ -21,7 +21,7 @@ name = "root drops the peak"
 file = "storage/src/merkle/hasher/terms.rs"
 original = "Part::Digest(folded),\n        ])\n    } else {"
 mutated = "])\n    } else {"
-fails = "Qmdb.Verifier"
+fails = "Qmdb.Reconstruct"
 
 [[mutation]]
 name = "traversal treats a boundary subtree as inside"
@@ -33,15 +33,15 @@ fails = "Qmdb.Verifier"
 [[mutation]]
 name = "traversal hashes the right child twice"
 file = "storage/src/merkle/proof/traversal.rs"
-original = "Ok(backend.node(position, left, right))"
-mutated = "Ok(backend.node(position, right, right))"
+original = "Ok(backend.node(position, width, start, left, right))"
+mutated = "Ok(backend.node(position, width, start, right, right))"
 fails = "Qmdb.Verifier"
 
 [[mutation]]
 name = "verifier ignores unused siblings"
-file = "verification/symbolic/src/qmdb.rs"
-original = "opening.cursor() == siblings.len()\n                && terms::root("
-mutated = "terms::root("
+file = "storage/src/merkle/proof/reconstruct.rs"
+original = "    if opening.cursor() != digests.len() {\n        return Err(Error::ExtraDigests);\n    }\n"
+mutated = ""
 fails = "Qmdb.Verifier"
 
 [[mutation]]

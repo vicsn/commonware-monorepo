@@ -114,21 +114,19 @@ right = [{ file = "storage/src/merkle/hasher.rs", rust = "fn node_digest_pair", 
 id = "client-verify"
 kind = "rust-rust"
 strength = "tested"
-title = "The client's verifier and production's outer checks"
-link = "`verifiers_agree_with_production` compares the verdicts of the two on 1,653 claims at heights 0 to 6, with a forward-fold hasher and the proof's own `leaves`."
+title = "The client's verifier and production's"
+link = "`verifiers_agree_with_production` compares the verdicts of the two on more than 1,000 claims at heights 0 to 6, with QMDB's backward-fold hasher and the proof's own `leaves`."
 left_label = "Verification-only client"
 left = [{ file = "verification/symbolic/src/qmdb.rs", rust = "fn verify" }]
 right_label = "Production"
 right = [
   { file = "storage/src/merkle/proof.rs", rust = "fn verify_range_inclusion", within = "impl Digest> Proof<F, D>", from = "match self.reconstruct_root", label = "verify_range_inclusion: root comparison" },
-  { file = "storage/src/merkle/proof.rs", rust = "fn reconstruct_root_inner", from = "if !start_loc.is_valid_index()", through = "let range = start_loc..end_loc;", label = "reconstruct_root_inner: bounds" },
-  { file = "storage/src/merkle/proof.rs", rust = "fn reconstruct_root_inner", from = "// Verify all elements were consumed.", label = "reconstruct_root_inner: exhaustion and root" },
+  { file = "storage/src/merkle/proof.rs", rust = "fn reconstruct_root_inner" },
 ]
 notes = [
-  "The client takes the tree size from a trusted `height`. Production reads `self.leaves` from the proof, which the attacker supplies, and relies on the root committing to it.",
-  "The client has no `all elements consumed` check. Its comment argues that the traversal reads exactly one element on success.",
-  "The client fixes `inactive_peaks` at 0. Production reads it from the proof.",
-  "Production also rejects a wrong digest count before the traversal, in `split_proof_digests`.",
+  "Both run production's `reconstruct::reconstruct`. The client takes the tree size from a trusted `height` and passes `1 << height` leaves. Production reads `self.leaves` from the proof, which the attacker supplies, and relies on the root committing to it.",
+  "The client fixes `inactive` at 0. Production reads `inactive_peaks` from the proof.",
+  "The client passes one element. Production passes any number, and its caller decides how many.",
 ]
 
 [[panel]]
@@ -136,11 +134,11 @@ id = "client-constants"
 kind = "rust-rust"
 strength = "tested"
 title = "Domain bytes and the size bound"
-link = "The differential tests build production trees with `Bagging::ForwardFold`, so they agree with the client's `[0, 0]`. They never run QMDB's own hasher."
+link = "The differential tests build production trees with `Bagging::BackwardFold`, QMDB's bagging, so they agree with the client's `[0, 1]`."
 left_label = "Verification-only client"
 left = [
-  { file = "verification/symbolic/src/qmdb.rs", rust = "const MMR_DOMAIN" },
-  { file = "verification/symbolic/src/qmdb.rs", rust = "const FORWARD_FOLD" },
+  { file = "storage/src/merkle/mmr/geometry.rs", rust = "const DOMAIN" },
+  { file = "verification/symbolic/src/qmdb.rs", rust = "const BACKWARD_FOLD" },
   { file = "verification/symbolic/src/qmdb.rs", rust = "const MAX_HEIGHT" },
 ]
 right_label = "Production"
@@ -150,51 +148,34 @@ right = [
   { file = "storage/src/qmdb/mod.rs", rust = "const ROOT_BAGGING" },
 ]
 notes = [
-  "QMDB's operation roots use `BackwardFold`, whose domain byte is 1. The client hashes `[0, 0]`, so the modelled tree is a forward-fold MMR, not a QMDB root.",
+  "The client hashes the MMR family's domain byte and QMDB's backward-fold byte, so the modelled root is the operations root of a QMDB over an MMR. `DOMAIN` is production's own constant, included by `#[path]`; the bagging byte is the client's copy.",
   "Production bounds the number of leaves by `MAX_LEAVES`. The client bounds the height by `MAX_HEIGHT`, which is the same for a power of two. `client_rejects_heights_above_the_bound` asserts that the two agree.",
 ]
 
 [[panel]]
-id = "client-root"
+id = "client-geometry"
 kind = "rust-rust"
 strength = "tested"
-title = "Hashing one peak into the root"
-link = "Covered by the same differential tests. With one peak and no inactive peaks, production's fold passes the peak through unchanged and calls the same `terms::root`."
+title = "The MMR geometry handed to the reconstruction"
+link = "Both sides forward to the functions of `mmr/geometry.rs`, which the symbolic crate includes by `#[path]`. Production's MMR family forwards to them as well, and its equivalence tests compare them with the implementation they replaced."
 left_label = "Verification-only client"
-left = [{ file = "verification/symbolic/src/qmdb.rs", rust = "fn verify", from = "Ok(peak) => {", through = "}", label = "verify: root" }]
+left = [{ file = "verification/symbolic/src/geometry.rs", rust = "impl Geometry for Mmr" }]
 right_label = "Production"
-right = [{ file = "storage/src/merkle/hasher.rs", rust = "fn root_with_folded_peaks", within = "trait Hasher", from = "let bagging = self.root_bagging();", label = "root_with_folded_peaks: body" }]
+right = [{ file = "storage/src/merkle/proof.rs", rust = "impl reconstruct::Geometry for FamilyGeometry" }]
 
 [[panel]]
 id = "client-opening"
 kind = "rust-rust"
 strength = "tested"
-title = "How each side calls the shared traversal"
-link = "Both call `traversal::reconstruct` over a `traversal::Opening`. The theorems cover the left instantiation only."
+title = "How each side calls the shared reconstruction"
+link = "Both call `reconstruct::reconstruct`. The theorems cover the left instantiation only."
 left_label = "Verification-only client"
-left = [{ file = "verification/symbolic/src/qmdb.rs", rust = "fn verify", from = "let mut opening", through = ") {", label = "verify: traversal call" }]
+left = [{ file = "verification/symbolic/src/qmdb.rs", rust = "fn verify", from = "match reconstruct::reconstruct(", through = "    ) {", label = "verify: reconstruction call" }]
 right_label = "Production"
-right = [
-  { file = "storage/src/merkle/proof.rs", rust = "fn reconstruct_digest", within = "impl Subtree<F>" },
-  { file = "storage/src/merkle/proof.rs", rust = "impl traversal::Nodes for FamilyNodes" },
-]
+right = [{ file = "storage/src/merkle/proof.rs", rust = "fn reconstruct_root_inner", from = "reconstruct::reconstruct(", through = ".map_err(Into::into)", label = "reconstruct_root_inner: reconstruction call" }]
 notes = [
-  "Client: MMR child positions from `Mmr`, one element from `Single`, cursor 0, and `()` as a collector that records nothing.",
-  "Production: child positions and hashing from `FamilyNodes`, any element iterator, a cursor shared across peaks and an optional collector. Node collection is therefore outside the proof.",
-]
-
-[[panel]]
-id = "client-children"
-kind = "rust-rust"
-strength = "tested"
-title = "Child positions of an MMR node"
-link = "The differential tests exercise both through honest and tampered openings at heights 0 to 8."
-left_label = "Verification-only client"
-left = [{ file = "verification/symbolic/src/qmdb.rs", rust = "fn children", within = "impl Nodes for Mmr" }]
-right_label = "Production"
-right = [
-  { file = "storage/src/merkle/mmr/mod.rs", rust = "fn children", within = "impl merkle::Family for Family" },
-  { file = "storage/src/merkle/proof.rs", rust = "fn children", within = "impl traversal::Nodes for FamilyNodes" },
+  "Client: the production `StandardNodes` over the symbolic `Terms`, one element from `Single`, and `()` as a collector that records nothing.",
+  "Production: `FamilyNodes` over the hasher, `ByteTerms`, any element iterator and an optional collector. Node collection is therefore outside the proof.",
 ]
 
 [[panel]]
@@ -649,8 +630,8 @@ reading = "`split_spec`: the projected splitter accepts exactly one length of di
 group = "rust"
 source = "verification/qmdb/mmb/README.md"
 sentence = "Peaks relates the physical size guard, inverse position lookup and complete peak iterator to the model."
-backed_by = [{ file = "verification/lean/Qmdb/Mmb/Children.lean", lean = "all_peaks_from_size" }]
-reading = "Started from the node count of a valid leaf count, the projected iterator yields the positions and heights of `located 0 (heights n)`, in order, and then ends. `Cursor` and `Yields` are the definitions to read."
+backed_by = [{ file = "verification/lean/Qmdb/Mmb/Peaks.lean", lean = "all_peaks" }]
+reading = "Started from a valid leaf count, the extracted iterator yields the positions and heights of `located 0 (heights n)`, in order, and then ends. `Cursor` and `Yields` are the definitions to read."
 
 [[claim]]
 group = "rust"
@@ -838,7 +819,7 @@ left_label = "Production"
 left = [
   { file = "storage/src/qmdb/current/proof/activity.rs", rust = "fn get" },
   { file = "storage/src/qmdb/current/proof/activity.rs", rust = "fn is_set" },
-  { file = "storage/src/qmdb/current/proof/operation.rs", from = "if !activity::get(chunk, *self.loc, bits)", through = "return false;" },
+  { file = "storage/src/qmdb/current/proof/rules.rs", rust = "fn verify_operation", from = "if !activity::get(chunk, location, bits)", through = "return false;", label = "verify_operation: activity check" },
 ]
 right_label = "Lean"
 right = [
@@ -917,8 +898,8 @@ id = "ck-peaks"
 kind = "spec-generated"
 strength = "proved"
 title = "The peaks of a tree with n leaves"
-link = "`next_peak`: one call of the generated iterator returns the next height of `peakHeight` and its position. `all_peaks_from_size` chains the calls from the node count of a valid leaf count."
-left = [{ file = "verification/lean/Qmdb/Mmb/PinnedPeaks.lean", lean = "PeakIterator.next" }]
+link = "`next_peak`: one call of the generated iterator returns the next height of `peakHeight` and its position. `all_peaks` chains the calls from a valid leaf count."
+left = [{ generated = "mmb_geometry.Peaks.next" }]
 right = [
   { file = "verification/lean/Qmdb/Mmb/Plan.lean", lean = "peakHeight" },
   { file = "verification/lean/Qmdb/Mmb/Plan.lean", lean = "heights" },
@@ -1000,7 +981,7 @@ text = "pub(crate) const ROOT_BAGGING: Bagging = Bagging::BackwardFold;"
 
 [[fact]]
 file = "verification/symbolic/src/qmdb/tests.rs"
-text = "Production::new(Bagging::ForwardFold)"
+text = "Production::new(Bagging::BackwardFold)"
 
 [[fact]]
 file = "verification/symbolic/src/qmdb/tests.rs"
@@ -1044,7 +1025,11 @@ text = "fn probe_root_is_a_leaf_input()"
 
 [[fact]]
 file = "verification/qmdb/mmb/README.md"
-text = "Tempo pins klkvr/monorepo at `789e9e5d47288b4138183e51f8d3cf1beedd8561`."
+text = "This target models klkvr/monorepo at `789e9e5d47288b4138183e51f8d3cf1beedd8561`, which Tempo pinned when it was written."
+
+[[fact]]
+file = "verification/qmdb/mmb/README.md"
+text = "Tempo now pins klkvr/monorepo `69cc03365`, which is upstream `v2026.11.0` plus one commit to partitioned ordered navigation, and which this branch carries."
 
 [[fact]]
 file = "verification/qmdb/mmb/check.sh"

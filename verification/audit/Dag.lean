@@ -53,7 +53,7 @@ def cited : Array Name := #[
   ``Qmdb.Ordered.Extraction.accepts_iff, ``Qmdb.Active.rustActive_eq,
   ``Qmdb.CurrentRoot.extracted_wire, ``Qmdb.Mmb.Blueprint.rust_classifies,
   ``Qmdb.Mmb.Blueprint.split_spec, ``Qmdb.Mmb.Blueprint.split_plan,
-  ``Qmdb.Mmb.Peaks.all_peaks_from_size, ``Qmdb.Mmb.Peaks.physical_children,
+  ``Qmdb.Mmb.Peaks.all_peaks, ``Qmdb.Mmb.Peaks.physical_children,
   ``Qmdb.Mmb.Dfs.reconstruct_peak, ``Qmdb.Mmb.pinned_placement,
   ``Qmdb.Mmb.pinned_graft_chunk, ``Qmdb.Mmb.Bagging.compressed_eq]
 

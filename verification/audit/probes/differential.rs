@@ -20,10 +20,10 @@ fn build(hasher: &Production, items: &[Vec<u8>]) -> Mmr<sha256::Digest> {
     mmr
 }
 
-/// The hasher that QMDB itself uses for operation roots.
+/// The forward-fold hasher, whose roots QMDB does not build.
 #[test]
-fn probe_qmdb_hasher() {
-    let hasher: Production = commonware_storage::qmdb::hasher::<Sha256>();
+fn probe_forward_fold() {
+    let hasher = Production::new(Bagging::ForwardFold);
     let mut rng = test_rng();
     let (mut honest, mut production, mut client) = (0, 0, 0);
     for height in 0..=6u32 {
@@ -45,15 +45,15 @@ fn probe_qmdb_hasher() {
         }
     }
     println!(
-        "PROBE qmdb hasher: {honest} honest openings, production accepts {production}, \
+        "PROBE forward fold: {honest} honest openings, production accepts {production}, \
          client accepts {client}"
     );
 }
 
-/// Tree sizes that are not a power of two, with the forward-fold hasher of the tests.
+/// Tree sizes that are not a power of two, with QMDB's hasher.
 #[test]
 fn probe_other_sizes() {
-    let hasher = Production::new(Bagging::ForwardFold);
+    let hasher: Production = commonware_storage::qmdb::hasher::<Sha256>();
     let mut rng = test_rng();
     let (mut honest, mut production, mut client) = (0, 0, 0);
     for leaves in 1..=64u64 {
@@ -87,7 +87,7 @@ fn probe_other_sizes() {
 /// The proof fields that the attacker writes and the differential tests never vary.
 #[test]
 fn probe_proof_fields() {
-    let hasher = Production::new(Bagging::ForwardFold);
+    let hasher: Production = commonware_storage::qmdb::hasher::<Sha256>();
     let mut rng = test_rng();
     let (mut altered, mut accepted) = (0u64, 0u64);
     for height in 0..=6u32 {
@@ -126,7 +126,7 @@ fn probe_proof_fields() {
 /// A client that trusts another height than the tree's.
 #[test]
 fn probe_wrong_height() {
-    let hasher = Production::new(Bagging::ForwardFold);
+    let hasher: Production = commonware_storage::qmdb::hasher::<Sha256>();
     let mut rng = test_rng();
     let (mut tried, mut accepted) = (0u64, 0u64);
     for height in 0..=6u32 {
@@ -152,12 +152,13 @@ fn probe_wrong_height() {
     println!("PROBE wrong height: {tried} honest openings at another height, client accepts {accepted}");
 }
 
-/// What the ideal hash cannot express: in bytes, the root input of a small forward-fold tree is
-/// also the leaf input at position 0 of a 34-byte item.
+/// What the ideal hash cannot express: in bytes, the root input of a small QMDB tree is also the
+/// leaf input at position `2^48` of a 34-byte item. The root input starts with the domain bytes
+/// `[0, 1]` and the high bytes of a small leaf count, which read as that position.
 #[test]
 fn probe_root_is_a_leaf_input() {
     use commonware_storage::merkle::{hasher::Hasher as _, mmr::Position};
-    let hasher = Production::new(Bagging::ForwardFold);
+    let hasher: Production = commonware_storage::qmdb::hasher::<Sha256>();
     let mut rng = test_rng();
     let (mut trees, mut same) = (0, 0);
     for height in 0..=6u32 {
@@ -170,12 +171,12 @@ fn probe_root_is_a_leaf_input() {
         let mut item = leaves.to_be_bytes()[6..].to_vec();
         item.extend_from_slice(peak.as_ref());
         trees += 1;
-        if hasher.leaf_digest(Position::new(0), &item) == root {
+        if hasher.leaf_digest(Position::new(1 << 48), &item) == root {
             same += 1;
         }
     }
     println!(
-        "PROBE root as leaf input: {same} of {trees} roots equal the leaf digest at position 0 \
-         of a 34-byte item"
+        "PROBE root as leaf input: {same} of {trees} roots equal the leaf digest at position \
+         2^48 of a 34-byte item"
     );
 }

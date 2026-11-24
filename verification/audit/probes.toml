@@ -8,10 +8,10 @@
 
 [[probe]]
 name = "R1 location bound off by one"
-file = "verification/symbolic/src/qmdb.rs"
-original = "if location >= leaves {"
-mutated = "if location > leaves {"
-expect = ["Qmdb.Verifier"]
+file = "storage/src/merkle/proof/reconstruct.rs"
+original = "if end > leaves {"
+mutated = "if end > leaves + 1 {"
+expect = ["Qmdb.Reconstruct"]
 
 [[probe]]
 name = "R2 height bound 63"
@@ -42,32 +42,32 @@ mutated = "Some(element) => Ok(self.nodes.leaf_digest(0, element.as_ref())),"
 expect = ["Qmdb.Verifier"]
 
 [[probe]]
-name = "R6 bagging domain byte set to QMDB's"
+name = "R6 bagging domain byte set to forward fold"
 file = "verification/symbolic/src/qmdb.rs"
-original = "pub(crate) const FORWARD_FOLD: u8 = 0;"
-mutated = "pub(crate) const FORWARD_FOLD: u8 = 1;"
+original = "pub(crate) const BACKWARD_FOLD: u8 = 1;"
+mutated = "pub(crate) const BACKWARD_FOLD: u8 = 0;"
 expect = "survives"
 
 [[probe]]
 name = "R7 range of two leaves"
 file = "verification/symbolic/src/qmdb.rs"
-original = "        location + 1,\n"
-mutated = "        location + 2,\n"
+original = "        location,\n        1,\n"
+mutated = "        location,\n        2,\n"
 expect = ["Qmdb.Verifier"]
 
 [[probe]]
 name = "R8 wrong peak position"
-file = "verification/symbolic/src/qmdb.rs"
-original = "        2 * (leaves - 1),\n"
-mutated = "        2 * leaves - 1,\n"
-expect = ["Qmdb.Verifier"]
+file = "storage/src/merkle/mmr/geometry.rs"
+original = "let peak = self.nodes + size - 1;"
+mutated = "let peak = self.nodes + size;"
+expect = ["Qmdb.MmrPeaks"]
 
 [[probe]]
 name = "R9 root does not commit to the size"
-file = "verification/symbolic/src/qmdb.rs"
-original = "terms::root(terms, [MMR_DOMAIN, FORWARD_FOLD], leaves, 0, &peak) == *root"
-mutated = "terms::root(terms, [MMR_DOMAIN, FORWARD_FOLD], 0, 0, &peak) == *root"
-expect = ["Qmdb.Verifier"]
+file = "storage/src/merkle/proof/reconstruct.rs"
+original = "        leaves,\n        layout.inactive_after_fold(inactive),\n"
+mutated = "        0,\n        layout.inactive_after_fold(inactive),\n"
+expect = ["Qmdb.Reconstruct"]
 
 [[probe]]
 name = "R10 collected digests swapped"
@@ -78,14 +78,14 @@ expect = "survives"
 
 [[probe]]
 name = "R11 children swapped"
-file = "verification/symbolic/src/qmdb.rs"
-original = "(position - (1u64 << height), position - 1)"
-mutated = "(position - 1, position - (1u64 << height))"
+file = "storage/src/merkle/mmr/geometry.rs"
+original = "(pos - (1 << height), pos - 1)"
+mutated = "(pos - 1, pos - (1 << height))"
 expect = ["Qmdb.Verifier"]
 
 [[probe]]
 name = "R12 element source never runs dry"
-file = "verification/symbolic/src/qmdb.rs"
+file = "storage/src/merkle/proof/reconstruct.rs"
 original = "                self.0 = None;\n"
 mutated = ""
 expect = ["Qmdb.Verifier"]
@@ -100,8 +100,8 @@ expect = ["Qmdb.Verifier"]
 [[probe]]
 name = "R14 node ignores its position"
 file = "storage/src/merkle/proof/traversal.rs"
-original = "self.nodes.node_digest(position, &left, &right)"
-mutated = "self.nodes.node_digest(0, &left, &right)"
+original = ".node_digest(position, width.ilog2(), start, &left, &right)"
+mutated = ".node_digest(0, width.ilog2(), start, &left, &right)"
 expect = ["Qmdb.Verifier"]
 
 [[probe]]
