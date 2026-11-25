@@ -10,6 +10,10 @@ from it, which `hax into lean` writes to
 | Rust | **Find Lean Uses of Extraction** | Searches every `.lean` file for the generated name, so the handwritten statements about the item show up. |
 | Lean | **Open Rust Source** | On a generated name, in handwritten or generated Lean, or anywhere inside a generated declaration, opens and selects the Rust it comes from. |
 
+Hovering the first line of an extracted Rust item, such as a function's signature, shows the names
+of its generated declarations, each with a link that opens it. A loop's first line shows the loop's
+declarations. The rest of an item shows nothing, so rust-analyzer's own hovers stay uncluttered.
+
 The command palette also has **Aeneas: Rebuild Extraction Index**.
 
 ## How it links the two
@@ -49,8 +53,9 @@ code --install-extension aeneas-link.vsix
 ```
 
 Settings: `aeneasLink.include` and `aeneasLink.exclude` choose the Lean files to index (by
-default every `.lean` file outside `.lake`, `node_modules` and `target`), and
-`aeneasLink.openToSide` opens the other side of a link beside the current editor.
+default every `.lean` file outside `.lake`, `node_modules` and `target`),
+`aeneasLink.openToSide` opens the other side of a link beside the current editor, and
+`aeneasLink.hover` turns the hover off.
 
 ## Tests
 

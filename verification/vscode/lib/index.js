@@ -237,6 +237,20 @@ class Index {
   }
 
   /**
+   * The declarations whose span starts on 1-based `line` of `rustFile`, such as a function on the
+   * line of its signature: whole items first, then loops. A span on one line counts only under its
+   * columns, so on a derive list only the name under `col` does.
+   */
+  startingAt(rustFile, line, col) {
+    const candidates = this.byRust.get(canonical(rustFile)) || [];
+    const starting = candidates.filter(
+      (e) => e.start.line === line && (e.end.line !== line || under(e, line, col)),
+    );
+    const loop = (e) => e.kind === 'loop' || e.kind === 'loop body';
+    return starting.sort((a, b) => loop(a) - loop(b) || size(b) - size(a));
+  }
+
+  /**
    * The declarations named `word`: the full or namespace-relative name of a generated
    * declaration, or else any whose name ends in `.word`.
    */

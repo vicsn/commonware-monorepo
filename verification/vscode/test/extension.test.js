@@ -86,6 +86,25 @@ function fake() {
       registerCommand: (name, f) => commands.set(name, f),
       executeCommand: async (name, args) => calls.executed.push({ name, args }),
     },
+    MarkdownString: class {
+      constructor() {
+        this.value = '';
+      }
+      appendMarkdown(s) {
+        this.value += s;
+      }
+    },
+    Hover: class {
+      constructor(contents) {
+        this.contents = contents;
+      }
+    },
+    languages: {
+      registerHoverProvider: (selector, provider) => {
+        calls.hover = { selector, provider };
+        return {};
+      },
+    },
   };
   const open = (file, line, character) => {
     vscode.window.activeTextEditor = {
@@ -93,7 +112,7 @@ function fake() {
       selection: { active: { line, character } },
     };
   };
-  return { vscode, calls, commands, open };
+  return { vscode, calls, commands, open, document };
 }
 
 function activate() {
@@ -191,4 +210,38 @@ test('A line with no extraction says so', async () => {
   await commands.get('aeneasLink.openLean')();
   assert.equal(calls.opened.length, 0);
   assert.match(calls.messages[0], /no generated Lean comes from line 1/);
+});
+
+test('Hovering the first line of an extracted function names its Lean', async () => {
+  const { calls, commands, document } = activate();
+  assert.deepEqual(calls.hover.selector, { language: 'rust' });
+  const provide = (line, character) =>
+    calls.hover.provider.provideHover(document(INCLUSION_RS), { line, character });
+  const line = lineOf(INCLUSION_RS, 'fn verify_element_inclusion');
+  const shown = await provide(line, 20);
+  const text = shown.contents.value;
+  assert.match(text, /`commonware_symbolic\.inclusion\.verify_element_inclusion`/);
+  assert.deepEqual(shown.contents.isTrusted, { enabledCommands: ['aeneasLink.openDeclaration'] });
+  // The link opens the generated definition.
+  const [, args] = /command:aeneasLink\.openDeclaration\?([^)]+)\)/.exec(text);
+  await commands.get('aeneasLink.openDeclaration')(...JSON.parse(decodeURIComponent(args)));
+  const { file, selection } = calls.opened[0];
+  assert.equal(
+    fs.readFileSync(file, 'utf8').split('\n')[selection.start.line],
+    'def inclusion.verify_element_inclusion',
+  );
+  // Nothing inside the body, where rust-analyzer's own hovers are.
+  assert.equal(await provide(line + 8, 8), null);
+});
+
+test('Hovering a derive list names only the derived item under the cursor', async () => {
+  const { calls, document } = activate();
+  const geometry = path.join(REPO, 'storage/src/merkle/mmb/geometry.rs');
+  const line = lineOf(geometry, '#[derive(Default)]');
+  const provide = (character) =>
+    calls.hover.provider.provideHover(document(geometry), { line, character });
+  const col = fs.readFileSync(geometry, 'utf8').split('\n')[line].indexOf('Default');
+  const shown = await provide(col + 2);
+  assert.match(shown.contents.value, /Peaks\.Insts\.CoreDefaultDefault\.default`/);
+  assert.equal(await provide(2), null);
 });

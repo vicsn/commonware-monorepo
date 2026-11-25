@@ -2,18 +2,20 @@
   "name": "aeneas-link",
   "displayName": "Aeneas Link",
   "description": "Jump between Rust items and the Lean declarations that Aeneas generates from them.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "commonware",
   "private": true,
   "license": "MIT OR Apache-2.0",
   "engines": {
-    "vscode": "^1.75.0"
+    "vscode": "^1.79.0"
   },
   "categories": [
     "Other"
   ],
   "main": "./extension.js",
-  "activationEvents": [],
+  "activationEvents": [
+    "onLanguage:rust"
+  ],
   "contributes": {
     "commands": [
       {
@@ -34,6 +36,11 @@
       {
         "command": "aeneasLink.reindex",
         "title": "Rebuild Extraction Index",
+        "category": "Aeneas"
+      },
+      {
+        "command": "aeneasLink.openDeclaration",
+        "title": "Open Generated Declaration",
         "category": "Aeneas"
       }
     ],
@@ -67,6 +74,10 @@
         {
           "command": "aeneasLink.openRust",
           "when": "resourceExtname == .lean"
+        },
+        {
+          "command": "aeneasLink.openDeclaration",
+          "when": "false"
         }
       ]
     },
@@ -82,6 +93,11 @@
           "type": "string",
           "default": "**/{.lake,node_modules,target}/**",
           "description": "Glob of the files to skip when indexing and when searching for Lean uses."
+        },
+        "aeneasLink.hover": {
+          "type": "boolean",
+          "default": true,
+          "description": "On the first line of an extracted Rust item, show the names of its generated Lean declarations on hover."
         },
         "aeneasLink.openToSide": {
           "type": "boolean",
