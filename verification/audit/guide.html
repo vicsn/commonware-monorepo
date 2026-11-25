@@ -33,7 +33,7 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 .dag .e{fill:none;stroke:var(--wire);stroke-width:1;opacity:.55}.dag .e.uses{stroke-dasharray:3 3;opacity:.32}.dag .e.lib{display:none}
 .dag svg.sel .n:not(.on){opacity:.15}.dag svg.sel .e:not(.on){opacity:.04}.dag svg.sel .e.on{display:inline;opacity:.95;stroke-width:1.5}.dag svg.sel .e.on.says{stroke:var(--ink)}.dag .n.cur rect{stroke:var(--ink);stroke-width:3;stroke-dasharray:none}
 .dag-info{font-size:14px;margin-top:10px;padding:10px 12px;background:var(--tint);border-radius:6px;min-height:44px;overflow-wrap:anywhere}.dag-info p{margin:4px 0}.dag-info button{font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;margin:2px 4px 2px 0;padding:1px 7px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--ink);cursor:pointer}.dag figcaption{font-size:14px;color:var(--muted);margin-top:8px}
-.matrix table{min-width:900px}.matrix td{text-align:center}.matrix td:nth-child(2){text-align:left}.matrix td.dot{color:var(--trusted-edge)}.matrix th[scope="row"]{font-weight:400}.matrix th[scope="col"]{font-weight:600}.matrix th code{overflow-wrap:normal}#dag-rows tr{cursor:pointer}
+#dag-rows tr{cursor:pointer}
 .kit td:first-child{width:40%}.kit td:nth-child(2){width:34%}.kit code{white-space:pre-wrap}
 @media(max-width:900px){.pair-grid{grid-template-columns:1fr}nav ul{columns:1}}
 @media(max-width:650px){main{padding-block:24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}th,td{padding:9px}.table table{min-width:660px}.step{grid-template-columns:1fr;gap:2px}.step dd{margin-bottom:8px}}
@@ -45,52 +45,57 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <p class="lede">Thirteen steps for checking that the Hax → DyLean proofs about Merkle trees say what is claimed of the Rust. Part I is the inclusion of one item. Part II is an ordered read under a checkpoint root. Wherever one piece of code must agree with another, both are shown side by side with what links them.</p>
 <p>The proofs live on branch <code>verify/qmdb-hax-dylean</code><span id="checkout">, in the checkout that holds this page</span>. <a class="src" href="qmdb/README.md" title="Open in VS Code">qmdb/README.md</a> states the results of part I and <a class="src" href="qmdb/mmb/README.md" title="Open in VS Code">qmdb/mmb/README.md</a> those of part II; this guide is for the person who checks them. It is written for a reader who knows Rust and Merkle trees and has not used Lean or DyLean. No step asks you to read a proof.</p>
 <p class="muted">Production baseline: <code>b45ef2d78ea7535d8a51588912ba1e13e461b146</code>. The panels and tables marked as generated are built from the sources by <code>verification/audit/build.py</code>, and <code>check.sh</code> fails when they are stale.</p>
-<div class="callout out"><p><b>Out of scope: the hax pipeline.</b> This audit assumes that hax, Charon and Aeneas translate the Rust faithfully into Lean, and that their models of the Rust core library match Rust. It does not audit them. Step 4 only checks how the pipeline is used: which tools are pinned, that regenerating the Lean reproduces the committed files, and that nothing was filled in by hand. A translation bug that changes the meaning of the verifier would leave every theorem here true of the wrong program.</p></div>
-<div class="table"><table>
-<thead><tr><th scope="col"></th><th scope="col">Part I · Inclusion of one item</th><th scope="col">Part II · Ordered reads under a checkpoint root</th></tr></thead>
-<tbody>
-<tr><th scope="row">What is proved</th><td>Two openings accepted at one location under one root carry the same item. Every acceptance that a client logs names the item stored there.</td><td>A claim that a key has a value, or has none, that is accepted under a root equals what replaying the journal gives.</td></tr>
-<tr><th scope="row">Root format</th><td>This branch’s, with its domain bytes. One peak. The height of the tree is trusted.</td><td><code>v2026.11.0</code>’s, with the domain bytes of an MMB. Any number of peaks. The leaf count and the inactive-peak count come from the proof, and the root fixes them.</td></tr>
-<tr><th scope="row">Verifier in the statements</th><td><code>inclusion::verify_element_inclusion</code>: Rust written for the proof and extracted by hax.</td><td>Production’s <code>rules::verify_operation</code>, extracted unchanged and proved to refine <code>RawProof.verify</code>, a Lean definition of the reader’s check.</td></tr>
-<tr><th scope="row">Tie to the deployed verifier</th><td>Differential tests against production (L2).</td><td>A refinement proof (M5), with production’s callers delegating to the extracted files (M3).</td></tr>
-<tr><th scope="row">The attacker</th><td>DyLean traces: the attacker sends any message it can derive.</td><td>No trace. The statements hold for any proof and any root.</td></tr>
-<tr><th scope="row">What is assumed of the database</th><td>A root with an accepted opening for every stored item.</td><td>The writer’s invariants: activity bits, successor links, the commit floor and the layout of the root.</td></tr>
-<tr><th scope="row">Steps</th><td>0 to 7</td><td>8 to 12</td></tr>
-</tbody></table></div>
 <nav aria-label="Table of contents"><b>Contents</b><ul>
-<li><a href="#scope">Scope and assumptions</a></li>
+<li><a href="#scope">Scope, assumptions and residual risks</a></li>
 <li><a href="#chain">The trust chain of part I</a></li>
 <li><a href="#chain-2">The trust chain of part II</a></li>
 <li><a href="#graph">Every Lean declaration, by trust type</a></li>
-<li><a href="#step-0">Step 0 · Primer</a></li>
-<li><a href="#step-1">Step 1 · What is claimed</a></li>
-<li><a href="#step-2">Step 2 · Production code and the refactor</a></li>
-<li><a href="#step-3">Step 3 · The verification-only client</a></li>
-<li><a href="#step-4">Step 4 · Extraction, time-boxed</a></li>
-<li><a href="#step-5">Step 5 · Trusted readings</a></li>
-<li><a href="#step-6">Step 6 · Assumption and protocol</a></li>
-<li><a href="#step-7">Step 7 · Machine evidence</a></li>
-<li><a href="#step-8">Step 8 · What part II claims</a></li>
-<li><a href="#step-9">Step 9 · The model and what it assumes</a></li>
-<li><a href="#step-10">Step 10 · Production code shared with part II</a></li>
-<li><a href="#step-11">Step 11 · The extracted verifier against the plan</a></li>
-<li><a href="#step-12">Step 12 · Machine evidence of part II</a></li>
-<li><a href="#risks">Residual risks</a></li>
-<li><a href="#signoff">Sign-off sheet</a></li>
+<li><a href="#step-i-0">Step I.0 · Primer</a></li>
+<li><a href="#step-i-1">Step I.1 · What is claimed</a></li>
+<li><a href="#step-i-2">Step I.2 · Production code and the refactor</a></li>
+<li><a href="#step-i-3">Step I.3 · The verification-only client</a></li>
+<li><a href="#step-i-4">Step I.4 · Extraction, time-boxed</a></li>
+<li><a href="#step-i-5">Step I.5 · Trusted readings</a></li>
+<li><a href="#step-i-6">Step I.6 · Assumption and protocol</a></li>
+<li><a href="#step-i-7">Step I.7 · Machine evidence</a></li>
+<li><a href="#step-ii-1">Step II.1 · What part II claims</a></li>
+<li><a href="#step-ii-2">Step II.2 · The model and what it assumes</a></li>
+<li><a href="#step-ii-3">Step II.3 · Production code shared with part II</a></li>
+<li><a href="#step-ii-4">Step II.4 · The extracted verifier against the plan</a></li>
+<li><a href="#step-ii-5">Step II.5 · Machine evidence of part II</a></li>
 <li><a href="#index">Index of extracted items</a></li>
 </ul></nav>
 
 <section id="scope">
-<h2>Scope and assumptions</h2>
-<p>In scope: the Merkle target of the Hax → DyLean experiment, in two parts. For part I that is the production files it shares with the proof, the verification-only client, the handwritten Lean that states what the Rust means, the application assumption, the protocol model, the theorem statements and the checks that a machine runs. For part II it is the specification of an ordered read, the production files proved to refine it, what it assumes of the writer, and its checks. The BLS and SAKE targets are out of scope; they share steps 4 to 7. So is the proof that a consumer builds on part II: no statement here says what a checkpoint is or who authenticates it.</p>
+<h2>Scope, assumptions and residual risks</h2>
+<p>In scope: the Merkle target of the Hax → DyLean experiment, in two parts. For part I that is the production files it shares with the proof, the verification-only client, the handwritten Lean that states what the Rust means, the application assumption, the protocol model, the theorem statements and the checks that a machine runs. For part II it is the specification of an ordered read, the production files proved to refine it, what it assumes of the writer, and its checks. The BLS and SAKE targets are out of scope; they share steps I.4 to I.7. So is the proof that a consumer builds on part II: no statement here says what a checkpoint is or who authenticates it.</p>
 <p>Four things are assumed and not audited. For each, the audit still checks how the proof depends on it.</p>
 <div class="table"><table>
 <thead><tr><th scope="col">#</th><th scope="col">Assumed, not audited</th><th scope="col">What the audit still checks</th><th scope="col">Step</th></tr></thead>
 <tbody>
-<tr><th scope="row">A1</th><td>hax, Charon and Aeneas translate the Rust faithfully. Their models of the Rust core library match Rust: integer overflow, a shift that is too large and an index out of bounds are failures.</td><td>The tool pins and where the binaries come from. Regenerating the Lean is byte-identical. <code>Assumptions/FunsExternal.lean</code> declares nothing. In part II, what is rewritten by hand before hax sees a function of the pinned fork.</td><td>4, 7, 11</td></tr>
-<tr><th scope="row">A2</th><td>Lean’s kernel and its three standard axioms (<code>propext</code>, <code>Classical.choice</code>, <code>Quot.sound</code>).</td><td>The axiom audit covers every theorem, and it fails when an escape hatch is planted.</td><td>7</td></tr>
-<tr><th scope="row">A3</th><td>DyLean’s core: traces, what the attacker knows, reachability and its tactics.</td><td>Its pin, the patch applied to it, the three <code>#combine</code> blocks that define what statements mean, and the two actions <code>accept</code> and <code>receive</code>.</td><td>6</td></tr>
-<tr><th scope="row">A4</th><td>The hash is ideal. A digest is DyLean’s hash constructor applied to its input, as ProVerif and Tamarin treat a hash by default: two digests are equal only when their inputs are the same term, and concatenation keeps the boundary between parts. SHA-256 allows length extension and the ideal hash does not, which is irrelevant here: extension derives the digest of a longer input from a digest alone, so it matters only when part of an input is secret, and every input the verifier hashes is public or chosen by the attacker. Part II adds a second constructor, for Keccak-256, to what a term is. No cited statement mentions it; a consumer hashes its keys with it.</td><td>What the reading of the hash says, against what production hashes. What the ideal hash cannot express is written down. In part II, that a path through a root is a list of whole fields and not a byte offset.</td><td>5, 8</td></tr>
+<tr><th scope="row">A1</th><td>hax, Charon and Aeneas translate the Rust faithfully. Their models of the Rust core library match Rust: integer overflow, a shift that is too large and an index out of bounds are failures.</td><td>The tool pins and where the binaries come from. Regenerating the Lean is byte-identical. <code>Assumptions/FunsExternal.lean</code> declares nothing. In part II, what is rewritten by hand before hax sees a function of the pinned fork.</td><td>I.4, I.7, II.4</td></tr>
+<tr><th scope="row">A2</th><td>Lean’s kernel and its three standard axioms (<code>propext</code>, <code>Classical.choice</code>, <code>Quot.sound</code>).</td><td>The axiom audit covers every theorem, and it fails when an escape hatch is planted.</td><td>I.7</td></tr>
+<tr><th scope="row">A3</th><td>DyLean’s core: traces, what the attacker knows, reachability and its tactics.</td><td>Its pin, the patch applied to it, the three <code>#combine</code> blocks that define what statements mean, and the two actions <code>accept</code> and <code>receive</code>.</td><td>I.6</td></tr>
+<tr><th scope="row">A4</th><td>The hash is ideal. A digest is DyLean’s hash constructor applied to its input, as ProVerif and Tamarin treat a hash by default: two digests are equal only when their inputs are the same term, and concatenation keeps the boundary between parts. SHA-256 allows length extension and the ideal hash does not, which is irrelevant here: extension derives the digest of a longer input from a digest alone, so it matters only when part of an input is secret, and every input the verifier hashes is public or chosen by the attacker. Part II adds a second constructor, for Keccak-256, to what a term is. No cited statement mentions it; a consumer hashes its keys with it.</td><td>What the reading of the hash says, against what production hashes. What the ideal hash cannot express is written down. In part II, that a path through a root is a list of whole fields and not a byte offset.</td><td>I.5, II.1</td></tr>
+</tbody></table></div>
+<h3 id="risks">Residual risks</h3>
+<p>What remains after every step passes. Each is a property of the approach or a gap. R1 to R7 belong to part I and R8 to R13 to part II. None is a flaw in a proof, and no independent reviewer has gone through either part.</p>
+<div class="table"><table>
+<thead><tr><th scope="col">#</th><th scope="col">Risk</th><th scope="col">Link</th><th scope="col">What would close it</th></tr></thead>
+<tbody id="register">
+<tr><th scope="row">R1</th><td>The translation from Rust to Lean is wrong in a way that changes what the verifier means.</td><td>L3</td><td>An audit of hax, Charon, Aeneas and their library models, or a second extraction route that agrees.</td></tr>
+<tr><th scope="row">R2</th><td>The proved call is not the deployed one. Both run production’s <code>reconstruct::reconstruct</code>, but the client fixes one item of a tree with one peak and a trusted size and hashes through symbolic terms, while production hashes bytes. Tests on trees of up to 64 leaves tie the two verdicts.</td><td>L2</td><td>State the theorems for any leaf and inactive count, which the reconstruction lemmas already allow, and prove production’s byte terms an instance of the symbolic ones.</td></tr>
+<tr><th scope="row">R3</th><td>The modelled root is a QMDB operations root over an MMR. A QMDB over the MMB family, whose roots carry another domain byte and other peaks, is covered by part II only.</td><td>L2</td><td>Run the client over <code>geometry::Mmb</code>. The reconstruction lemmas hold for any geometry; the peaks of an MMB need their own <code>Yields</code> lemma.</td></tr>
+<tr><th scope="row">R4</th><td>The tree size is trusted. Production reads <code>leaves</code> and <code>inactive_peaks</code> from the proof, which the attacker writes, and relies on the root committing to them. No statement covers that, and the tests never vary them.</td><td>L2</td><td>A statement in which the size comes from the proof and the root alone is trusted. Part II has one: <code>verify_operation_header</code> with <code>Header.binding</code>. Part I’s client is unchanged.</td></tr>
+<tr><th scope="row">R5</th><td>The hash is ideal. No statement reduces a broken opening to a collision of a real hash, and facts about bytes are outside the model: in bytes the root of a small tree is also a leaf digest, and only positions keep a long item apart from a node.</td><td>L4, A4</td><td>An argument over production’s bytes beside the symbolic one. This branch had a reduction to an explicit collision and dropped it for a smaller trusted base.</td></tr>
+<tr><th scope="row">R6</th><td>Honest roots are built by code that the proof does not see. The tree builder hashes nodes through a second encoding, and the journal chooses what is stored at each location.</td><td>L5</td><td>Route the builder through the part lists of <code>terms.rs</code>; state the snapshot in terms of the journal.</td></tr>
+<tr><th scope="row">R7</th><td>The toolchain is pinned by name, not by content: the hax binary and the dependency builds are whatever is on the machine, and no CI runs the check.</td><td>L8</td><td>Record how the binary is built, hash it, and run <code>check.sh</code> in CI.</td></tr>
+<tr><th scope="row">R8</th><td>The refinement has two hypotheses. Every supplied digest has the width of SHA-256, which production’s digest type guarantees and the symbolic digests do not. The bitmap chunk has 32 bytes, as <code>Plan</code> fixes 256 bits; production accepts any chunk whose bit width is a power of two.</td><td>M5</td><td>Generalize <code>Plan</code> over the chunk width, or state that every deployment uses 32-byte chunks.</td></tr>
+<tr><th scope="row">R9</th><td>The proved code is this branch’s. Production was changed to delegate to the extracted rules files, and Tempo’s pin does not contain those changes. Reference tests and conformance fixtures tie the two, and they are not a proof.</td><td>M3</td><td>Upstream the rules files, so that a Tempo pin contains them.</td></tr>
+<tr><th scope="row">R10</th><td>Nothing ties the writer to the assumed snapshot. The activity bits, the successor links, the commit floor and the layout of the root are hypotheses, shown to be satisfiable for one leaf and for three.</td><td>M6</td><td>A model or an extraction of the writer with the invariants proved, or tests that check them on production databases of many sizes.</td></tr>
+<tr><th scope="row">R11</th><td>The statements are not combined here. A guarantee about a read needs the rows of step II.1 chained, and a statement about checkpoints: who authenticates the pair of roots and which root answers which query.</td><td>M7</td><td>Audit the consumer’s proof, or state the composed theorem in this repository.</td></tr>
+<tr><th scope="row">R12</th><td>The ordered client is a verification-only entry point. It calls production’s selectors, layout and verifier with stand-in types, and production’s <code>KeyValueProof::verify</code> and <code>ExclusionProof::verify</code> are not extracted themselves. Differential tests compare the client’s verdicts with theirs on databases of up to 450 keys and on a history of updates and deletes: honest proofs, altered claims, and proofs with one field altered. Production rejects every altered proof, and the client agrees on every verdict.</td><td>M1</td><td>Extract the ordered proof methods, or route them through the client’s functions.</td></tr>
+<tr><th scope="row">R13</th><td>The writer that the encoding runs with is a reading: its primitive appends stand for production’s codec buffer, and the codec of keys and values is assumed fixed-width and injective. A path through a root is still a list of whole fields, as in R5.</td><td>M4, A4</td><td>Extract the codec’s writer, or test <code>bytes</code> against encoded operations.</td></tr>
 </tbody></table></div>
 </section>
 
@@ -120,18 +125,18 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <div class="table"><table>
 <thead><tr><th scope="col">Link</th><th scope="col">What must hold</th><th scope="col">Strength today</th><th scope="col">Step</th></tr></thead>
 <tbody>
-<tr><th scope="row">L0</th><td>The refactor made for the proof preserved production behaviour.</td><td><span class="chip tested">tested</span> the old traversal is kept and compared with the new one</td><td><a href="#step-2">2</a></td></tr>
-<tr><th scope="row">L1</th><td>The files the proof sees are the files production compiles.</td><td><span class="chip shared">same code</span> included by <code>#[path]</code></td><td><a href="#step-2">2</a></td></tr>
-<tr><th scope="row">L2</th><td>The verification-only client behaves like production’s verifier.</td><td><span class="chip tested">tested</span> with known divergences</td><td><a href="#step-3">3</a></td></tr>
-<tr><th scope="row">L3</th><td>The generated Lean means what the Rust does.</td><td><span class="chip assumed">assumed</span> A1</td><td><a href="#step-4">4</a></td></tr>
-<tr><th scope="row">L4</th><td>The handwritten Lean readings of Rust traits are faithful.</td><td><span class="chip trusted">trusted</span></td><td><a href="#step-5">5</a></td></tr>
-<tr><th scope="row">L5</th><td>The application can supply the snapshot that the theorems assume.</td><td><span class="chip tested">tested</span> for honest openings</td><td><a href="#step-6">6</a></td></tr>
-<tr><th scope="row">L6</th><td>The protocol model and the way it uses DyLean are adequate.</td><td><span class="chip trusted">trusted</span></td><td><a href="#step-6">6</a></td></tr>
-<tr><th scope="row">L7</th><td>The README’s claims are what the Lean statements say.</td><td><span class="chip trusted">trusted</span> a reading</td><td><a href="#step-1">1</a></td></tr>
-<tr><th scope="row">L8</th><td>The proofs are checked by Lean with no escape hatch.</td><td><span class="chip proved">proved</span> by the build</td><td><a href="#step-7">7</a></td></tr>
+<tr><th scope="row">L0</th><td>The refactor made for the proof preserved production behaviour.</td><td><span class="chip tested">tested</span> the old traversal is kept and compared with the new one</td><td><a href="#step-i-2">I.2</a></td></tr>
+<tr><th scope="row">L1</th><td>The files the proof sees are the files production compiles.</td><td><span class="chip shared">same code</span> included by <code>#[path]</code></td><td><a href="#step-i-2">I.2</a></td></tr>
+<tr><th scope="row">L2</th><td>The verification-only client behaves like production’s verifier.</td><td><span class="chip tested">tested</span> with known divergences</td><td><a href="#step-i-3">I.3</a></td></tr>
+<tr><th scope="row">L3</th><td>The generated Lean means what the Rust does.</td><td><span class="chip assumed">assumed</span> A1</td><td><a href="#step-i-4">I.4</a></td></tr>
+<tr><th scope="row">L4</th><td>The handwritten Lean readings of Rust traits are faithful.</td><td><span class="chip trusted">trusted</span></td><td><a href="#step-i-5">I.5</a></td></tr>
+<tr><th scope="row">L5</th><td>The application can supply the snapshot that the theorems assume.</td><td><span class="chip tested">tested</span> for honest openings</td><td><a href="#step-i-6">I.6</a></td></tr>
+<tr><th scope="row">L6</th><td>The protocol model and the way it uses DyLean are adequate.</td><td><span class="chip trusted">trusted</span></td><td><a href="#step-i-6">I.6</a></td></tr>
+<tr><th scope="row">L7</th><td>The README’s claims are what the Lean statements say.</td><td><span class="chip trusted">trusted</span> a reading</td><td><a href="#step-i-1">I.1</a></td></tr>
+<tr><th scope="row">L8</th><td>The proofs are checked by Lean with no escape hatch.</td><td><span class="chip proved">proved</span> by the build</td><td><a href="#step-i-7">I.7</a></td></tr>
 </tbody></table></div>
 <p>The labels: <span class="chip proved">proved</span> a named Lean lemma states the link and Lean checks it. <span class="chip tested">tested</span> a test samples it. <span class="chip trusted">trusted</span> a person must read both sides; nothing checks it. <span class="chip assumed">assumed</span> one of A1 to A4. <span class="chip shared">same code</span> one side calls or includes the other. <span class="chip none">no link</span> the two sides should agree and nothing relates them.</p>
-<p><b>Order.</b> Start step 7 first and let it run: it builds the toolchain and takes the longest. Then work through steps 0 to 6 in order. Steps 3, 5 and 6 are where a person’s judgement matters most. The times are rough and add up to about a day.</p>
+<p><b>Order.</b> Start step I.7 first and let it run: it builds the toolchain and takes the longest. Then work through steps I.0 to I.6 in order. Steps I.3, I.5 and I.6 are where a person’s judgement matters most. The times are rough and add up to about a day.</p>
 </section>
 
 <section id="chain-2">
@@ -158,26 +163,26 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <div class="table"><table>
 <thead><tr><th scope="col">Link</th><th scope="col">What must hold</th><th scope="col">Strength today</th><th scope="col">Step</th></tr></thead>
 <tbody>
-<tr><th scope="row">M1</th><td>The production files that part II extracts mean the same in the extracted crate as in production.</td><td><span class="chip shared">same code</span> for the rules, geometry, reconstruction and layout files; <span class="chip trusted">trusted</span> for <code>claim.rs</code>, which is compiled against stand-in types</td><td><a href="#step-10">10</a></td></tr>
-<tr><th scope="row">M2</th><td>The generated Lean means what the Rust does.</td><td><span class="chip assumed">assumed</span> A1</td><td><a href="#step-4">4</a>, <a href="#step-11">11</a></td></tr>
-<tr><th scope="row">M3</th><td>Production’s verifier and codec delegate to the shared files without changing what they compute.</td><td><span class="chip tested">tested</span> reference tests against the code they replaced, and the conformance fixtures</td><td><a href="#step-10">10</a>, <a href="#step-11">11</a></td></tr>
-<tr><th scope="row">M4</th><td>Each extracted piece computes what the specification says at that place.</td><td><span class="chip proved">proved</span></td><td><a href="#step-10">10</a>, <a href="#step-11">11</a></td></tr>
-<tr><th scope="row">M5</th><td>Production’s verifier, as a whole, refines <code>RawProof.verify</code>.</td><td><span class="chip proved">proved</span> for digests of SHA-256 width and 32-byte chunks</td><td><a href="#step-11">11</a></td></tr>
-<tr><th scope="row">M6</th><td>The writer keeps what the statements assume of a snapshot.</td><td><span class="chip none">no link</span> two examples show that the assumptions can be met</td><td><a href="#step-9">9</a></td></tr>
-<tr><th scope="row">M7</th><td>The statements are combined into a guarantee about a read.</td><td><span class="chip none">no link</span> here; it is the consumer’s proof</td><td><a href="#step-8">8</a></td></tr>
-<tr><th scope="row">M8</th><td>The claims of the README and of the doc comments are what the Lean statements say.</td><td><span class="chip trusted">trusted</span> a reading</td><td><a href="#step-8">8</a></td></tr>
-<tr><th scope="row">M9</th><td>The proofs are checked by Lean with no escape hatch.</td><td><span class="chip proved">proved</span> by the build</td><td><a href="#step-12">12</a></td></tr>
+<tr><th scope="row">M1</th><td>The production files that part II extracts mean the same in the extracted crate as in production.</td><td><span class="chip shared">same code</span> for the rules, geometry, reconstruction and layout files; <span class="chip trusted">trusted</span> for <code>claim.rs</code>, which is compiled against stand-in types</td><td><a href="#step-ii-3">II.3</a></td></tr>
+<tr><th scope="row">M2</th><td>The generated Lean means what the Rust does.</td><td><span class="chip assumed">assumed</span> A1</td><td><a href="#step-i-4">I.4</a>, <a href="#step-ii-4">II.4</a></td></tr>
+<tr><th scope="row">M3</th><td>Production’s verifier and codec delegate to the shared files without changing what they compute.</td><td><span class="chip tested">tested</span> reference tests against the code they replaced, and the conformance fixtures</td><td><a href="#step-ii-3">II.3</a>, <a href="#step-ii-4">II.4</a></td></tr>
+<tr><th scope="row">M4</th><td>Each extracted piece computes what the specification says at that place.</td><td><span class="chip proved">proved</span></td><td><a href="#step-ii-3">II.3</a>, <a href="#step-ii-4">II.4</a></td></tr>
+<tr><th scope="row">M5</th><td>Production’s verifier, as a whole, refines <code>RawProof.verify</code>.</td><td><span class="chip proved">proved</span> for digests of SHA-256 width and 32-byte chunks</td><td><a href="#step-ii-4">II.4</a></td></tr>
+<tr><th scope="row">M6</th><td>The writer keeps what the statements assume of a snapshot.</td><td><span class="chip none">no link</span> two examples show that the assumptions can be met</td><td><a href="#step-ii-2">II.2</a></td></tr>
+<tr><th scope="row">M7</th><td>The statements are combined into a guarantee about a read.</td><td><span class="chip none">no link</span> here; it is the consumer’s proof</td><td><a href="#step-ii-1">II.1</a></td></tr>
+<tr><th scope="row">M8</th><td>The claims of the README and of the doc comments are what the Lean statements say.</td><td><span class="chip trusted">trusted</span> a reading</td><td><a href="#step-ii-1">II.1</a></td></tr>
+<tr><th scope="row">M9</th><td>The proofs are checked by Lean with no escape hatch.</td><td><span class="chip proved">proved</span> by the build</td><td><a href="#step-ii-5">II.5</a></td></tr>
 </tbody></table></div>
-<p><b>Order.</b> Read step 0 of part I first. Then steps 8 to 12 in order; steps 9 and 11 are where a person’s judgement matters most. Part II adds about a day.</p>
+<p><b>Order.</b> Read step I.0 of part I first. Then steps II.1 to II.5 in order; steps II.2 and II.4 are where a person’s judgement matters most. Part II adds about a day.</p>
 </section>
 
 <section id="graph">
 <h2>Every Lean declaration, by trust type</h2>
 <p>The trust chains say which links hold. This graph says which Lean a person has to read. It holds every Lean declaration of both parts: the handwritten definitions and theorems, the generated definitions they reach, and the three libraries under both. Lean prints the graph, and the trust type of each declaration follows from it.</p>
 <ul>
-<li><span class="chip statement">cited statement</span> A theorem that this guide cites, in one of three groups: inclusion, ordered reads in the model, and the model against extracted Rust. Its statement is a reading that step 1 or step 8 checks. Lean checks its proof.</li>
-<li><span class="chip trusted">trusted</span> Handwritten, and a cited statement depends on what it says. Steps 5, 6 and 9 read these.</li>
-<li><span class="chip generated">generated</span> Produced from Rust by hax from the extracted crate. Assumed faithful (A1); steps 4 and 11 look at some of them.</li>
+<li><span class="chip statement">cited statement</span> A theorem that this guide cites, in one of three groups: inclusion, ordered reads in the model, and the model against extracted Rust. Its statement is a reading that step I.1 or step II.1 checks. Lean checks its proof.</li>
+<li><span class="chip trusted">trusted</span> Handwritten, and a cited statement depends on what it says. Steps I.5, I.6 and II.2 read these.</li>
+<li><span class="chip generated">generated</span> Produced from Rust by hax from the extracted crate. Assumed faithful (A1); steps I.4 and II.4 look at some of them.</li>
 <li><span class="chip assumed">assumed library</span> DyLean (A3), the Aeneas library and hax’s core models (A1).</li>
 <li><span class="chip checked">checked</span> A lemma, or a definition that only proofs use. Lean checks it, and it is not to be read.</li>
 </ul>
@@ -188,15 +193,15 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 
 <section id="part-1">
 <h2>Part I · Inclusion of one item</h2>
-<p>Steps 0 to 7. Step 7 runs the checks of both parts.</p>
+<p>Steps I.0 to I.7. Step I.7 runs the checks of both parts.</p>
 </section>
 
-<section id="step-0">
-<h2>Step 0 · Primer</h2>
+<section id="step-i-0">
+<h2>Step I.0 · Primer</h2>
 <dl class="step">
 <dt>Read</dt><dd>The panel and the table below.</dd>
 <dt>Pass when</dt><dd>You can say in one sentence what the statement in the panel assumes and what it concludes.</dd>
-<dt>Links</dt><dd>None. This prepares steps 1 to 6.</dd>
+<dt>Links</dt><dd>None. This prepares steps I.1 to I.6.</dd>
 <dt>Time</dt><dd>15 minutes.</dd>
 </dl>
 <!-- panel: primer -->
@@ -213,8 +218,8 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 </tbody></table></div>
 </section>
 
-<section id="step-1">
-<h2>Step 1 · What is claimed</h2>
+<section id="step-i-1">
+<h2>Step I.1 · What is claimed</h2>
 <dl class="step">
 <dt>Read</dt><dd>The table below, then the statements it shows: five in <a class="src" href="lean/Qmdb/Inclusion.lean" title="Open in VS Code">Inclusion.lean</a> and two in <a class="src" href="lean/Qmdb/SecurityTheorems.lean" title="Open in VS Code">SecurityTheorems.lean</a> (44 lines). Statements only.</dd>
 <dt>Pass when</dt><dd><ul><li>Each sentence of the README says no more than the statement beside it.</li><li>Every hypothesis of a statement appears in the sentence, or its absence is written down.</li><li>You can say what the hash is in each statement and what that leaves out.</li></ul></dd>
@@ -224,12 +229,12 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <p>Three questions to ask of every statement. What is the hash: in every statement it is DyLean’s ideal hash, never a real one. Which inputs are trusted: the root, and in every statement also the height. What does the client have to be given before the statement applies?</p>
 <p>Generated: each sentence is checked to occur in the README, and each statement is read from the Lean source.</p>
 <!-- claims -->
-<p>No theorem is stated twice. The properties of the verifier are stated in <code>Inclusion.lean</code>, and the two results about the protocol and its assumption in <code>SecurityTheorems.lean</code>. The <a href="#dag-trusted">table of trusted declarations</a> says which definitions each of the eight statements depends on.</p>
+<p>No theorem is stated twice. The properties of the verifier are stated in <code>Inclusion.lean</code>, and the two results about the protocol and its assumption in <code>SecurityTheorems.lean</code>. Selecting a statement in the <a href="#graph">declaration graph</a> shows which definitions it depends on.</p>
 <!-- panel: term-equality -->
 </section>
 
-<section id="step-2">
-<h2>Step 2 · Production code and the refactor</h2>
+<section id="step-i-2">
+<h2>Step I.2 · Production code and the refactor</h2>
 <dl class="step">
 <dt>Read</dt><dd><a class="src" href="../storage/src/merkle/hasher/terms.rs" title="Open in VS Code">terms.rs</a> (109 lines) and <a class="src" href="../storage/src/merkle/proof/traversal.rs" title="Open in VS Code">traversal.rs</a> (165 lines) in full. Then the changes to <a class="src" href="../storage/src/merkle/hasher.rs" title="Open in VS Code">hasher.rs</a> <a class="code-diff" href="qmdb-diff://dylean/storage/src/merkle/hasher.rs" title="Compare documented baseline with working file in VS Code">Diff</a> and <a class="src" href="../storage/src/merkle/proof.rs" title="Open in VS Code">proof.rs</a> <a class="code-diff" href="qmdb-diff://dylean/storage/src/merkle/proof.rs" title="Compare documented baseline with working file in VS Code">Diff</a> against the baseline.</dd>
 <dt>Pass when</dt><dd><ul><li>The refactor preserves behaviour: the old traversal and the new one agree wherever production calls them.</li><li>The two shared files name nothing from the crate around them, so they mean the same in both crates.</li><li>You have a list of the production code paths that do not go through the shared files.</li></ul></dd>
@@ -245,8 +250,8 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <p id="diff-help" class="muted">Diff compares this checkout’s file against the original baseline <code>b45ef2d78</code>, including test changes in the same file. New files have an empty left pane. Install the local VS Code handler with <code>python3 verification/qmdb/code-diff.py --install</code>.</p>
 </section>
 
-<section id="step-3">
-<h2>Step 3 · The verification-only client</h2>
+<section id="step-i-3">
+<h2>Step I.3 · The verification-only client</h2>
 <dl class="step">
 <dt>Read</dt><dd><a class="src" href="symbolic/src/inclusion.rs" title="Open in VS Code">inclusion.rs</a> (105 lines) and <a class="src" href="symbolic/src/geometry.rs" title="Open in VS Code">geometry.rs</a> against production’s verifier in <code>proof.rs</code>, <code>mmr/mod.rs</code> and <code>qmdb/mod.rs</code>. Then <a class="src" href="symbolic/src/inclusion/tests.rs" title="Open in VS Code">inclusion/tests.rs</a>.</dd>
 <dt>Pass when</dt><dd><ul><li>Every line of <code>verify</code> has a production counterpart or a divergence that you have written down.</li><li>For each divergence you can say whether the tests cover it.</li><li>You can say which deployed configuration the client models.</li></ul></dd>
@@ -275,15 +280,15 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <!-- panel: concrete-hash -->
 </section>
 
-<section id="step-4">
-<h2>Step 4 · Extraction, time-boxed</h2>
+<section id="step-i-4">
+<h2>Step I.4 · Extraction, time-boxed</h2>
 <dl class="step">
 <dt>Read</dt><dd>The four panels below, for plausibility only.</dd>
-<dt>Pass when</dt><dd><ul><li>Each generated definition has the shape of its Rust: the same branches in the same order, and a possible failure at every arithmetic step.</li><li>The checks of step 7 confirm that the generated files are reproducible and that nothing was added by hand.</li></ul></dd>
+<dt>Pass when</dt><dd><ul><li>Each generated definition has the shape of its Rust: the same branches in the same order, and a possible failure at every arithmetic step.</li><li>The checks of step I.7 confirm that the generated files are reproducible and that nothing was added by hand.</li></ul></dd>
 <dt>Links</dt><dd>L3 stays assumed.</dd>
 <dt>Time</dt><dd>30 minutes. Stop there.</dd>
 </dl>
-<div class="callout out"><p>This step does not establish that the translation is right. That is assumption A1. Its purpose is to let you recognise the generated code that the statements in steps 1, 5 and 6 mention, and to notice a gross mismatch.</p></div>
+<div class="callout out"><p>This step does not establish that the translation is right. That is assumption A1. Its purpose is to let you recognise the generated code that the statements in steps I.1, I.5 and I.6 mention, and to notice a gross mismatch.</p></div>
 <!-- panel: gen-terms -->
 <!-- panel: gen-leaf -->
 <!-- panel: gen-reconstruct -->
@@ -293,22 +298,22 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <p>The <a href="#index">index</a> at the end lists every generated Merkle definition with its Rust source.</p>
 </section>
 
-<section id="step-5">
-<h2>Step 5 · Trusted readings</h2>
+<section id="step-i-5">
+<h2>Step I.5 · Trusted readings</h2>
 <dl class="step">
 <dt>Read</dt><dd>In <a class="src" href="lean/Commonware/Symbolic/Terms.lean" title="Open in VS Code">Terms.lean</a> the definitions <code>part</code>, <code>chain</code>, <code>dyTerms</code>, <code>toByteArray</code>, <code>toSlice</code> and <code>messages</code>.</dd>
 <dt>Pass when</dt><dd><ul><li>For each panel, the Lean on the right is a fair account of the Rust on the left, or you have written down where it is not and whether a statement depends on it.</li><li>You accept the ideal hash for the question you are asking, or you have written down why not.</li></ul></dd>
 <dt>Links</dt><dd>L4, A4.</dd>
 <dt>Time</dt><dd>1 hour.</dd>
 </dl>
-<p>The generated code is generic in the hash. A theorem needs a concrete thing to put in that place, and a person wrote it: <code>dyTerms</code>. Every statement of step 1 uses it. It makes the hash a constructor of terms, the usual choice of symbolic tools. That is the largest assumption of this proof, because it is what turns “the same root” into “the same tree”.</p>
+<p>The generated code is generic in the hash. A theorem needs a concrete thing to put in that place, and a person wrote it: <code>dyTerms</code>. Every statement of step I.1 uses it. It makes the hash a constructor of terms, the usual choice of symbolic tools. That is the largest assumption of this proof, because it is what turns “the same root” into “the same tree”.</p>
 <!-- panel: read-terms -->
 <!-- panel: read-ideal -->
 <!-- panel: read-messages -->
 </section>
 
-<section id="step-6">
-<h2>Step 6 · Assumption and protocol</h2>
+<section id="step-i-6">
+<h2>Step I.6 · Assumption and protocol</h2>
 <dl class="step">
 <dt>Read</dt><dd><a class="src" href="lean/Qmdb/Assumptions.lean" title="Open in VS Code">Assumptions.lean</a> (41 lines). In <a class="src" href="lean/Qmdb/Protocol.lean" title="Open in VS Code">Protocol.lean</a> the definition of <code>client</code>. In <a class="src" href="lean/Commonware/Symbolic/Client.lean" title="Open in VS Code">Client.lean</a> the definitions <code>accept</code> and <code>receive</code>. The patch.</dd>
 <dt>Pass when</dt><dd><ul><li>The snapshot is something an application has, and you can say what it does not tie down.</li><li>The attacker chooses the message, the location and the siblings without restriction.</li><li>Nothing in the model lets the client refuse to act where the Rust would act.</li><li>The patch adds no axiom, and you have read the one definition it adds.</li></ul></dd>
@@ -322,7 +327,7 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <div class="table"><table>
 <thead><tr><th scope="col">Argument of <code>accept_inclusion</code></th><th scope="col">In the model</th><th scope="col">Chosen by</th></tr></thead>
 <tbody>
-<tr><th scope="row"><code>terms</code></th><td><code>dyTerms</code>: DyLean’s hash constructor over the symbolic reading of step 5.</td><td>The model. The hash is ideal (A4).</td></tr>
+<tr><th scope="row"><code>terms</code></th><td><code>dyTerms</code>: DyLean’s hash constructor over the symbolic reading of step I.5.</td><td>The model. The hash is ideal (A4).</td></tr>
 <tr><th scope="row"><code>root</code>, <code>height</code></th><td><code>Snapshot.root</code>, <code>Snapshot.height</code>.</td><td>Trusted. How the client obtains them is outside the model.</td></tr>
 <tr><th scope="row"><code>message</code></th><td>The message at a network handle. It carries an item when it is a literal.</td><td>The attacker, among the terms it can derive.</td></tr>
 <tr><th scope="row"><code>location</code></th><td>Any <code>u64</code>, a parameter of the client action.</td><td>Unconstrained: every value is a reachable step.</td></tr>
@@ -333,8 +338,8 @@ select,input[type="text"]{font:inherit;font-size:13.5px;padding:4px 6px;border:1
 <!-- panel: patch -->
 </section>
 
-<section id="step-7">
-<h2>Step 7 · Machine evidence</h2>
+<section id="step-i-7">
+<h2>Step I.7 · Machine evidence</h2>
 <dl class="step">
 <dt>Read</dt><dd><a class="src" href="check.sh" title="Open in VS Code">check.sh</a>, <a class="src" href="toolchain.sh" title="Open in VS Code">toolchain.sh</a>, <a class="src" href="lean/Commonware/Symbolic/Audit.lean" title="Open in VS Code">Audit.lean</a> (46 lines), <a class="src" href="qmdb/mutations.toml" title="Open in VS Code">mutations.toml</a> and <a class="src" href="audit/probes.toml" title="Open in VS Code">probes.toml</a>.</dd>
 <dt>Pass when</dt><dd><ul><li>A run on a clean checkout passes and prints what the first row below records.</li><li>The axiom audit fails when you plant an escape hatch.</li><li>You can explain every mutation that the proofs do not notice.</li><li>You know where each tool binary came from.</li></ul></dd>
@@ -366,12 +371,12 @@ git checkout verification/symbolic/src/inclusion/tests.rs</code></td><td>Five <c
 
 <section id="part-2">
 <h2>Part II · Ordered reads under a checkpoint root</h2>
-<p>Steps 8 to 12. A reader holds a root that it trusts and receives a claim about one key with a proof: the key has this value, or the key has none. Part II is about when such a claim can be believed. Its root is the canonical root of a <code>current</code> database over an MMB, in the format of Commonware <code>v2026.11.0</code>. Tempo pins that code through <code>klkvr/monorepo</code> <code>69cc03365</code>, upstream <code>v2026.11.0</code> plus one commit to partitioned ordered navigation, and this branch carries it.</p>
-<div class="callout out"><p><b>A specification and a refinement.</b> The main statements of part II are about <code>RawProof.verify</code>, a Lean definition of the reader's check. Step 11 proves that production's verifier, extracted unchanged, refines it: whatever production accepts, the definition accepts. So the soundness statements hold of production's verifier. The definitions of step 9 are a specification that Lean checks against the Rust, not a trusted model; the structures that describe the database behind the root stay assumptions.</p></div>
+<p>Steps II.1 to II.5. A reader holds a root that it trusts and receives a claim about one key with a proof: the key has this value, or the key has none. Part II is about when such a claim can be believed. Its root is the canonical root of a <code>current</code> database over an MMB, in the format of Commonware <code>v2026.11.0</code>. Tempo pins that code through <code>klkvr/monorepo</code> <code>69cc03365</code>, upstream <code>v2026.11.0</code> plus one commit to partitioned ordered navigation, and this branch carries it.</p>
+<div class="callout out"><p><b>A specification and a refinement.</b> The main statements of part II are about <code>RawProof.verify</code>, a Lean definition of the reader's check. Step II.4 proves that production's verifier, extracted unchanged, refines it: whatever production accepts, the definition accepts. So the soundness statements hold of production's verifier. The definitions of step II.2 are a specification that Lean checks against the Rust, not a trusted model; the structures that describe the database behind the root stay assumptions.</p></div>
 </section>
 
-<section id="step-8">
-<h2>Step 8 · What part II claims</h2>
+<section id="step-ii-1">
+<h2>Step II.1 · What part II claims</h2>
 <dl class="step">
 <dt>Read</dt><dd>The panel and the two tables below, with the statements they show. Statements only.</dd>
 <dt>Pass when</dt><dd><ul><li>Each sentence says no more than the statement beside it.</li><li>For each statement you can say which verifier it is about and which structure it assumes.</li><li>You can list what a consumer has to add before it has a guarantee about a read.</li></ul></dd>
@@ -399,27 +404,27 @@ git checkout verification/symbolic/src/inclusion/tests.rs</code></td><td>Five <c
 </tbody></table></div>
 <p><code>Ordered.Database</code> bundles the structures of the last column, and the two examples build one. That the pieces fit is therefore shown for one leaf and for three, by <code>empty_claim</code> and <code>singleton_claims</code>.</p>
 <h3>The model against extracted Rust</h3>
-<p>Every statement below is about production files of this branch, extracted unchanged (steps 10 and 11). In each, an extracted function stands on the left and a definition of the model on the right.</p>
+<p>Every statement below is about production files of this branch, extracted unchanged (steps II.3 and II.4). In each, an extracted function stands on the left and a definition of the model on the right.</p>
 <!-- claims: rust -->
 </section>
 
-<section id="step-9">
-<h2>Step 9 · The specification and what it assumes</h2>
+<section id="step-ii-2">
+<h2>Step II.2 · The specification and what it assumes</h2>
 <dl class="step">
 <dt>Read</dt><dd><a class="src" href="lean/Qmdb/Mmb/Plan.lean" title="Open in VS Code">Plan.lean</a> in full. In <a class="src" href="lean/Qmdb/Mmb/Raw.lean" title="Open in VS Code">Raw.lean</a> the definitions up to <code>RawProof.verify</code>. The structures <code>Snapshot</code> in <a class="src" href="lean/Qmdb/Active.lean" title="Open in VS Code">Active.lean</a> and <a class="src" href="lean/Qmdb/Ordered.lean" title="Open in VS Code">Ordered.lean</a> and <code>Layout</code> in <a class="src" href="lean/Qmdb/Mmb.lean" title="Open in VS Code">Mmb.lean</a>. <a class="src" href="lean/Qmdb/Ordered/Journal.lean" title="Open in VS Code">Journal.lean</a> up to <code>replay</code>.</dd>
 <dt>Pass when</dt><dd><ul><li>You can explain each check of <code>fieldsValid</code> and each case of <code>envelope</code>.</li><li>For each proof field of the three structures you can say what in the writer keeps it true, or you have written down that you do not know.</li><li>You accept <code>replay</code> as the meaning of a read.</li></ul></dd>
 <dt>Links</dt><dd>M6. The definitions read here are the right-hand sides of M4 and M5.</dd>
 <dt>Time</dt><dd>3 hours.</dd>
 </dl>
-<p>Two kinds of definition matter. The verifier and its plan say what a reader checks; step 11 proves that production computes them, so an error there would make a refinement theorem fail to build. The three structures say what is assumed of the database behind the root, and nothing ties them to Rust: the <a href="#dag-trusted-reads">second table of trusted declarations</a> lists them.</p>
+<p>Two kinds of definition matter. The verifier and its plan say what a reader checks; step II.4 proves that production computes them, so an error there would make a refinement theorem fail to build. The three structures say what is assumed of the database behind the root, and nothing ties them to Rust. The <a href="#graph">declaration graph</a> marks them as trusted.</p>
 <!-- panel: ck-raw -->
 <!-- panel: ck-plan -->
 <!-- panel: ck-snapshot -->
 <!-- panel: ck-journal -->
 </section>
 
-<section id="step-10">
-<h2>Step 10 · Production code shared with part II</h2>
+<section id="step-ii-3">
+<h2>Step II.3 · Production code shared with part II</h2>
 <dl class="step">
 <dt>Read</dt><dd><a class="src" href="../storage/src/qmdb/current/ordered/proof/claim.rs" title="Open in VS Code">claim.rs</a>, <a class="src" href="../storage/src/qmdb/current/proof/activity.rs" title="Open in VS Code">activity.rs</a>, <a class="src" href="../utils/src/range/cyclic.rs" title="Open in VS Code">cyclic.rs</a>, <code>current_root</code> in <a class="src" href="../storage/src/merkle/hasher/terms.rs" title="Open in VS Code">terms.rs</a> and <a class="src" href="../storage/src/qmdb/any/operation/layout.rs" title="Open in VS Code">layout.rs</a>. Then <a class="src" href="symbolic/src/reads.rs" title="Open in VS Code">reads.rs</a> and, in <a class="src" href="lean/Qmdb/Ordered/Extraction.lean" title="Open in VS Code">Extraction.lean</a>, the readings <code>keys</code>, <code>readOp</code> and <code>select</code>.</dd>
 <dt>Pass when</dt><dd><ul><li>Every name that <code>claim.rs</code> takes from its surroundings has a stand-in that behaves like production’s for the two selectors.</li><li>You can say what <code>accepts_iff</code> leaves out.</li><li>You accept the byte-list writer of <code>Encoding.lean</code> as a reading of production's codec buffer.</li></ul></dd>
@@ -435,8 +440,8 @@ git checkout verification/symbolic/src/inclusion/tests.rs</code></td><td>Five <c
 <!-- panel: ck-encoding -->
 </section>
 
-<section id="step-11">
-<h2>Step 11 · The extracted verifier against the plan</h2>
+<section id="step-ii-4">
+<h2>Step II.4 · The extracted verifier against the plan</h2>
 <dl class="step">
 <dt>Read</dt><dd><a class="src" href="../storage/src/qmdb/current/proof/rules.rs" title="Open in VS Code">rules.rs</a> and <a class="src" href="../storage/src/qmdb/current/grafting/rules.rs" title="Open in VS Code">grafting/rules.rs</a> in full, <code>reconstruct</code> in <a class="src" href="../storage/src/merkle/proof/reconstruct.rs" title="Open in VS Code">reconstruct.rs</a>, and the statements of <a class="src" href="lean/Qmdb/Mmb/Extracted.lean" title="Open in VS Code">Extracted.lean</a> and <a class="src" href="lean/Qmdb/Reads.lean" title="Open in VS Code">Reads.lean</a>.</dd>
 <dt>Pass when</dt><dd><ul><li>You can say which production function each statement is about and that it is included unchanged.</li><li>You accept the two hypotheses of <code>verify_operation_refines</code>: digests of SHA-256 width and a 32-byte chunk.</li><li>You can name the production checks that the refinement relies on: chunk size, coverage, graftable count, the two suffix checks, the digest count, element exhaustion and the root comparison.</li></ul></dd>
@@ -452,11 +457,11 @@ git checkout verification/symbolic/src/inclusion/tests.rs</code></td><td>Five <c
 <!-- panel: ck-client -->
 </section>
 
-<section id="step-12">
-<h2>Step 12 · Machine evidence of part II</h2>
+<section id="step-ii-5">
+<h2>Step II.5 · Machine evidence of part II</h2>
 <dl class="step">
 <dt>Read</dt><dd><a class="src" href="lean/Qmdb/CheckpointAudit.lean" title="Open in VS Code">CheckpointAudit.lean</a> and the part II entries of <a class="src" href="qmdb/mutations.toml" title="Open in VS Code">mutations.toml</a>.</dd>
-<dt>Pass when</dt><dd><ul><li>The audit of part II names the namespaces of its statements and reports only standard axioms.</li><li>You can say what the extraction check of step 7 covers for part II.</li></ul></dd>
+<dt>Pass when</dt><dd><ul><li>The audit of part II names the namespaces of its statements and reports only standard axioms.</li><li>You can say what the extraction check of step I.7 covers for part II.</li></ul></dd>
 <dt>Links</dt><dd>M9.</dd>
 <dt>Time</dt><dd>30 minutes.</dd>
 </dl>
@@ -467,50 +472,6 @@ git checkout verification/symbolic/src/inclusion/tests.rs</code></td><td>Five <c
 <tr><td><code>bash verification/check.sh</code></td><td>The extraction matches the committed files, which include <code>rules.rs</code>, <code>grafting/rules.rs</code>, <code>reconstruct.rs</code>, the MMB geometry and <code>layout.rs</code>.</td><td>The Lean that part II's theorems are about is what hax produces from the production files of this branch.</td></tr>
 </tbody></table></div>
 <p>Eight mutations of <code>mutations.toml</code> change the files of part II: the activity check, the partial-chunk check, the zero-chunk graft, the graftable count, the update tag, the MMB child positions, the MMB peak heights and the backward fold. Each breaks a named module: <code>Qmdb.Mmb.Extracted</code>, <code>Qmdb.Ordered.Encoding</code>, <code>Qmdb.Mmb.ChildGeometry</code>, <code>Qmdb.Mmb.Peaks</code> or <code>Qmdb.Reconstruct</code>.</p>
-</section>
-
-<section id="risks">
-<h2>Residual risks</h2>
-<p>What remains after every step passes. Each is a property of the approach or a gap. R1 to R7 belong to part I and R8 to R13 to part II. None is a flaw in a proof, and no independent reviewer has gone through either part.</p>
-<div class="table"><table>
-<thead><tr><th scope="col">#</th><th scope="col">Risk</th><th scope="col">Link</th><th scope="col">What would close it</th></tr></thead>
-<tbody id="register">
-<tr><th scope="row">R1</th><td>The translation from Rust to Lean is wrong in a way that changes what the verifier means.</td><td>L3</td><td>An audit of hax, Charon, Aeneas and their library models, or a second extraction route that agrees.</td></tr>
-<tr><th scope="row">R2</th><td>The proved call is not the deployed one. Both run production’s <code>reconstruct::reconstruct</code>, but the client fixes one item of a tree with one peak and a trusted size and hashes through symbolic terms, while production hashes bytes. Tests on trees of up to 64 leaves tie the two verdicts.</td><td>L2</td><td>State the theorems for any leaf and inactive count, which the reconstruction lemmas already allow, and prove production’s byte terms an instance of the symbolic ones.</td></tr>
-<tr><th scope="row">R3</th><td>The modelled root is a QMDB operations root over an MMR. A QMDB over the MMB family, whose roots carry another domain byte and other peaks, is covered by part II only.</td><td>L2</td><td>Run the client over <code>geometry::Mmb</code>. The reconstruction lemmas hold for any geometry; the peaks of an MMB need their own <code>Yields</code> lemma.</td></tr>
-<tr><th scope="row">R4</th><td>The tree size is trusted. Production reads <code>leaves</code> and <code>inactive_peaks</code> from the proof, which the attacker writes, and relies on the root committing to them. No statement covers that, and the tests never vary them.</td><td>L2</td><td>A statement in which the size comes from the proof and the root alone is trusted. Part II has one: <code>verify_operation_header</code> with <code>Header.binding</code>. Part I’s client is unchanged.</td></tr>
-<tr><th scope="row">R5</th><td>The hash is ideal. No statement reduces a broken opening to a collision of a real hash, and facts about bytes are outside the model: in bytes the root of a small tree is also a leaf digest, and only positions keep a long item apart from a node.</td><td>L4, A4</td><td>An argument over production’s bytes beside the symbolic one. This branch had a reduction to an explicit collision and dropped it for a smaller trusted base.</td></tr>
-<tr><th scope="row">R6</th><td>Honest roots are built by code that the proof does not see. The tree builder hashes nodes through a second encoding, and the journal chooses what is stored at each location.</td><td>L5</td><td>Route the builder through the part lists of <code>terms.rs</code>; state the snapshot in terms of the journal.</td></tr>
-<tr><th scope="row">R7</th><td>The toolchain is pinned by name, not by content: the hax binary and the dependency builds are whatever is on the machine, and no CI runs the check.</td><td>L8</td><td>Record how the binary is built, hash it, and run <code>check.sh</code> in CI.</td></tr>
-<tr><th scope="row">R8</th><td>The refinement has two hypotheses. Every supplied digest has the width of SHA-256, which production’s digest type guarantees and the symbolic digests do not. The bitmap chunk has 32 bytes, as <code>Plan</code> fixes 256 bits; production accepts any chunk whose bit width is a power of two.</td><td>M5</td><td>Generalize <code>Plan</code> over the chunk width, or state that every deployment uses 32-byte chunks.</td></tr>
-<tr><th scope="row">R9</th><td>The proved code is this branch’s. Production was changed to delegate to the extracted rules files, and Tempo’s pin does not contain those changes. Reference tests and conformance fixtures tie the two, and they are not a proof.</td><td>M3</td><td>Upstream the rules files, so that a Tempo pin contains them.</td></tr>
-<tr><th scope="row">R10</th><td>Nothing ties the writer to the assumed snapshot. The activity bits, the successor links, the commit floor and the layout of the root are hypotheses, shown to be satisfiable for one leaf and for three.</td><td>M6</td><td>A model or an extraction of the writer with the invariants proved, or tests that check them on production databases of many sizes.</td></tr>
-<tr><th scope="row">R11</th><td>The statements are not combined here. A guarantee about a read needs the rows of step 8 chained, and a statement about checkpoints: who authenticates the pair of roots and which root answers which query.</td><td>M7</td><td>Audit the consumer’s proof, or state the composed theorem in this repository.</td></tr>
-<tr><th scope="row">R12</th><td>The ordered client is a verification-only entry point. It calls production’s selectors, layout and verifier with stand-in types, and production’s <code>KeyValueProof::verify</code> and <code>ExclusionProof::verify</code> are not extracted themselves. Differential tests compare the client’s verdicts with theirs on databases of up to 450 keys and on a history of updates and deletes: honest proofs, altered claims, and proofs with one field altered. Production rejects every altered proof, and the client agrees on every verdict.</td><td>M1</td><td>Extract the ordered proof methods, or route them through the client’s functions.</td></tr>
-<tr><th scope="row">R13</th><td>The writer that the encoding runs with is a reading: its primitive appends stand for production’s codec buffer, and the codec of keys and values is assumed fixed-width and injective. A path through a root is still a list of whole fields, as in R5.</td><td>M4, A4</td><td>Extract the codec’s writer, or test <code>bytes</code> against encoded operations.</td></tr>
-</tbody></table></div>
-</section>
-
-<section id="signoff">
-<h2>Sign-off sheet</h2>
-<p class="muted">Your verdicts and notes are kept in this browser only. Print the page or copy them out to keep them.</p>
-<div class="table"><table>
-<thead><tr><th scope="col">Step</th><th scope="col">Links</th><th scope="col">Pass when</th><th scope="col">Verdict</th><th scope="col">Notes</th></tr></thead>
-<tbody id="sheet">
-<tr><th scope="row">0 · Primer</th><td>none</td><td>One statement restated: what it assumes and what it concludes.</td><td class="verdict"></td><td class="note"></td></tr>
-<tr><th scope="row">1 · What is claimed</th><td>L7</td><td>No sentence of the README says more than its statement; the hash of each statement is named.</td><td class="verdict"></td><td class="note"></td></tr>
-<tr><th scope="row">2 · Production code and the refactor</th><td>L0, L1</td><td>The refactor preserves behaviour; the shared files stand alone.</td><td class="verdict"></td><td class="note"></td></tr>
-<tr><th scope="row">3 · The verification-only client</th><td>L2</td><td>Every client line has a production counterpart or a written divergence.</td><td class="verdict"></td><td class="note"></td></tr>
-<tr><th scope="row">4 · Extraction</th><td>L3</td><td>The generated code is plausible; the translation stays assumed.</td><td class="verdict"></td><td class="note"></td></tr>
-<tr><th scope="row">5 · Trusted readings</th><td>L4</td><td>Each reading matches its Rust, or the gap is written down; the ideal hash is accepted or not.</td><td class="verdict"></td><td class="note"></td></tr>
-<tr><th scope="row">6 · Assumption and protocol</th><td>L5, L6</td><td>The snapshot is obtainable; the attacker is unrestricted; the patch is inert.</td><td class="verdict"></td><td class="note"></td></tr>
-<tr><th scope="row">7 · Machine evidence</th><td>L8</td><td>A clean run reproduces; planted escape hatches fail; survivors are explained.</td><td class="verdict"></td><td class="note"></td></tr>
-<tr><th scope="row">8 · What part II claims</th><td>M7, M8</td><td>No sentence says more than its statement; the verifier and the assumed structure of each statement are named; what a consumer must add is listed.</td><td class="verdict"></td><td class="note"></td></tr>
-<tr><th scope="row">9 · The specification and what it assumes</th><td>M6</td><td>Each check of the specification is explained; each assumed field has an owner in the writer or is written down as open.</td><td class="verdict"></td><td class="note"></td></tr>
-<tr><th scope="row">10 · Production code shared with part II</th><td>M1, M4</td><td>The stand-ins behave like production’s types for the selectors; the writer reading is accepted or written down as open.</td><td class="verdict"></td><td class="note"></td></tr>
-<tr><th scope="row">11 · The extracted verifier against the plan</th><td>M2, M3, M4, M5</td><td>Each statement names an unchanged production function; the two hypotheses of the refinement are accepted.</td><td class="verdict"></td><td class="note"></td></tr>
-<tr><th scope="row">12 · Machine evidence of part II</th><td>M9</td><td>The audit reports only standard axioms; the extraction check covers the files of part II.</td><td class="verdict"></td><td class="note"></td></tr>
-</tbody></table></div>
 </section>
 
 <section id="index">
@@ -591,13 +552,5 @@ function verdicts(cells,prefix,options){cells.forEach((cell,index)=>{
   cell.append(select);
 });}
 verdicts(document.querySelectorAll('.claims td.verdict'),'claim-',['not read','holds','says more','unclear']);
-verdicts(document.querySelectorAll('#sheet td.verdict'),'step-',['open','pass','pass with notes','fail']);
-document.querySelectorAll('#sheet td.note').forEach((cell,index)=>{
-  const input=document.createElement('input');
-  input.type='text';input.setAttribute('aria-label','Notes');
-  input.value=recall('note-'+index);
-  input.addEventListener('input',()=>keep('note-'+index,input.value));
-  cell.append(input);
-});
 </script>
 </body></html>

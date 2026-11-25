@@ -1,6 +1,6 @@
 # Probes of the audit, run by probes.py. Each edits a mirror of the repository, extracts the crate
 # again and builds the proofs. `expect` records what happened: "survives", or the proof modules
-# that stopped building. Step 7 of the audit guide lists the probes that survive.
+# that stopped building. Step I.7 of the audit guide lists the probes that survive.
 #
 # An edit is { file, original, mutated } or { file, before, append }; `edits` lists several.
 

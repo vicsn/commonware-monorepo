@@ -24,7 +24,7 @@ prefixes = [
   "verification/symbolic/src/client.rs",
 ]
 
-# Step 0: primer.
+# Step I.0: primer.
 
 [[panel]]
 id = "primer"
@@ -37,12 +37,12 @@ right = [{ prose = [
   "`(h : Std.U32) (loc : Std.U64)`: for any height and any location. `Std.U32`, `Std.U64` and `Slice Std.U8` are Rust's `u32`, `u64` and `&[u8]`; `.val` is the number or the list behind one.",
   "`(root : Bytes)` and `(wa wb : Slice Bytes)`: a root and two lists of siblings. `Bytes` is a DyLean term, not a byte string: a literal, a concatenation or a hash.",
   "`(ha : inclusion.verify_element_inclusion dyTerms () h loc root a wa = RustM.ok true)`: a hypothesis, named `ha`. The extracted Rust function `verify_element_inclusion` returned `true`. `RustM` is the result of extracted Rust: `ok v`, a failure such as a panic or an overflow, or divergence.",
-  "`dyTerms` says what a hash is in this statement: DyLean's hash constructor. Step 5 shows it. No statement here is about a real hash function.",
+  "`dyTerms` says what a hash is in this statement: DyLean's hash constructor. Step I.5 shows it. No statement here is about a real hash function.",
   "After the colon: `a = b ∧ wa = wb`. The two items are equal and so are the two sibling lists.",
   "Trace statements add two notions: `tr.Reachable reachability` is any sequence of attacker sends and client steps, and `tr.EventLoggedAt e t` says that the client logged `e` at time `t`.",
 ] }]
 
-# Step 1: what is claimed.
+# Step I.1: what is claimed.
 
 [[panel]]
 id = "term-equality"
@@ -67,7 +67,7 @@ notes = [
   "The proofs are shown here because they are one line each. They are still not required reading.",
 ]
 
-# Step 2: production code and the refactor.
+# Step I.2: production code and the refactor.
 
 [[panel]]
 id = "refactor-traversal"
@@ -108,7 +108,7 @@ left = [{ file = "storage/src/merkle/hasher/terms.rs", rust = "fn node_digest" }
 right_label = "Encoding the builder uses"
 right = [{ file = "storage/src/merkle/hasher.rs", rust = "fn node_digest_pair", within = "impl Hasher<F> for Standard<H>" }]
 
-# Step 3: the verification-only client.
+# Step I.3: the verification-only client.
 
 [[panel]]
 id = "client-verify"
@@ -189,7 +189,7 @@ left = [{ file = "verification/symbolic/src/concrete.rs", rust = "fn hash", with
 right_label = "Production"
 right = [{ file = "storage/src/merkle/hasher.rs", rust = "fn hash", within = "impl Terms for ByteTerms" }]
 
-# Step 4: extraction.
+# Step I.4: extraction.
 
 [[panel]]
 id = "gen-terms"
@@ -249,7 +249,7 @@ right = [
   { generated = "terms.root" },
 ]
 
-# Step 5: trusted readings.
+# Step I.5: trusted readings.
 
 [[panel]]
 id = "read-terms"
@@ -316,7 +316,7 @@ notes = [
   "A message that is a hash or a concatenation carries no item, so the client rejects it. An item is always plain bytes in this model.",
 ]
 
-# Step 6: assumption and protocol.
+# Step I.6: assumption and protocol.
 
 [[panel]]
 id = "snapshot"
@@ -419,7 +419,7 @@ right = [{ prose = [
   "Hunk 3 registers a trace class only if Aeneas has not already registered one of the same name.",
 ] }]
 
-# Step 1: the claim table. Every sentence must occur verbatim in its `source`, and the statements
+# Step I.1: the claim table. Every sentence must occur verbatim in its `source`, and the statements
 # that back the claims must be the ones that `Dag.lean` lists as cited.
 
 [[claim]]
@@ -453,7 +453,7 @@ reading = "The trace is an attempt: the attacker sends the item, and the client 
 source = "verification/qmdb/README.md"
 sentence = "A snapshot with a root and an accepted opening for every stored item exists at every height up to `MAX_HEIGHT`, the client's limit, which is production's `MAX_LEAVES` as a height."
 backed_by = [{ file = "verification/lean/Qmdb/SecurityTheorems.lean", lean = "honest_snapshots_exist" }]
-reading = "The assumption is not contradictory. It does not show that production's tree builder produces such a snapshot; the tests in step 6 sample that."
+reading = "The assumption is not contradictory. It does not show that production's tree builder produces such a snapshot; the tests in step I.6 sample that."
 
 [[claim]]
 source = "verification/qmdb/README.md"
@@ -467,7 +467,7 @@ reading = "`verify_bounds`: acceptance implies `h ≤ maxHeight` and an in-range
 # Part II: ordered reads under a checkpoint root. Its claims come from its README where the README
 # makes them, and from the doc comment of the theorem otherwise.
 
-# Step 8: what part II claims.
+# Step II.1: what part II claims.
 
 [[panel]]
 id = "ck-openings"
@@ -496,7 +496,7 @@ backed_by = [
   { file = "verification/lean/Qmdb/Active.lean", lean = "accepted" },
   { file = "verification/lean/Qmdb/Active.lean", lean = "honest" },
 ]
-reading = "`Accepts s` is `Verifies` at the snapshot's root and layout: the location is in range, the claimed chunk has the bit of the location set, and both witnesses follow the snapshot's paths and rebuild its root. `accepted`: then the location is live in the snapshot and the item is the one stored there. `honest`: every live location has such a proof. Both take an `Active.Snapshot`, whose proof fields say that the root opens to the stored items and chunks (step 9)."
+reading = "`Accepts s` is `Verifies` at the snapshot's root and layout: the location is in range, the claimed chunk has the bit of the location set, and both witnesses follow the snapshot's paths and rebuild its root. `accepted`: then the location is live in the snapshot and the item is the one stored there. `honest`: every live location has such a proof. Both take an `Active.Snapshot`, whose proof fields say that the root opens to the stored items and chunks (step II.2)."
 
 [[claim]]
 group = "reads"
@@ -510,7 +510,7 @@ group = "reads"
 source = "verification/qmdb/mmb/README.md"
 sentence = "Its soundness theorem constructs both openings by induction on the same program."
 backed_by = [{ file = "verification/lean/Qmdb/Mmb/Raw.lean", lean = "RawProof.sound" }]
-reading = "`RawProof.verify` is a specification of the reader's check; production's extracted verifier refines it (step 11). Acceptance gives a pair of witnesses at the paths that `plan` computes from the leaf count, the inactive-peak count and the location, and both rebuild the supplied root. Nothing is assumed of the root or of the fields of the proof."
+reading = "`RawProof.verify` is a specification of the reader's check; production's extracted verifier refines it (step II.4). Acceptance gives a pair of witnesses at the paths that `plan` computes from the leaf count, the inactive-peak count and the location, and both rebuild the supplied root. Nothing is assumed of the root or of the fields of the proof."
 
 [[claim]]
 group = "reads"
@@ -569,7 +569,7 @@ group = "reads"
 source = "verification/qmdb/mmb/README.md"
 sentence = "The fixed encoding is the bytes that production's extracted layout writes: the operation tag, ordered update fields, optional metadata, big-endian floor and zero padding."
 backed_by = [{ file = "verification/lean/Qmdb/Ordered/Encoding.lean", lean = "encode_ok" }]
-reading = "The extracted `ordered::encode`, with a writer that appends bytes, returns `bytes` of the operation. Only the writer's primitive appends are modelled; the tags, the field order and the padding come from production's `layout.rs` (step 10)."
+reading = "The extracted `ordered::encode`, with a writer that appends bytes, returns `bytes` of the operation. Only the writer's primitive appends are modelled; the tags, the field order and the padding come from production's `layout.rs` (step II.3)."
 
 [[claim]]
 group = "reads"
@@ -607,7 +607,7 @@ group = "rust"
 source = "verification/qmdb/mmb/README.md"
 sentence = "Lean proves the selected operation and proof are exactly those used by the replay soundness theorem."
 backed_by = [{ file = "verification/lean/Qmdb/Ordered/Extraction.lean", lean = "accepts_iff" }]
-reading = "`Extraction.Accepts` runs the extracted `claim::membership` and `claim::exclusion` and opens the operation they return. `VerifyWith` is the definition that `accepted_read` is stated with. The selectors are production's `claim.rs`, compiled here against stand-in types (step 10)."
+reading = "`Extraction.Accepts` runs the extracted `claim::membership` and `claim::exclusion` and opens the operation they return. `VerifyWith` is the definition that `accepted_read` is stated with. The selectors are production's `claim.rs`, compiled here against stand-in types (step II.3)."
 
 [[claim]]
 group = "rust"
@@ -664,13 +664,13 @@ sentence = "Children checks the physical child positions."
 backed_by = [{ file = "verification/lean/Qmdb/Mmb/Children.lean", lean = "physical_children" }]
 reading = "For a subtree of the planner, the extracted `children` returns the positions of its two halves. `Subtree` is the definition to read."
 
-# Step 9: the model and what it assumes.
+# Step II.2: the model and what it assumes.
 
 [[panel]]
 id = "ck-raw"
 kind = "reading"
 title = "The check that a reader of a checkpoint runs, as a Lean definition"
-link = "This is the object of `RawProof.sound` and `header_of_verify`. Read it as a specification of `OperationProof::verify` for one location and 32-byte chunks. Production's extracted verifier refines it (step 11)."
+link = "This is the object of `RawProof.sound` and `header_of_verify`. Read it as a specification of `OperationProof::verify` for one location and 32-byte chunks. Production's extracted verifier refines it (step II.4)."
 left = [
   { file = "verification/lean/Qmdb/Mmb/Raw.lean", lean = "RawProof" },
   { file = "verification/lean/Qmdb/Mmb/Raw.lean", lean = "RawProof.fieldsValid" },
@@ -701,7 +701,7 @@ right = [{ prose = [
   "`plan`: the location is below the leaf count, the leaf count is at most the MMB maximum, and the inactive-peak count is at most the number of peaks. It finds the peak that holds the location and assembles the tree.",
   "`envelope` is the outside of every tree: the hash of the ops root and the Merkle root, followed by the pending chunk and by the partial chunk with its bit count, when the leaf count has them. When the location lies in one of the two, its field is the hash of the bitmap chunk.",
   "The Merkle root is `merkleShape`: the domain bytes, the leaf count, then the inactive-peak count when it is not zero, then the bagged peaks, as production's `terms::root` lays them out.",
-  "Step 11 proves that production's verifier computes this plan.",
+  "Step II.4 proves that production's verifier computes this plan.",
 ] }]
 
 [[panel]]
@@ -718,7 +718,7 @@ right = [{ prose = [
   "`Active.Snapshot`: a root, a leaf count, the encoded operation and the bitmap chunk of every location, and a path for each. `itemOpening` and `chunkOpening`: the root opens to them at those paths. `liveCovered`: a chunk with a set bit has a path.",
   "`Ordered.Snapshot` adds the journal. `encoded`: the items are the encoded entries. `activeUpdate`: the bit of an update is set exactly when no later operation touches its key. `adjacent`: no live key lies strictly between a live key and its recorded successor. `commitBounds`: a live commit is the last entry, and no live location is below its floor.",
   "`Mmb.Layout`: the snapshot's paths are the planner's, and where a grafted chunk is all zero, the field that a bitmap path would address holds an 8-byte node position. That is what keeps a prover from presenting a zero chunk's subtree as a chunk with a set bit.",
-  "`honest_snapshots_exist` of part I has no counterpart here for every size: the examples of step 8 build these structures for one leaf and for three.",
+  "`honest_snapshots_exist` of part I has no counterpart here for every size: the examples of step II.1 build these structures for one leaf and for three.",
   "What to ask: does production's writer maintain each field after every commit, including after pruning and a restart?",
 ] }]
 
@@ -740,7 +740,7 @@ right = [{ prose = [
   "The model has no pruning: `entry` is defined at every location, and the floor only bounds which locations may be live.",
 ] }]
 
-# Step 10: production Rust shared with part II.
+# Step II.3: production Rust shared with part II.
 
 [[panel]]
 id = "ck-claim-surroundings"
@@ -765,7 +765,7 @@ notes = [
   "The stand-in `Operation` has no `Delete`. The selectors never build one.",
   "Production compares keys with `Ord`. The stand-in asks for `PartialEq` and a `less`, and Lean reads both from one `LinearOrder` (`Extraction.keys`).",
   "Production's `contains_cyclic` takes any range bounds. The stand-in is its case for `&start..&end`: start included, end excluded. Both end in `cyclic::contains`, which is shared.",
-  "The stand-in `OperationProof` keeps the location and a payload, which `verify_selected` passes to the extracted `current::verify_operation` (step 11).",
+  "The stand-in `OperationProof` keeps the location and a payload, which `verify_selected` passes to the extracted `current::verify_operation` (step II.4).",
 ]
 
 [[panel]]
@@ -870,7 +870,7 @@ notes = [
   "The codec of keys and values is an assumption: a `Codec` gives them fixed-width, injective bytes.",
 ]
 
-# Step 11: the extracted verifier against the plan.
+# Step II.4: the extracted verifier against the plan.
 [[panel]]
 id = "ck-peaks"
 kind = "spec-generated"
