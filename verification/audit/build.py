@@ -576,8 +576,8 @@ def chip(trust):
 
 
 def render_dag(claims):
-    """Every Lean declaration of the target with its trust type: two drawings, the trusted
-    declarations against the statements that depend on them, and a table of all of them."""
+    """Every Lean declaration of the target with its trust type: two drawings and a table of all
+    of them."""
     nodes = graph.load(DAG.read_text(), lambda path, line: lines_of(ROOT / path)[line - 1])
     trusts = list(graph.TRUST)
     order = sorted(nodes, key=lambda key: (trusts.index(nodes[key]['trust']),
@@ -637,25 +637,9 @@ def render_dag(claims):
              's': sorted(index[other] for other in nodes[key]['says']),
              'u': sorted(index[other] for other in nodes[key]['uses'])} for key in order]
 
-    trusted = [key for key in order if nodes[key]['trust'] == 'trusted']
 
     def short(key):
         return html.escape(nodes[key]['label']).replace('_', '_<wbr>').replace('.', '.<wbr>')
-
-    def matrix(name):
-        """The trusted declarations that the statements of one group depend on."""
-        columns = members[name]
-        rows = [key for key in trusted if set(columns) & set(nodes[key]['said_by'])]
-        head = ''.join(f'<th scope="col"><code>{short(key)}</code></th>' for key in columns)
-        body = ''.join(
-            f'<tr><th scope="row">{link(key)}</th><td>{html.escape(nodes[key]["kind"])}</td>'
-            + ''.join('<td class="dot">●</td>' if statement in nodes[key]['said_by'] else
-                      '<td></td>' for statement in columns) + '</tr>' for key in rows)
-        return (f'<h4 id="dag-trusted-{name}">{html.escape(GROUPS[name])}: {len(columns)} '
-                f'statements, {len(rows)} trusted declarations</h4>'
-                '<div class="table matrix"><table><thead><tr>'
-                '<th scope="col">Trusted declaration</th><th scope="col">Kind</th>'
-                f'{head}</tr></thead><tbody>{body}</tbody></table></div>')
 
     def reach(key):
         node = nodes[key]
@@ -701,11 +685,6 @@ def render_dag(claims):
         'selected declaration.</figcaption></figure>'
         f'<script type="application/json" id="dag-data">{json.dumps(data, separators=(",", ":"))}'
         '</script>'
-        '<h3 id="dag-trusted">The trusted declarations and the statements that depend on them</h3>'
-        '<p>A dot means that the statement of the column cannot be read without the declaration '
-        'of the row. Every statement also depends on the generated definitions it mentions and '
-        'on the libraries. There is one table for each group of statements.</p>'
-        + ''.join(matrix(name) for name in GROUPS) +
         f'<details id="dag-all"><summary>All {len(nodes)} declarations</summary>'
         '<div class="table"><table><thead><tr><th scope="col">Declaration</th>'
         '<th scope="col">Kind</th><th scope="col">Trust type</th>'
