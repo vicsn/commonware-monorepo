@@ -2,7 +2,7 @@ module
 public import Qmdb.Completeness
 
 /-! What the QMDB target proves about the protocol and its assumption. Trusted: the three
-statements. The properties of the extracted verifier are stated once, in `Verifier`: `unique`
+statements. The properties of the extracted verifier are stated once, in `Inclusion`: `unique`
 (accepted openings are unique, so the verifier is position binding), `verify_total`,
 `verify_bounds`, `honest_opening` and `extra_sibling_rejected`. -/
 

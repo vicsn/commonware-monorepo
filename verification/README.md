@@ -28,6 +28,8 @@ terms and clients.
 - [profile.sh](profile.sh) and [profile.py](profile.py): elaborate every module alone with Lean's
   profiler and summarise the slowest modules, declarations and import chain in
   `.lake/logs/profile/summary.md`.
+- [vscode/](vscode): a VS Code extension that opens the generated Lean of the Rust item under the
+  cursor, finds the Lean that uses it, and opens the Rust of a generated Lean name.
 - [symbolic/](symbolic): the crate that hax extracts, outside the Commonware workspace.
   - `lib.rs` includes production modules unchanged through `#[path]`:
     `storage/src/merkle/hasher/terms.rs`, `storage/src/merkle/proof/traversal.rs`,

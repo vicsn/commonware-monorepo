@@ -1,0 +1,97 @@
+{
+  "name": "aeneas-link",
+  "displayName": "Aeneas Link",
+  "description": "Jump between Rust items and the Lean declarations that Aeneas generates from them.",
+  "version": "0.1.0",
+  "publisher": "commonware",
+  "private": true,
+  "license": "MIT OR Apache-2.0",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "aeneasLink.openLean",
+        "title": "Open Lean Extraction",
+        "category": "Aeneas"
+      },
+      {
+        "command": "aeneasLink.findLeanUses",
+        "title": "Find Lean Uses of Extraction",
+        "category": "Aeneas"
+      },
+      {
+        "command": "aeneasLink.openRust",
+        "title": "Open Rust Source",
+        "category": "Aeneas"
+      },
+      {
+        "command": "aeneasLink.reindex",
+        "title": "Rebuild Extraction Index",
+        "category": "Aeneas"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "aeneasLink.openLean",
+          "when": "editorLangId == rust",
+          "group": "navigation@90"
+        },
+        {
+          "command": "aeneasLink.findLeanUses",
+          "when": "editorLangId == rust",
+          "group": "navigation@91"
+        },
+        {
+          "command": "aeneasLink.openRust",
+          "when": "resourceExtname == .lean",
+          "group": "navigation@90"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "aeneasLink.openLean",
+          "when": "editorLangId == rust"
+        },
+        {
+          "command": "aeneasLink.findLeanUses",
+          "when": "editorLangId == rust"
+        },
+        {
+          "command": "aeneasLink.openRust",
+          "when": "resourceExtname == .lean"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Aeneas Link",
+      "properties": {
+        "aeneasLink.include": {
+          "type": "string",
+          "default": "**/*.lean",
+          "description": "Glob of the Lean files to search for Aeneas output. Only files whose header says Aeneas generated them are indexed."
+        },
+        "aeneasLink.exclude": {
+          "type": "string",
+          "default": "**/{.lake,node_modules,target}/**",
+          "description": "Glob of the files to skip when indexing and when searching for Lean uses."
+        },
+        "aeneasLink.openToSide": {
+          "type": "boolean",
+          "default": false,
+          "description": "Open the other side of a link in the editor group beside the current one."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "node --test test/"
+  }
+}
