@@ -138,6 +138,30 @@ async function openRust() {
   await reveal(entry.rustFile, span);
 }
 
+/** Open line `line` of the generated Lean file `file`; the target of the hover's links. */
+async function openDeclaration(file, line) {
+  await reveal(file, new vscode.Range(line, 0, line, 0));
+}
+
+/** On the first line of an extracted Rust item, the names of its generated declarations. */
+async function hover(document, position) {
+  if (!vscode.workspace.getConfiguration('aeneasLink').get('hover', true)) return null;
+  const idx = await index();
+  const entries = idx.startingAt(document.uri.fsPath, position.line + 1, position.character);
+  if (entries.length === 0) return null;
+  const text = new vscode.MarkdownString();
+  text.isTrusted = { enabledCommands: ['aeneasLink.openDeclaration'] };
+  for (const e of entries) {
+    const args = encodeURIComponent(JSON.stringify([e.leanFile, e.declLine]));
+    const where = `${vscode.workspace.asRelativePath(e.leanFile)}:${e.declLine + 1}`;
+    const kind = e.kind === 'item' ? '' : ` (${e.kind})`;
+    text.appendMarkdown(
+      `**Aeneas** \`${e.fullName}\`${kind} · [${where}](command:aeneasLink.openDeclaration?${args})\n\n`,
+    );
+  }
+  return new vscode.Hover(text);
+}
+
 function activate(context) {
   const watcher = vscode.workspace.createFileSystemWatcher('**/*.lean');
   const drop = () => {
@@ -151,6 +175,8 @@ function activate(context) {
     vscode.commands.registerCommand('aeneasLink.openLean', openLean),
     vscode.commands.registerCommand('aeneasLink.findLeanUses', findLeanUses),
     vscode.commands.registerCommand('aeneasLink.openRust', openRust),
+    vscode.commands.registerCommand('aeneasLink.openDeclaration', openDeclaration),
+    vscode.languages.registerHoverProvider({ language: 'rust' }, { provideHover: hover }),
     vscode.commands.registerCommand('aeneasLink.reindex', async () => {
       drop();
       const idx = await index();
